@@ -10,7 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=secondary-8" />
-  <link rel="stylesheet" href="secondary.css?v=secondary-8" />
+  <link rel="stylesheet" href="secondary.css?v=secondary-9" />
+  <link rel="stylesheet" href="tertiary.css?v=tertiary-1" />
 </head>
 <body>
   <div class="app-shell">
@@ -167,20 +168,44 @@
 
         <section class="scene" id="scene-tertiary" data-scene-panel="tertiary" aria-labelledby="tertiaryTitle" hidden>
           <div class="scene-copy">
-            <p class="scene-number">05 / 05</p>
+            <p class="scene-number">06 / 06</p>
             <h2 id="tertiaryTitle">Tertiary structure is the 3D arrangement</h2>
-            <p>Interactions across the chain bring the stems together into a compact L-shaped tRNA.</p>
+            <p>See how the same residues and secondary-structure elements occupy three-dimensional space in the experimental tRNA structure.</p>
             <div class="fact-panel residue-panel" aria-live="polite">
               <span class="fact-label">FOLLOWING</span>
               <h3 class="selected-residue-title">Guanine · G1</h3>
-              <p class="selected-residue-copy">Drag the model to see this residue from another angle.</p>
+              <p class="selected-residue-copy">Left-drag to rotate, mouse wheel to zoom, and right-drag to pan.</p>
             </div>
             <button class="secondary-action" id="followButton" type="button">Follow a random nucleotide</button>
+            <div id="tertiaryControls"></div>
           </div>
           <div class="visual-stage tertiary-stage" id="tertiaryStage">
-            <svg id="tertiarySvg" viewBox="0 0 720 520" role="img" aria-label="Rotatable simplified three-dimensional tRNA model"></svg>
-            <div class="drag-hint" aria-hidden="true"><span>↔</span> DRAG TO ROTATE</div>
-            <p class="stage-note">Experimental C4′ residue trace · PDB 1EHZ · Not an atom-level view</p>
+            <div class="te-toolbar" aria-label="Tertiary structure view controls">
+              <button id="teZoomOut" type="button" aria-label="Zoom out">−</button>
+              <output id="teZoomValue" aria-live="polite">100%</output>
+              <button id="teZoomIn" type="button" aria-label="Zoom in">+</button>
+              <button id="teResetView" type="button">Reset view</button>
+              <button id="teCenterSelected" type="button">Center selected</button>
+            </div>
+            <div class="te-split-shell" id="tertiarySplitShell">
+              <aside class="te-mini-panel" id="tertiaryMiniPanel" hidden>
+                <div class="te-mini-heading">
+                  <strong>Secondary map</strong>
+                  <span>linked selection</span>
+                </div>
+                <svg id="tertiaryMiniSvg" viewBox="0 0 340 430" role="img" aria-label="Linked secondary-structure map"></svg>
+              </aside>
+              <div class="te-viewport" id="tertiaryViewport">
+                <svg id="tertiarySvg" viewBox="0 0 720 520" role="img" aria-label="Rotatable C4-prime trace of yeast phenylalanine tRNA"></svg>
+                <div class="te-tooltip" id="teTooltip" hidden></div>
+              </div>
+            </div>
+            <div class="te-legend-row">
+              <div class="te-heat-legend" id="teHeatLegend" hidden></div>
+              <div class="te-region-legend" id="teRegionLegendStage" hidden></div>
+            </div>
+            <p class="te-interaction-help">Left drag: rotate · Mouse wheel: zoom · Right drag: pan · Arrow keys: rotate</p>
+            <p class="stage-note">Experimental C4′ residue trace · PDB 1EHZ · Base-pair lines are mapped secondary-structure connections, not atom-level hydrogen bonds.</p>
           </div>
         </section>
       </div>
@@ -204,7 +229,8 @@
   <script src="chemistry.js"></script>
   <script src="journey.js"></script>
   <script src="primary-animation.js"></script>
-  <script src="secondary.js?v=secondary-8"></script>
-  <script src="app.js?v=secondary-8"></script>
+  <script src="secondary.js?v=secondary-9"></script>
+  <script src="tertiary.js?v=tertiary-1"></script>
+  <script src="app.js?v=tertiary-1"></script>
 </body>
 </html>
