@@ -131,19 +131,36 @@
           <div class="scene-copy">
             <p class="scene-number">04 / 05</p>
             <h2 id="secondaryTitle">Secondary structure maps local pairing</h2>
-            <p>The same chain forms stems and loops when nucleotides pair. Lines connect paired bases.</p>
+            <p>Enter an RNA sequence and its dot-bracket structure, then compare three ways of viewing the same base pairs.</p>
+            <div class="secondary-inputs" aria-label="RNA secondary-structure input">
+              <label for="secondarySequence">RNA sequence</label>
+              <textarea id="secondarySequence" rows="3" spellcheck="false" aria-describedby="secondaryInputHelp"></textarea>
+              <label for="secondaryDotBracket">Dot-bracket structure</label>
+              <textarea id="secondaryDotBracket" rows="3" spellcheck="false" aria-describedby="secondaryInputHelp"></textarea>
+              <p class="input-help" id="secondaryInputHelp">Use <code>(</code> and <code>)</code> for paired residues and <code>.</code> for unpaired residues.</p>
+              <div class="secondary-workspace-actions">
+                <button class="primary-action" id="renderSecondaryButton" type="button">Render structure</button>
+                <button class="secondary-action" id="restoreTrnaButton" type="button">Restore tRNA</button>
+              </div>
+              <p class="input-status" id="secondaryInputStatus" aria-live="polite"></p>
+            </div>
             <div class="fact-panel residue-panel" aria-live="polite">
               <span class="fact-label">FOLLOWING</span>
-              <h3 class="selected-residue-title">Guanine · G1</h3>
-              <p class="selected-residue-copy">Position 1 is shown in the cloverleaf map.</p>
+              <h3 class="secondary-residue-title">Guanine · G1</h3>
+              <p class="secondary-residue-copy">Position 1 is highlighted in the structure map.</p>
             </div>
             <div class="legend" aria-label="Nucleotide color legend">
               <span><i class="dot a"></i>A</span><span><i class="dot g"></i>G</span><span><i class="dot c"></i>C</span><span><i class="dot u"></i>U</span>
             </div>
           </div>
           <div class="visual-stage secondary-stage">
+            <div class="secondary-layout-picker" role="group" aria-label="Secondary structure layout">
+              <button class="layout-choice active" type="button" data-secondary-layout="radial" aria-pressed="true">Radial</button>
+              <button class="layout-choice" type="button" data-secondary-layout="circular" aria-pressed="false">Circular</button>
+              <button class="layout-choice" type="button" data-secondary-layout="arc" aria-pressed="false">Arc</button>
+            </div>
             <svg id="secondarySvg" viewBox="0 0 720 520" role="img" aria-label="Interactive schematic tRNA cloverleaf secondary structure"></svg>
-            <p class="stage-note">Cloverleaf secondary-structure map · Select a nucleotide</p>
+            <p class="stage-note" id="secondaryStageNote">Radial secondary-structure map · Select a nucleotide</p>
           </div>
         </section>
 
