@@ -36,7 +36,7 @@ for(const base of ['A','G','C','U']){
 }
 for(let i=0;i<6;i++){run('showScene('+i+')');flush();assert.equal(document.querySelectorAll('.scene:not([hidden])').length,1);assert.equal(document.getElementById('progressText').textContent,(i+1)+' of 6');}
 assert.equal(document.querySelectorAll('.nt').length,76);
-assert.equal(document.querySelectorAll('.secondary-node').length,76);
+assert.equal(document.querySelectorAll('.se-node').length,76);
 assert.equal(document.querySelectorAll('.tertiary-node').length,76);
 run('showScene(3)');
 assert.equal(document.querySelectorAll('.growth-residue').length,1);
