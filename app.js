@@ -1,4 +1,5 @@
 const RNA_SEQUENCE = "GCGGAUUUAGCUCAGUUGGGAGAGCGCCAGACUGAAGAUCUGGAGGUCCUGUGUUCGAUCCACAGAAUUCGCACCA";
+const TRNA_DOT_BRACKET = "(((((((..((((........)))).(((((.......))))).....(((((.......))))))))))))....";
 const BASE_NAMES = { A: "Adenine", G: "Guanine", C: "Cytosine", U: "Uracil" };
 const BASE_COLORS = { A: "#b55d6a", G: "#2f6b57", C: "#c89b4a", U: "#5d7fa3" };
 const SCENES = ["blocks", "nucleoside", "nucleotide", "primary", "secondary", "tertiary"];
@@ -36,7 +37,11 @@ const state = {
   rotationY: -0.6,
   dragging: false,
   dragMoved: false,
-  lastPointer: null
+  lastPointer: null,
+  secondarySequence: RNA_SEQUENCE,
+  secondaryStructure: TRNA_DOT_BRACKET,
+  secondaryLayout: "radial",
+  secondarySelectedResidue: 0
 };
 
 const blockFacts = {
@@ -135,7 +140,7 @@ function renderPrimary() {
   });
 }
 
-function buildSecondaryCoordinates() {
+function buildTrnaCoordinates() {
   const p = Array.from({ length: RNA_SEQUENCE.length });
   for (let i = 0; i <= 6; i++) p[i] = { x: 335, y: 60 + i * 18 };
   p[7] = { x: 310, y: 180 }; p[8] = { x: 290, y: 184 };
@@ -165,50 +170,176 @@ function buildSecondaryCoordinates() {
   return p;
 }
 
+function parseDotBracket(structure) {
+  const stack = [];
+  const pairs = [];
+  for (let index = 0; index < structure.length; index++) {
+    const symbol = structure[index];
+    if (symbol === "(") stack.push(index);
+    else if (symbol === ")") {
+      const partner = stack.pop();
+      if (partner === undefined) return { error: `Position ${index + 1} closes a pair that was never opened.` };
+      pairs.push([partner, index]);
+    } else if (symbol !== ".") {
+      return { error: `Position ${index + 1} uses “${symbol}”. Use only ., (, and ).` };
+    }
+  }
+  if (stack.length) return { error: `${stack.length} opening parenthesis${stack.length === 1 ? " is" : "es are"} not closed.` };
+  return { pairs };
+}
+
+function buildCircularCoordinates(length) {
+  const center = { x: 360, y: 258 };
+  const radius = Math.min(194, Math.max(110, length * 3.1));
+  return Array.from({ length }, (_, index) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / length;
+    return { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius };
+  });
+}
+
+function buildRadialCoordinates(length, pairs) {
+  const pairedAt = Array(length).fill(0);
+  pairs.forEach(([a, b]) => { pairedAt[a]++; pairedAt[b]++; });
+  let depth = 0;
+  const depths = Array(length).fill(0);
+  for (let index = 0; index < length; index++) {
+    if (state.secondaryStructure[index] === ")") depth--;
+    depths[index] = depth;
+    if (state.secondaryStructure[index] === "(") depth++;
+  }
+  const maxDepth = Math.max(1, ...depths);
+  return Array.from({ length }, (_, index) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / length;
+    const radius = 190 - (depths[index] / maxDepth) * 82 - (pairedAt[index] ? 0 : 12);
+    return { x: 360 + Math.cos(angle) * radius, y: 258 + Math.sin(angle) * radius };
+  });
+}
+
+function buildArcCoordinates(length) {
+  const padding = length > 55 ? 30 : 55;
+  const span = 720 - padding * 2;
+  return Array.from({ length }, (_, index) => ({
+    x: length === 1 ? 360 : padding + (span * index) / (length - 1),
+    y: 425
+  }));
+}
+
+function addSecondaryNode(svg, point, base, index) {
+  const selected = index === state.secondarySelectedResidue;
+  const group = svgElement("g", {
+    class: `secondary-node${selected ? " selected" : ""}`,
+    transform: `translate(${point.x} ${point.y})`, tabindex: "0", role: "button",
+    "aria-label": `${BASE_NAMES[base]}, position ${index + 1}`
+  });
+  group.appendChild(svgElement("circle", { r: 10, fill: BASE_COLORS[base] }));
+  const text = svgElement("text", { y: .5 });
+  text.textContent = base;
+  group.appendChild(text);
+  group.addEventListener("click", () => selectSecondaryResidue(index));
+  group.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      selectSecondaryResidue(index);
+    }
+  });
+  svg.appendChild(group);
+}
+
+function addArc(svg, a, b, positions) {
+  const x1 = positions[a].x, x2 = positions[b].x;
+  const distance = Math.abs(x2 - x1);
+  const peak = Math.max(55, 410 - Math.min(360, distance * .78));
+  svg.appendChild(svgElement("path", { class: "pair-line arc-pair", d: `M ${x1} 416 Q ${(x1 + x2) / 2} ${peak} ${x2} 416` }));
+}
+
+function updateSecondaryPanel() {
+  const base = state.secondarySequence[state.secondarySelectedResidue];
+  const position = state.secondarySelectedResidue + 1;
+  document.querySelectorAll(".secondary-residue-title").forEach(node => node.textContent = `${BASE_NAMES[base]} · ${base}${position}`);
+  document.querySelectorAll(".secondary-residue-copy").forEach(node => node.textContent = `Position ${position} of ${state.secondarySequence.length} is highlighted in the ${state.secondaryLayout} view.`);
+}
+
+function selectSecondaryResidue(index) {
+  state.secondarySelectedResidue = Math.max(0, Math.min(state.secondarySequence.length - 1, index));
+  updateSecondaryPanel();
+  document.querySelectorAll(".secondary-node").forEach((node, i) => node.classList.toggle("selected", i === state.secondarySelectedResidue));
+}
+
 function renderSecondary() {
   const svg = document.getElementById("secondarySvg");
-  const positions = buildSecondaryCoordinates();
+  svg.replaceChildren();
+  const sequence = state.secondarySequence;
+  const { pairs } = parseDotBracket(state.secondaryStructure);
+  const isDefaultTrna = sequence === RNA_SEQUENCE && state.secondaryStructure === TRNA_DOT_BRACKET;
+  const positions = state.secondaryLayout === "arc"
+    ? buildArcCoordinates(sequence.length)
+    : (state.secondaryLayout === "radial" && isDefaultTrna ? buildTrnaCoordinates() : state.secondaryLayout === "radial" ? buildRadialCoordinates(sequence.length, pairs) : buildCircularCoordinates(sequence.length));
   const backbone = svgElement("polyline", { class: "backbone-line", points: positions.map(point => `${point.x},${point.y}`).join(" ") });
   svg.appendChild(backbone);
-
-  const pairs = [];
-  for (let i = 0; i < 7; i++) pairs.push([i, 71 - i]);
-  for (let i = 0; i < 4; i++) pairs.push([9 + i, 24 - i]);
-  for (let i = 0; i < 5; i++) pairs.push([26 + i, 42 - i]);
-  for (let i = 0; i < 5; i++) pairs.push([48 + i, 64 - i]);
   pairs.forEach(([a, b]) => {
-    svg.appendChild(svgElement("line", { class: "pair-line", x1: positions[a].x, y1: positions[a].y, x2: positions[b].x, y2: positions[b].y }));
+    if (state.secondaryLayout === "arc") addArc(svg, a, b, positions);
+    else svg.appendChild(svgElement("line", { class: "pair-line", x1: positions[a].x, y1: positions[a].y, x2: positions[b].x, y2: positions[b].y }));
   });
 
-  const labels = [
+  const labels = isDefaultTrna && state.secondaryLayout === "radial" ? [
     ["ACCEPTOR STEM", 352, 25], ["D LOOP", 72, 130], ["ANTICODON LOOP", 350, 495], ["VARIABLE", 438, 288], ["TΨC LOOP", 625, 315]
-  ];
+  ] : [];
   labels.forEach(([text, x, y]) => {
     const label = svgElement("text", { class: "region-label", x, y, "text-anchor": "middle" });
     label.textContent = text;
     svg.appendChild(label);
   });
 
-  positions.forEach((point, index) => {
-    const base = RNA_SEQUENCE[index];
-    const group = svgElement("g", {
-      class: `secondary-node${index === state.selectedResidue ? " selected" : ""}`,
-      transform: `translate(${point.x} ${point.y})`, tabindex: "0", role: "button",
-      "aria-label": `${BASE_NAMES[base]}, position ${index + 1}`
-    });
-    group.appendChild(svgElement("circle", { r: 10, fill: BASE_COLORS[base] }));
-    const text = svgElement("text", { y: .5 });
-    text.textContent = base;
-    group.appendChild(text);
-    group.addEventListener("click", () => selectResidue(index));
-    group.addEventListener("keydown", event => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        selectResidue(index);
-      }
-    });
-    svg.appendChild(group);
+  positions.forEach((point, index) => addSecondaryNode(svg, point, sequence[index], index));
+  document.getElementById("secondaryStageNote").textContent = `${state.secondaryLayout[0].toUpperCase() + state.secondaryLayout.slice(1)} secondary-structure map · Select a nucleotide`;
+  updateSecondaryPanel();
+}
+
+function setSecondaryStatus(message, isError = false) {
+  const status = document.getElementById("secondaryInputStatus");
+  status.textContent = message;
+  status.classList.toggle("error", isError);
+}
+
+function renderCustomSecondary() {
+  const sequence = document.getElementById("secondarySequence").value.toUpperCase().replace(/\s/g, "");
+  const structure = document.getElementById("secondaryDotBracket").value.replace(/\s/g, "");
+  if (!sequence) return setSecondaryStatus("Enter an RNA sequence before rendering.", true);
+  if (!/^[ACGU]+$/.test(sequence)) return setSecondaryStatus("The sequence may contain only A, C, G, and U.", true);
+  if (sequence.length !== structure.length) return setSecondaryStatus(`Sequence has ${sequence.length} residues, but dot-bracket notation has ${structure.length} characters.`, true);
+  const parsed = parseDotBracket(structure);
+  if (parsed.error) return setSecondaryStatus(parsed.error, true);
+  state.secondarySequence = sequence;
+  state.secondaryStructure = structure;
+  state.secondarySelectedResidue = 0;
+  renderSecondary();
+  setSecondaryStatus(`${sequence.length}-nucleotide structure rendered with ${parsed.pairs.length} base pair${parsed.pairs.length === 1 ? "" : "s"}.`);
+}
+
+function setupSecondaryWorkspace() {
+  const sequence = document.getElementById("secondarySequence");
+  const structure = document.getElementById("secondaryDotBracket");
+  sequence.value = RNA_SEQUENCE;
+  structure.value = TRNA_DOT_BRACKET;
+  document.getElementById("renderSecondaryButton").addEventListener("click", renderCustomSecondary);
+  document.getElementById("restoreTrnaButton").addEventListener("click", () => {
+    sequence.value = RNA_SEQUENCE;
+    structure.value = TRNA_DOT_BRACKET;
+    state.secondarySequence = RNA_SEQUENCE;
+    state.secondaryStructure = TRNA_DOT_BRACKET;
+    state.secondarySelectedResidue = 0;
+    renderSecondary();
+    setSecondaryStatus("The default yeast tRNA example has been restored.");
   });
+  document.querySelectorAll("[data-secondary-layout]").forEach(button => button.addEventListener("click", () => {
+    state.secondaryLayout = button.dataset.secondaryLayout;
+    document.querySelectorAll("[data-secondary-layout]").forEach(control => {
+      const active = control === button;
+      control.classList.toggle("active", active);
+      control.setAttribute("aria-pressed", String(active));
+    });
+    renderSecondary();
+  }));
 }
 
 const center3D = TERTIARY_COORDS.reduce((acc, point) => acc.map((value, i) => value + point[i] / TERTIARY_COORDS.length), [0, 0, 0]);
@@ -377,6 +508,7 @@ function initialize() {
   setupChemicalJourney();
   renderPrimary();
   setupPrimaryAnimation();
+  setupSecondaryWorkspace();
   renderSecondary();
   setupTertiaryControls();
   setupDialog();
