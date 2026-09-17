@@ -379,7 +379,7 @@ const SecondaryExplorer = (() => {
     $("seBackReset").addEventListener("click",()=>{delete backboneOverrides[selectedBackbone];panel();render();});
     $("seResidueReset").addEventListener("click",()=>{delete residueOverrides[selected];panel();render();});
     $("seNaturalColors").addEventListener("click",()=>{
-      delete settings.fillColor;heatEnabled=false;Object.values(residueOverrides).forEach(o=>delete o.fillColor);panel();render();
+      delete settings.fillColor;heatEnabled=false;Object.values(residueOverrides).forEach(o=>delete o.fillColor);panel();render();broadcastContext();
     });
     $("seHeatTheme").addEventListener("change",e=>{heatTheme=e.target.value;panel();render();broadcastContext();});
     $("seHeatEnabled").addEventListener("change",e=>{
