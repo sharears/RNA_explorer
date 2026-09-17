@@ -70,7 +70,7 @@ function selectResidue(index) {
   updateResiduePanels();
   document.querySelectorAll(".nt").forEach((node, i) => node.classList.toggle("selected", i === state.selectedResidue));
   SecondaryExplorer.followDefault(state.selectedResidue);
-  renderTertiary();
+  if (typeof TertiaryExplorer !== "undefined") TertiaryExplorer.render(state.selectedResidue);
 }
 
 function updateResiduePanels() {
@@ -113,7 +113,7 @@ function showScene(index) {
   nextButton.innerHTML = state.sceneIndex < SCENES.length - 1 ? `Next: ${SCENE_LABELS[state.sceneIndex + 1]} <span>→</span>` : `Journey complete <span>✓</span>`;
   document.getElementById("progressText").textContent = `${state.sceneIndex + 1} of ${SCENES.length}`;
 
-  if (activeName === "tertiary") renderTertiary();
+  if (activeName === "tertiary" && typeof TertiaryExplorer !== "undefined") TertiaryExplorer.render(state.selectedResidue);
   enterChemicalScene(activeName);
   if (activeName === 'primary') enterPrimaryAnimation();
 }
@@ -313,7 +313,14 @@ function initialize() {
   setupPrimaryAnimation();
   setupSecondaryWorkspace();
   renderSecondary();
-  setupTertiaryControls();
+  TertiaryExplorer.setup({
+    sequence: RNA_SEQUENCE,
+    structure: TRNA_DOT_BRACKET,
+    coords: TERTIARY_COORDS,
+    colors: BASE_COLORS,
+    names: BASE_NAMES,
+    onSelect: index => selectResidue(index)
+  });
   setupDialog();
   registerWebMCPTools();
   selectResidue(0);

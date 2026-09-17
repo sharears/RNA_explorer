@@ -299,6 +299,13 @@ const SecondaryExplorer = (() => {
     $("secondaryStageNote").textContent=`${layout[0].toUpperCase()+layout.slice(1)} · ${seq.length} residues · ${pairs.length} pairs · Select a residue index or pair`;
     renderLegend();renderHeatLegend();
   }
+  function broadcastContext() {
+    const isDefault=seq===defaultSeq&&db===defaultDb;
+    window.dispatchEvent(new CustomEvent("rna-secondary-context",{detail:{isDefault,sequence:seq,structure:db}}));
+    window.dispatchEvent(new CustomEvent("rna-metadata-change",{detail:{
+      isDefault,metadata:{...metadata},heatEnabled,heatTheme,heatRange:[...heatRange]
+    }}));
+  }
   function load(sequence,structure) {
     const parsed=parse(sequence,structure);
     const changed=sequence!==seq||structure!==db;
@@ -321,7 +328,7 @@ const SecondaryExplorer = (() => {
       label.append(checkbox,document.createTextNode(String(i+1)));$("seIndexChoices").append(label);
       checkbox.addEventListener("change",()=>{if(checkbox.checked)indexSelection.add(i);else indexSelection.delete(i);indexMode="selected";panel();render();});
     });
-    panel();render();
+    panel();render();broadcastContext();
   }
 
   const residueFields=[
@@ -372,17 +379,17 @@ const SecondaryExplorer = (() => {
     $("seBackReset").addEventListener("click",()=>{delete backboneOverrides[selectedBackbone];panel();render();});
     $("seResidueReset").addEventListener("click",()=>{delete residueOverrides[selected];panel();render();});
     $("seNaturalColors").addEventListener("click",()=>{
-      delete settings.fillColor;heatEnabled=false;Object.values(residueOverrides).forEach(o=>delete o.fillColor);panel();render();
+      delete settings.fillColor;heatEnabled=false;Object.values(residueOverrides).forEach(o=>delete o.fillColor);panel();render();broadcastContext();
     });
-    $("seHeatTheme").addEventListener("change",e=>{heatTheme=e.target.value;panel();render();});
+    $("seHeatTheme").addEventListener("change",e=>{heatTheme=e.target.value;panel();render();broadcastContext();});
     $("seHeatEnabled").addEventListener("change",e=>{
       heatEnabled=e.target.checked&&Object.keys(metadata).length>0;
       if(e.target.checked&&!heatEnabled)$("seMetadataStatus").textContent="Upload a CSV with numeric values first.";
-      panel();render();
+      panel();render();broadcastContext();
     });
     $("seClearMetadata").addEventListener("click",()=>{
       metadataTicket++;metadata={};heatEnabled=false;$("seMetadataFile").value="";
-      $("seMetadataStatus").textContent="Metadata cleared.";panel();render();
+      $("seMetadataStatus").textContent="Metadata cleared.";panel();render();broadcastContext();
     });
     $("seMetadataFile").addEventListener("change",async e=>{
       const file=e.target.files[0];if(!file)return;
@@ -416,7 +423,7 @@ const SecondaryExplorer = (() => {
         Object.values(residueOverrides).forEach(o=>["fillColor","circleColor","letterColor"].forEach(k=>delete o[k]));
         controls.querySelectorAll("[data-setting]").forEach(el=>{if(settings[el.dataset.setting]!==undefined)el.value=settings[el.dataset.setting];});
         $("seMetadataStatus").textContent=values.length+" numeric values loaded; "+(seq.length-values.length)+" residues without values. Manual edits now override the heatmap.";
-        panel();render();
+        panel();render();broadcastContext();
     }
   }
   const indexFields=[["color","Index color","color"],["size","Index size","number",8,26,1],["font","Index font family","select",["monospace","sans-serif","serif"]],["fontStyle","Index font style","select",["normal","bold","italic"]]];
