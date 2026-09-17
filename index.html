@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="An interactive journey from RNA building blocks to primary, secondary, and tertiary structure." />
+  <title>RNA Structure Explorer — Beta</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230b1220'/%3E%3Cpath d='M18 47C18 29 46 35 46 17M18 17c0 18 28 12 28 30' fill='none' stroke='%2374d7b6' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="RNA Structure Explorer home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>RNA Structure Explorer</span>
+        <span class="beta">BETA</span>
+      </a>
+      <button class="about-button" id="aboutButton" type="button">About this model</button>
+    </header>
+
+    <main>
+      <section class="intro" aria-labelledby="pageTitle">
+        <div>
+          <p class="eyebrow">Explore RNA at different scales</p>
+          <h1 id="pageTitle">Build it. Trace it. See it fold.</h1>
+        </div>
+        <p>Follow one RNA molecule from its chemical parts to its three-dimensional shape. Each view describes the same connected chain.</p>
+      </section>
+
+      <nav class="scale-nav" aria-label="RNA structural scale">
+        <button class="scale-step active" data-scene="blocks" aria-current="step"><span>01</span><b>Building blocks</b></button>
+        <button class="scale-step" data-scene="nucleoside"><span>02</span><b>Nucleoside</b></button>
+        <button class="scale-step" data-scene="nucleotide"><span>03</span><b>Nucleotide</b></button>
+        <button class="scale-step" data-scene="primary"><span>04</span><b>Primary</b></button>
+        <button class="scale-step" data-scene="secondary"><span>05</span><b>Secondary</b></button>
+        <button class="scale-step" data-scene="tertiary"><span>06</span><b>Tertiary</b></button>
+      </nav>
+
+      <div class="explorer" id="explorer">
+        <section class="scene active" id="scene-blocks" data-scene-panel="blocks" aria-labelledby="blocksTitle">
+          <div class="scene-copy">
+            <p class="scene-number">01 / 05</p>
+            <h2 id="blocksTitle">What is RNA made of?</h2>
+            <p>An RNA nucleotide has three chemical parts. Select each part to see the job it performs.</p>
+            <div class="fact-panel" id="blockFact" aria-live="polite">
+              <span class="fact-label">SELECTED PART</span>
+              <h3>Ribose sugar</h3>
+              <p>Ribose is a five-carbon sugar. Its 2′-OH group helps give RNA its distinct chemistry.</p>
+            </div>
+          </div>
+          <div class="visual-stage molecule-stage">
+            <svg class="molecule-svg" viewBox="0 0 720 430" role="img" aria-label="Simplified nucleotide showing phosphate, ribose, and nitrogenous base">
+              <path class="bond" d="M173 215 L278 215 M410 215 L508 215" />
+              <g class="chem-part" data-part="phosphate" tabindex="0" role="button" aria-label="Phosphate group">
+                <circle cx="115" cy="215" r="62" />
+                <text x="115" y="225">P</text>
+                <text class="part-name" x="115" y="310">PHOSPHATE</text>
+              </g>
+              <g class="chem-part selected" data-part="ribose" tabindex="0" role="button" aria-label="Ribose sugar">
+                <path d="M345 143 L417 197 L389 284 L300 284 L273 197 Z" />
+                <text x="345" y="225">O</text>
+                <text class="carbon-label" x="405" y="190">1′</text>
+                <text class="carbon-label" x="398" y="300">2′</text>
+                <text class="carbon-label" x="285" y="300">3′</text>
+                <text class="carbon-label" x="258" y="190">4′</text>
+                <text class="carbon-label" x="288" y="140">5′</text>
+                <text class="part-name" x="345" y="345">RIBOSE</text>
+              </g>
+              <g class="chem-part" data-part="base" tabindex="0" role="button" aria-label="Nitrogenous base">
+                <path d="M551 145 L632 145 L672 215 L632 285 L551 285 L511 215 Z" />
+                <path d="M632 145 L690 176 L690 254 L632 285" />
+                <text x="600" y="225">BASE</text>
+                <text class="part-name" x="600" y="345">A · G · C · U</text>
+              </g>
+            </svg>
+            <p class="stage-note">Simplified chemical diagram · Select a component</p>
+          </div>
+        </section>
+
+        <section class="scene" id="scene-nucleotide" data-scene-panel="nucleotide" aria-labelledby="nucleotideTitle" hidden>
+          <div class="scene-copy">
+            <p class="scene-number">02 / 05</p>
+            <h2 id="nucleotideTitle">Build a nucleotide</h2>
+            <p>The sugar and phosphate stay the same. Choose a base, then assemble the three parts.</p>
+            <div class="base-picker" role="group" aria-label="Choose a nitrogenous base">
+              <button class="base-choice a active" data-base="A" aria-pressed="true">A <span>Adenine</span></button>
+              <button class="base-choice g" data-base="G" aria-pressed="false">G <span>Guanine</span></button>
+              <button class="base-choice c" data-base="C" aria-pressed="false">C <span>Cytosine</span></button>
+              <button class="base-choice u" data-base="U" aria-pressed="false">U <span>Uracil</span></button>
+            </div>
+            <button class="primary-action" id="assembleButton" type="button">Assemble nucleotide</button>
+          </div>
+          <div class="visual-stage builder-stage">
+            <div class="builder" id="builder" aria-label="Nucleotide assembly visualization">
+              <div class="builder-piece phosphate-piece"><span>P</span><small>Phosphate</small></div>
+              <span class="plus">+</span>
+              <div class="builder-piece sugar-piece"><span>R</span><small>Ribose</small></div>
+              <span class="plus">+</span>
+              <div class="builder-piece base-piece a" id="builderBase"><span>A</span><small>Adenine</small></div>
+            </div>
+            <div class="assembly-result" id="assemblyResult" aria-live="polite">
+              <span class="result-formula">BASE + SUGAR + PHOSPHATE</span>
+              <strong>Choose a base and assemble it.</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="scene" id="scene-primary" data-scene-panel="primary" aria-labelledby="primaryTitle" hidden>
+          <div class="scene-copy">
+            <p class="scene-number">03 / 05</p>
+            <h2 id="primaryTitle">Primary structure is the order</h2>
+            <p>Every letter represents one nucleotide. The sequence is read from the 5′ end toward the 3′ end.</p>
+            <div class="fact-panel residue-panel" aria-live="polite">
+              <span class="fact-label">SELECTED NUCLEOTIDE</span>
+              <h3 class="selected-residue-title">Guanine · G1</h3>
+              <p class="selected-residue-copy">Position 1 of 76 in this tRNA sequence.</p>
+            </div>
+          </div>
+          <div class="visual-stage sequence-stage">
+            <div class="sequence-label"><span>5′</span><span>3′</span></div>
+            <div class="sequence" id="primarySequence" aria-label="RNA primary sequence"></div>
+            <p class="stage-note">Select any letter. Your selection follows into the next views.</p>
+          </div>
+        </section>
+
+        <section class="scene" id="scene-secondary" data-scene-panel="secondary" aria-labelledby="secondaryTitle" hidden>
+          <div class="scene-copy">
+            <p class="scene-number">04 / 05</p>
+            <h2 id="secondaryTitle">Secondary structure maps local pairing</h2>
+            <p>The same chain forms stems and loops when nucleotides pair. Lines connect paired bases.</p>
+            <div class="fact-panel residue-panel" aria-live="polite">
+              <span class="fact-label">FOLLOWING</span>
+              <h3 class="selected-residue-title">Guanine · G1</h3>
+              <p class="selected-residue-copy">Position 1 is shown in the cloverleaf map.</p>
+            </div>
+            <div class="legend" aria-label="Nucleotide color legend">
+              <span><i class="dot a"></i>A</span><span><i class="dot g"></i>G</span><span><i class="dot c"></i>C</span><span><i class="dot u"></i>U</span>
+            </div>
+          </div>
+          <div class="visual-stage secondary-stage">
+            <svg id="secondarySvg" viewBox="0 0 720 520" role="img" aria-label="Interactive schematic tRNA cloverleaf secondary structure"></svg>
+            <p class="stage-note">Cloverleaf secondary-structure map · Select a nucleotide</p>
+          </div>
+        </section>
+
+        <section class="scene" id="scene-tertiary" data-scene-panel="tertiary" aria-labelledby="tertiaryTitle" hidden>
+          <div class="scene-copy">
+            <p class="scene-number">05 / 05</p>
+            <h2 id="tertiaryTitle">Tertiary structure is the 3D arrangement</h2>
+            <p>Interactions across the chain bring the stems together into a compact L-shaped tRNA.</p>
+            <div class="fact-panel residue-panel" aria-live="polite">
+              <span class="fact-label">FOLLOWING</span>
+              <h3 class="selected-residue-title">Guanine · G1</h3>
+              <p class="selected-residue-copy">Drag the model to see this residue from another angle.</p>
+            </div>
+            <button class="secondary-action" id="followButton" type="button">Follow a random nucleotide</button>
+          </div>
+          <div class="visual-stage tertiary-stage" id="tertiaryStage">
+            <svg id="tertiarySvg" viewBox="0 0 720 520" role="img" aria-label="Rotatable simplified three-dimensional tRNA model"></svg>
+            <div class="drag-hint" aria-hidden="true"><span>↔</span> DRAG TO ROTATE</div>
+            <p class="stage-note">Experimental C4′ residue trace · PDB 1EHZ · Not an atom-level view</p>
+          </div>
+        </section>
+      </div>
+
+      <footer class="scene-footer">
+        <button class="nav-button previous" id="previousButton" type="button" disabled><span>←</span> Previous</button>
+        <p><span id="progressText">1 of 6</span> · From building blocks to RNA</p>
+        <button class="nav-button next" id="nextButton" type="button">Next: Nucleoside <span>→</span></button>
+      </footer>
+    </main>
+  </div>
+
+  <dialog id="aboutDialog">
+    <button class="dialog-close" id="dialogClose" aria-label="Close dialog">×</button>
+    <p class="eyebrow">About the beta</p>
+    <h2>A teaching model, not a folding simulation</h2>
+    <p>The first three views introduce building blocks and simplified condensation schemes. Primary, secondary, and tertiary views describe the same tRNA; they do not imply a sequential folding pathway.</p>
+    <p>The secondary view is a simplified educational map of a 76-nucleotide tRNA. The tertiary view traces the C4′ positions from the experimentally determined yeast tRNA-Phe structure <a href="https://www.rcsb.org/structure/1EHZ" target="_blank" rel="noreferrer">PDB 1EHZ</a>, without showing every atom.</p>
+  </dialog>
+
+  <script src="chemistry.js"></script>
+  <script src="journey.js"></script>
+  <script src="primary-animation.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
