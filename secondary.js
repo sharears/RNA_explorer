@@ -10,6 +10,54 @@ const SecondaryExplorer = (() => {
     fontStyle:"normal", mode:"uniform", legend:true};
   let seq="", db="", defaultSeq="", defaultDb="", pairs=[], partner=[], selected=0;
   let layout="radial", overrides={}, annotations={}, onDefaultSelect=()=>{};
+  let residueOverrides={}, backboneOverrides={}, selectedBackbone=0, zoom=1;
+  let metadata={}, heatEnabled=false, heatTheme="viridis", heatRange=[0,1], metadataTicket=0;
+  const defaults={...settings};
+  const palettes={
+    viridis:["#440154","#3b528b","#21918c","#5ec962","#fde725"],
+    magma:["#000004","#51127c","#b73779","#fc8961","#fcfdbf"],
+    blueRed:["#2166ac","#92c5de","#f7f7f7","#f4a582","#b2182b"],
+    cividis:["#00224e","#434e6c","#7d7c78","#bcae6c","#fee838"]
+  };
+  function heatColor(value) {
+    const t=heatRange[1]===heatRange[0]?.5:Math.max(0,Math.min(1,(value-heatRange[0])/(heatRange[1]-heatRange[0])));
+    const stops=palettes[heatTheme],x=t*(stops.length-1),i=Math.min(stops.length-2,Math.floor(x)),f=x-i;
+    return "#"+[1,3,5].map(k=>Math.round(parseInt(stops[i].slice(k,k+2),16)*(1-f)+parseInt(stops[i+1].slice(k,k+2),16)*f).toString(16).padStart(2,"0")).join("");
+  }
+  function residueStyle(i) {
+    return {...settings,fillColor:heatEnabled&&metadata[i]?.value!=null?heatColor(metadata[i].value):settings.fillColor||colors[seq[i]],...residueOverrides[i]};
+  }
+  function parseMetadata(csv,n) {
+    const rows=[];let row=[],cell="",quoted=false,closed=false;
+    csv=csv.replace(/^\uFEFF/,"");
+    for(let i=0;i<=csv.length;i++){
+      const c=i===csv.length?"\n":csv[i];
+      if(quoted){
+        if(i===csv.length)throw Error("Unclosed quoted field in CSV.");
+        if(c==='"'&&csv[i+1]==='"'){cell+='"';i++;}
+        else if(c==='"'){quoted=false;closed=true;}else cell+=c;
+      }else if(c==='"'){
+        if(cell.trim()||closed)throw Error("Invalid quote in CSV.");quoted=true;cell="";
+      }else if(c===","||c==="\n"||c==="\r"){
+        row.push(cell.trim());cell="";closed=false;
+        if(c!==","){if(row.some(v=>v!==""))rows.push(row);row=[];if(c==="\r"&&csv[i+1]==="\n")i++;}
+      }else {if(closed&&!/\s/.test(c))throw Error("Invalid text after quoted field.");cell+=c;}
+    }
+    if(!rows.length||rows[0].join(",")!=="Residue_Index,Residue_ID,Residue_Information")throw Error("CSV headers must be Residue_Index,Residue_ID,Residue_Information, in that order.");
+    const data={};let count=0;
+    rows.slice(1).forEach((r,i)=>{
+      if(r.length!==3)throw Error("CSV row "+(i+2)+" must contain three columns.");
+      const index=Number(r[0]);
+      if(!/^\d+$/.test(r[0])||!Number.isInteger(index)||index<1||index>n)throw Error("Invalid Residue_Index on row "+(i+2)+". Use 1–"+n+".");
+      if(data[index-1])throw Error("Duplicate Residue_Index "+index+".");
+      const missing=r[2]===""||/^(NA|N\/A|NaN)$/i.test(r[2]);
+      const value=missing?null:Number(r[2]);
+      if(!missing&&(!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(r[2])||!Number.isFinite(value)))throw Error("Residue_Information must be numeric or blank/NA (row "+(i+2)+").");
+      data[index-1]={id:r[1],value};if(value!==null)count++;
+    });
+    if(!count)throw Error("CSV needs at least one numeric Residue_Information value.");
+    return data;
+  }
   const $ = id => document.getElementById(id);
   const svg = (name, attrs={}) => {
     const el=document.createElementNS(NS,name);
@@ -94,7 +142,7 @@ const SecondaryExplorer = (() => {
   function coordinates() {
     const n=seq.length;
     if(layout==="radial") return radial(n,partner);
-    if(layout==="arc") return Array.from({length:n},(_,i)=>({x:i*36,y:0}));
+    if(layout==="arc") return Array.from({length:n},(_,i)=>({x:i*56,y:0}));
     const r=Math.max(60,n*36/(2*Math.PI));
     return Array.from({length:n},(_,i)=>{
       const angle=-Math.PI/2+i*(2*Math.PI-0.18)/Math.max(1,n-1);
@@ -151,10 +199,11 @@ const SecondaryExplorer = (() => {
     parent.append(g);
   }
   function select(index,notify=true) {
-    selected=index;panel();render();
+    selected=index;selectedBackbone=Math.min(index,Math.max(0,seq.length-2));panel();render();
     if(notify&&seq===defaultSeq&&db===defaultDb) onDefaultSelect(index);
   }
   function panel() {
+    extendedPanel();
     const other=partner[selected],key=activeKey();
     $("seSelected").textContent=other<0?`${seq[selected]}${selected+1} · unpaired`:`${seq[selected]}${selected+1} — ${seq[other]}${other+1}`;
     $("sePairEditor").disabled=!key;
@@ -200,20 +249,29 @@ const SecondaryExplorer = (() => {
   function render() {
     if(!seq) return;
     const root=$("secondarySvg");root.replaceChildren();
-    const pos=coordinates(),s=settings;
+    const pos=coordinates();
     const xs=pos.map(p=>p.x),ys=pos.map(p=>p.y);
     let minX=Math.min(...xs)-52,maxX=Math.max(...xs)+52,minY=Math.min(...ys)-55,maxY=Math.max(...ys)+55;
     if(layout==="arc") for(const [a,b] of pairs) minY=Math.min(minY,-Math.abs(pos[b].x-pos[a].x)/2-55);
     root.setAttribute("viewBox",`${minX} ${minY} ${Math.max(150,maxX-minX)} ${Math.max(150,maxY-minY)}`);
     root.setAttribute("aria-label",`${layout} RNA secondary structure with ${seq.length} nucleotides`);
-    root.style.minWidth=(layout==="arc"?Math.max(660,seq.length*20):Math.max(660,(maxX-minX)*.9))+"px";
-    root.style.minHeight=layout==="arc"?"450px":Math.max(520,(maxY-minY)*.9)+"px";
-    root.append(svg("polyline",{points:pos.map(p=>`${p.x},${p.y}`).join(" "),fill:"none",stroke:s.backColor,"stroke-width":s.backWidth,opacity:s.backOpacity,"stroke-linejoin":"round"}));
+    applyZoom();
+    for(let i=0;i<pos.length-1;i++){
+      const a=pos[i],b=pos[i+1],bs={...settings,...backboneOverrides[i]};
+      const g=svg("g",{class:"se-backbone",role:"button",tabindex:0,"aria-label":`Backbone ${i+1}–${i+2}`,"data-backbone":i});
+      g.append(svg("line",{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:bs.backColor,"stroke-width":bs.backWidth,opacity:bs.backOpacity}));
+      g.append(svg("line",{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:"transparent","stroke-width":14,"pointer-events":"stroke","data-export-remove":""}));
+      const choose=()=>{selectedBackbone=i;panel();};
+      g.addEventListener("click",choose);
+      g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();choose();}});
+      root.append(g);
+    }
     pairs.forEach(([a,b])=>pairGraphic(root,a,b,pos,keyOf(a,b)));
     pos.forEach((p,i)=>{
+      const s=residueStyle(i);
       const g=svg("g",{transform:`translate(${p.x} ${p.y})`,class:"se-node",tabindex:0,role:"button","aria-label":`${seq[i]}${i+1}, ${partner[i]<0?"unpaired":"paired with "+(partner[i]+1)}`});
-      if(i===selected || i===partner[selected]) g.append(svg("circle",{r:20,fill:"none",stroke:"#ffffff","stroke-width":1.5,"stroke-dasharray":i===selected?"none":"3 3"}));
-      g.append(svg("circle",{r:16,fill:colors[seq[i]],stroke:s.circleColor,"stroke-width":s.circleWidth}));
+      if(i===selected || i===partner[selected]) g.append(svg("circle",{"data-export-remove":"",r:20,fill:"none",stroke:"#ffffff","stroke-width":1.5,"stroke-dasharray":i===selected?"none":"3 3"}));
+      g.append(svg("circle",{r:16,fill:s.fillColor,stroke:s.circleColor,"stroke-width":s.circleWidth}));
       text(g,seq[i],{y:0,fill:s.letterColor,"font-family":s.font,"font-size":s.letterSize,"font-style":s.fontStyle==="italic"?"italic":"normal","font-weight":s.fontStyle==="bold"?"700":"400","text-anchor":"middle","dominant-baseline":"central"});
       const prev=pos[Math.max(0,i-1)],next=pos[Math.min(pos.length-1,i+1)];
       const away=partner[i]>=0?{x:p.x-pos[partner[i]].x,y:p.y-pos[partner[i]].y}
@@ -221,7 +279,7 @@ const SecondaryExplorer = (() => {
       const norm=Math.hypot(away.x,away.y)||1;
       const number=text(g,String(i+1),{x:away.x/norm*28,y:away.y/norm*28+3,fill:"#bacbd7","font-size":10,"font-family":"monospace","text-anchor":"middle"});
       number.setAttribute("class","se-index");
-      const title=svg("title");title.textContent=`${seq[i]}${i+1}`;g.append(title);
+      const title=svg("title");title.textContent=`${seq[i]}${i+1}`+(metadata[i]?` · ${metadata[i].id} · ${metadata[i].value??"No value"}`:"");g.append(title);
       g.addEventListener("click",()=>select(i));
       g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select(i);}});
       root.append(g);
@@ -229,13 +287,19 @@ const SecondaryExplorer = (() => {
     text(root,"5′",{x:pos[0].x-30,y:pos[0].y,fill:"#74d7b6","font-size":16,"text-anchor":"end"});
     text(root,"3′",{x:pos.at(-1).x+30,y:pos.at(-1).y,fill:"#74d7b6","font-size":16});
     $("secondaryStageNote").textContent=`${layout[0].toUpperCase()+layout.slice(1)} · ${seq.length} residues · ${pairs.length} pairs · Select a residue index or pair`;
-    renderLegend();
+    renderLegend();renderHeatLegend();
   }
   function load(sequence,structure) {
     const parsed=parse(sequence,structure);
     const changed=sequence!==seq||structure!==db;
     seq=sequence;db=structure;pairs=parsed.pairs;partner=parsed.partner;selected=0;
-    if(changed){overrides={};annotations={};}
+    if(changed){overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;zoom=1;
+      if($("seMetadataFile"))$("seMetadataFile").value="";
+      if($("seMetadataStatus"))$("seMetadataStatus").textContent="Upload metadata for the current sequence.";
+    }
+    selectedBackbone=0;
+    $("seBackList").replaceChildren();
+    for(let i=0;i<seq.length-1;i++)$("seBackList").append(new Option(`${i+1}–${i+2}`,String(i)));
     $("sePairList").replaceChildren(new Option("Select a pair by residue indices",""));
     pairs.forEach(([a,b])=>$("sePairList").append(new Option(`${a+1}–${b+1}  (${seq[a]}–${seq[b]})`,keyOf(a,b))));
     $("seIndices").replaceChildren();
@@ -246,6 +310,158 @@ const SecondaryExplorer = (() => {
     });
     panel();render();
   }
+
+  const residueFields=[
+    ["fillColor","Circle fill","color"],["circleColor","Circle outline color","color"],
+    ["circleWidth","Circle outline thickness","number",0,8,.5],
+    ["letterColor","Letter color","color"],["letterSize","Letter size","number",8,26,1],
+    ["font","Font family","select",["monospace","sans-serif","serif"]],
+    ["fontStyle","Font style","select",["normal","bold","italic"]]
+  ];
+  const backFields=[["backColor","Backbone color","color"],["backWidth","Backbone thickness","number",0,10,.5],["backOpacity","Backbone opacity (0–1)","number",0,1,.05]];
+  function localFields(fields,prefix){
+    return fields.map(([k,label,type,min,max,step])=>'<label>'+label+(type==="select"
+      ?'<select id="'+prefix+k+'">'+min.map(v=>'<option value="'+v+'">'+v+'</option>').join("")+'</select>'
+      :'<input id="'+prefix+k+'" type="'+type+'" '+(type==="number"?'min="'+min+'" max="'+max+'" step="'+step+'"':'')+'>')+'</label>').join("");
+  }
+  function reorganizeControls(controls){
+    const old=[...controls.children].filter(el=>el.tagName==="DETAILS");
+    function group(name){
+      const el=document.createElement("details");el.open=name==="Residues";
+      el.innerHTML='<summary>'+name+'</summary><details open><summary>Selected</summary></details><details><summary>All</summary></details>';
+      controls.insertBefore(el,old[0]);return [el.children[1],el.children[2]];
+    }
+    const [bs,ba]=group("Backbone"),[rs,ra]=group("Residues"),[ps,pa]=group("Base pairs");
+    backFields.forEach(([k])=>ba.append($("se-"+k).closest("label")));
+    ba.insertAdjacentHTML("afterbegin","<p>Phosphodiester connections between consecutive residues.</p>");
+    bs.innerHTML+='<label>Connection indices<select id="seBackList"></select></label><fieldset id="seBackEditor"><legend>Selected connection</legend>'+localFields(backFields,"seBack-")+'<button id="seBackReset" type="button">Reset selected connection</button></fieldset>';
+    ["pairColor","pairWidth","pairOpacity","mode"].forEach(k=>pa.append($("se-"+k).closest("label")));
+    pa.append($("seLegendToggle"));
+    const fill=document.createElement("div");fill.innerHTML=input("fillColor","All circle fills (replaces heatmap)","color","#2f6b57");
+    ra.append(fill.firstElementChild);
+    [...old[1].children].filter(el=>el.tagName!=="SUMMARY").forEach(el=>ra.append(el));
+    rs.innerHTML+='<strong id="seResidueSelected"></strong><p id="seResidueMetadata"></p>'+localFields(residueFields,"seResidue-")+'<button id="seResidueReset" type="button">Reset selected residue</button>';
+    rs.append($("seIndices"));
+    const instructions=document.createElement("p");instructions.textContent="Select a residue in the drawing or by its index below. Selected styles override All styles.";
+    rs.insertBefore(instructions,$("seIndices"));
+    ps.append($("seSelected"),$("sePairList").closest("label"),$("sePairEditor"));
+    ra.insertAdjacentHTML("beforeend",'<button id="seNaturalColors" type="button">Restore A/G/C/U fill colors</button><fieldset><legend>CSV heatmap</legend><p>Headers: Residue_Index, Residue_ID, Residue_Information. Indices start at 1. Numeric values are mapped linearly; blank or NA values keep the standard nucleotide color. Upload applies the heatmap and resets other colors to defaults; you can edit them afterward.</p><label>Metadata CSV<input id="seMetadataFile" type="file" accept=".csv,text/csv"></label><label>Heatmap theme<select id="seHeatTheme"><option value="viridis">Viridis</option><option value="magma">Magma</option><option value="blueRed">Blue–white–red</option><option value="cividis">Cividis</option></select></label><label><input type="checkbox" id="seHeatEnabled">Use metadata colors</label><button id="seClearMetadata" type="button">Clear metadata</button><p id="seMetadataStatus" role="status">Upload metadata for the current sequence.</p></fieldset>');
+    old.forEach(el=>el.remove());
+    $("seBackList").addEventListener("change",e=>{selectedBackbone=Number(e.target.value);panel();});
+    const bindLocal=(fields,prefix,target,index)=>fields.forEach(([k])=>$(prefix+k).addEventListener("input",e=>{
+      if(!e.target.checkValidity())return;
+      const collection=target(),i=index();collection[i]??={};
+      collection[i][k]=e.target.type==="number"?Number(e.target.value):e.target.value;render();
+    }));
+    bindLocal(backFields,"seBack-",()=>backboneOverrides,()=>selectedBackbone);
+    bindLocal(residueFields,"seResidue-",()=>residueOverrides,()=>selected);
+    $("seBackReset").addEventListener("click",()=>{delete backboneOverrides[selectedBackbone];panel();render();});
+    $("seResidueReset").addEventListener("click",()=>{delete residueOverrides[selected];panel();render();});
+    $("seNaturalColors").addEventListener("click",()=>{
+      delete settings.fillColor;heatEnabled=false;Object.values(residueOverrides).forEach(o=>delete o.fillColor);panel();render();
+    });
+    $("seHeatTheme").addEventListener("change",e=>{heatTheme=e.target.value;panel();render();});
+    $("seHeatEnabled").addEventListener("change",e=>{
+      heatEnabled=e.target.checked&&Object.keys(metadata).length>0;
+      if(e.target.checked&&!heatEnabled)$("seMetadataStatus").textContent="Upload a CSV with numeric values first.";
+      panel();render();
+    });
+    $("seClearMetadata").addEventListener("click",()=>{
+      metadataTicket++;metadata={};heatEnabled=false;$("seMetadataFile").value="";
+      $("seMetadataStatus").textContent="Metadata cleared.";panel();render();
+    });
+    $("seMetadataFile").addEventListener("change",async e=>{
+      const file=e.target.files[0];if(!file)return;
+      const ticket=++metadataTicket;
+      try{
+        if(file.size>2*1024*1024)throw Error("CSV must be smaller than 2 MB.");
+        const csv=await file.text();if(ticket!==metadataTicket)return;
+        const data=parseMetadata(csv,seq.length);
+        const values=Object.values(data).map(r=>r.value).filter(v=>v!==null);
+        metadata=data;heatRange=[Math.min(...values),Math.max(...values)];heatEnabled=true;
+        delete settings.fillColor;
+        ["backColor","pairColor","circleColor","letterColor"].forEach(k=>settings[k]=defaults[k]);
+        Object.values(overrides).forEach(o=>delete o.pairColor);
+        Object.values(backboneOverrides).forEach(o=>delete o.backColor);
+        Object.values(residueOverrides).forEach(o=>["fillColor","circleColor","letterColor"].forEach(k=>delete o[k]));
+        controls.querySelectorAll("[data-setting]").forEach(el=>{if(settings[el.dataset.setting]!==undefined)el.value=settings[el.dataset.setting];});
+        $("seMetadataStatus").textContent=values.length+" numeric values loaded; "+(seq.length-values.length)+" residues without values. Manual edits now override the heatmap.";
+        panel();render();
+      }catch(error){if(ticket===metadataTicket)$("seMetadataStatus").textContent=error.message;}
+    });
+  }
+  function extendedPanel(){
+    if(!$("seBackList"))return;
+    $("seBackList").value=String(selectedBackbone);
+    $("seBackEditor").disabled=seq.length<2;
+    const b={...settings,...backboneOverrides[selectedBackbone]},r=residueStyle(selected);
+    backFields.forEach(([k])=>$("seBack-"+k).value=b[k]);
+    residueFields.forEach(([k])=>$("seResidue-"+k).value=r[k]);
+    $("seResidueSelected").textContent=(seq[selected]||"")+" · residue "+(selected+1);
+    const m=metadata[selected];
+    $("seResidueMetadata").textContent=m?"Residue ID: "+m.id+" · Information: "+(m.value??"No value"):"No metadata for this residue.";
+    $("seHeatEnabled").checked=heatEnabled;
+  }
+  function renderHeatLegend(){
+    const box=$("seHeatLegend");if(!box)return;
+    box.hidden=!heatEnabled;box.replaceChildren();if(!heatEnabled)return;
+    const title=document.createElement("strong");title.textContent="Residue information · "+heatTheme;
+    const bar=document.createElement("div");bar.className="se-heat-bar";bar.style.background="linear-gradient(to right,"+palettes[heatTheme].join(",")+")";
+    const label=document.createElement("p");label.textContent=heatRange[0]+" → "+heatRange[1]+" · Linear scale. Missing values use nucleotide colors. Manual overrides take priority.";
+    box.append(title,bar,label);
+  }
+  function applyZoom(){
+    const root=$("secondarySvg"),v=root.getAttribute("viewBox").split(/\s+/).map(Number);
+    const viewport=root.parentElement,fitWidth=Math.max(280,viewport.clientWidth||700);
+    const fit=Math.min(fitWidth/v[2],560/v[3]);
+    root.style.width=(v[2]*fit*zoom)+"px";root.style.height=(v[3]*fit*zoom)+"px";
+    root.style.minWidth="0";root.style.minHeight="0";root.style.maxWidth="none";root.style.flexShrink="0";
+    if($("seZoomValue"))$("seZoomValue").textContent=Math.round(zoom*100)+"%";
+    if($("seZoomOut"))$("seZoomOut").disabled=zoom<=.25;
+    if($("seZoomIn"))$("seZoomIn").disabled=zoom>=8;
+  }
+  async function exportPng(){
+    const button=$("seDownload"),status=$("seExportStatus");button.disabled=true;status.textContent="Preparing transparent PNG…";
+    try{
+      const source=$("secondarySvg"),clone=source.cloneNode(true);
+      const [, ,w,h]=source.getAttribute("viewBox").split(/\s+/).map(Number);
+      // Use explicit presentation attributes, not page CSS. Export the full drawing.
+      clone.removeAttribute("style");clone.setAttribute("xmlns",NS);
+      const scale=Math.min(2,8192/w,8192/h,Math.sqrt(16000000/(w*h)));
+      const width=Math.max(1,Math.round(w*scale)),height=Math.max(1,Math.round(h*scale));
+      clone.setAttribute("width",width);clone.setAttribute("height",height);
+      clone.querySelectorAll("[data-export-remove],title").forEach(el=>el.remove());
+      clone.querySelectorAll('[stroke="transparent"]').forEach(el=>el.remove());
+      clone.querySelectorAll("[tabindex]").forEach(el=>el.removeAttribute("tabindex"));
+      const blob=new Blob([new XMLSerializer().serializeToString(clone)],{type:"image/svg+xml;charset=utf-8"});
+      const url=URL.createObjectURL(blob),img=new Image();
+      try{await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error("Could not rasterize the SVG."));img.src=url;});}
+      finally{URL.revokeObjectURL(url);}
+      const canvas=document.createElement("canvas");canvas.width=width;canvas.height=height;
+      const context=canvas.getContext("2d");if(!context)throw Error("Canvas export is unavailable.");
+      context.clearRect(0,0,width,height);context.drawImage(img,0,0,width,height);
+      const png=await new Promise(resolve=>canvas.toBlob(resolve,"image/png"));
+      if(!png)throw Error("PNG creation failed. Try a smaller structure.");
+      const downloadUrl=URL.createObjectURL(png),link=document.createElement("a");
+      link.href=downloadUrl;link.download="rna-secondary-"+layout+".png";document.body.append(link);link.click();link.remove();
+      setTimeout(()=>URL.revokeObjectURL(downloadUrl),10000);
+      status.textContent="PNG downloaded ("+width+" × "+height+"). Transparent background; selection highlights and side-panel legends excluded.";
+    }catch(error){status.textContent="Export failed: "+error.message;}finally{button.disabled=false;}
+  }
+  function setupToolbar(viewport,stage){
+    const toolbar=document.createElement("div");toolbar.className="se-toolbar";
+    toolbar.innerHTML='<button id="seZoomOut" type="button" aria-label="Zoom out">−</button><output id="seZoomValue" aria-live="polite">100%</output><button id="seZoomIn" type="button" aria-label="Zoom in">+</button><button id="seZoomReset" type="button">Reset view</button><button id="seDownload" type="button">Download PNG</button>';
+    viewport.before(toolbar);
+    const message=document.createElement("p");message.id="seExportStatus";message.setAttribute("role","status");message.className="se-export-status";viewport.after(message);
+    const legend=document.createElement("div");legend.id="seHeatLegend";legend.hidden=true;stage.append(legend);
+    function changeZoom(factor){zoom=Math.max(.25,Math.min(8,zoom*factor));applyZoom();}
+    $("seZoomIn").addEventListener("click",()=>changeZoom(1.25));
+    $("seZoomOut").addEventListener("click",()=>changeZoom(.8));
+    $("seZoomReset").addEventListener("click",()=>{zoom=1;applyZoom();viewport.scrollTop=0;viewport.scrollLeft=0;});
+    $("seDownload").addEventListener("click",exportPng);
+    if(typeof ResizeObserver!=="undefined")new ResizeObserver(()=>{if(seq)applyZoom();}).observe(viewport);
+  }
+
   const input = (key,label,type,value,min,max,step) => `<label>${label}<input id="se-${key}" data-setting="${key}" type="${type}" value="${value}" ${min!==undefined?`min="${min}" max="${max}" step="${step}"`:""}></label>`;
   function setup(sequence,structure,onSelect) {
     defaultSeq=sequence;defaultDb=structure;onDefaultSelect=onSelect;
@@ -293,10 +509,12 @@ const SecondaryExplorer = (() => {
       <p class="se-disclaimer">Custom input changes this secondary view only. Primary and tertiary remain the original tRNA. Layouts are schematic, not a folding prediction.</p>
       <a href="https://rnajournal.cshlp.org/content/7/4/499.long" target="_blank" rel="noreferrer">Leontis & Westhof (2001)</a>`;
     copy.append(controls);
+    reorganizeControls(controls);
     $("secondarySequence").value=sequence;$("secondaryDotBracket").value=structure;
     const stage=document.querySelector(".secondary-stage"),root=$("secondarySvg");
     const viewport=document.createElement("div");viewport.className="se-viewport";root.before(viewport);viewport.append(root);
     const legend=document.createElement("div");legend.id="seLegend";legend.setAttribute("aria-label","Base-pair legend");stage.append(legend);
+    setupToolbar(viewport,stage);
     const status=(message,error=false)=>{$("secondaryInputStatus").textContent=message;$("secondaryInputStatus").classList.toggle("error",error);};
     $("renderSecondaryButton").addEventListener("click",()=>{
       try {
@@ -306,17 +524,19 @@ const SecondaryExplorer = (() => {
     });
     $("restoreTrnaButton").addEventListener("click",()=>{
       $("secondarySequence").value=defaultSeq;$("secondaryDotBracket").value=defaultDb;
-      overrides={};annotations={};load(defaultSeq,defaultDb);status("Default tRNA restored; pair overrides and annotations cleared.");
+      overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;zoom=1;$("seMetadataFile").value="";$("seMetadataStatus").textContent="Upload metadata for the current sequence.";load(defaultSeq,defaultDb);status("Default tRNA restored; pair overrides and annotations cleared.");
     });
     document.querySelectorAll("[data-secondary-layout]").forEach(button=>button.addEventListener("click",()=>{
       layout=button.dataset.secondaryLayout;
       document.querySelectorAll("[data-secondary-layout]").forEach(b=>{
         b.classList.toggle("active",b===button);b.setAttribute("aria-pressed",String(b===button));
-      });render();
+      });zoom=1;render();
     }));
     controls.querySelectorAll("[data-setting]").forEach(el=>el.addEventListener("input",()=>{
       if(el.type==="number"&&!el.checkValidity())return;
-      settings[el.dataset.setting]=el.type==="number"?Number(el.value):el.value;panel();render();
+      settings[el.dataset.setting]=el.type==="number"?Number(el.value):el.value;
+      if(el.dataset.setting==="fillColor")heatEnabled=false;
+      panel();render();
     }));
     $("seLegendToggle").addEventListener("click",()=>{
       settings.legend=!settings.legend;
@@ -340,7 +560,7 @@ const SecondaryExplorer = (() => {
     $("seResetPair").addEventListener("click",()=>{delete overrides[activeKey()];panel();render();});
     load(sequence,structure);
   }
-  return {setup,render,parse,radial,followDefault(index){
+  return {setup,render,parse,parseMetadata,radial,followDefault(index){
     if(seq===defaultSeq&&db===defaultDb&&selected!==index)select(index,false);
   }};
 })();
