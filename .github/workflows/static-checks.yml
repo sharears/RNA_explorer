@@ -12,6 +12,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - run: npm install --no-save linkedom
+      - run: node tests/tertiary.cjs
       - run: node tests/chemistry.cjs
       - run: node tests/secondary-v7.cjs
-      - run: node tests/tertiary.cjs
