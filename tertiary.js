@@ -231,17 +231,18 @@ const TertiaryExplorer = (() => {
   }
 
   function renderRegionLegend() {
-    const box = $("teRegionLegend");
-    if (!box) return;
-    box.hidden = state.colorMode !== "region";
-    if (box.hidden) return;
-    box.replaceChildren();
-    Object.entries(REGION_COLORS).forEach(([name, color]) => {
-      const item = document.createElement("span");
-      const swatch = document.createElement("i");
-      swatch.style.background = color;
-      item.append(swatch, document.createTextNode(name));
-      box.append(item);
+    const boxes = [$("teRegionLegend"), $("teRegionLegendStage")].filter(Boolean);
+    boxes.forEach(box => {
+      box.hidden = state.colorMode !== "region";
+      if (box.hidden) return;
+      box.replaceChildren();
+      Object.entries(REGION_COLORS).forEach(([name, color]) => {
+        const item = document.createElement("span");
+        const swatch = document.createElement("i");
+        swatch.style.background = color;
+        item.append(swatch, document.createTextNode(name));
+        box.append(item);
+      });
     });
   }
 
@@ -268,7 +269,9 @@ const TertiaryExplorer = (() => {
       group.setAttribute("tabindex", "0");
       group.setAttribute("role", "button");
       group.setAttribute("aria-label", `Secondary-structure pair ${a + 1}–${b + 1}`);
-      group.addEventListener("pointerdown", event => event.stopPropagation());
+      group.addEventListener("pointerdown", event => {
+        if (event.button === 0) event.stopPropagation();
+      });
       group.addEventListener("click", choose);
       group.addEventListener("keydown", event => {
         if (event.key === "Enter" || event.key === " ") {
@@ -360,7 +363,9 @@ const TertiaryExplorer = (() => {
           text.textContent = base;
           group.append(text);
         }
-        group.addEventListener("pointerdown", event => event.stopPropagation());
+        group.addEventListener("pointerdown", event => {
+          if (event.button === 0) event.stopPropagation();
+        });
         group.addEventListener("click", event => {
           event.stopPropagation();
           chooseResidue(i);
