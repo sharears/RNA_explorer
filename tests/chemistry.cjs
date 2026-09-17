@@ -6,7 +6,8 @@ const {parseHTML}=require(process.argv[2] || 'linkedom');
 const {document,window}=parseHTML(fs.readFileSync('dist/index.html','utf8'));
 let serial=0;const timers=new Map();
 window.matchMedia=()=>({matches:false});
-const ctx=vm.createContext({document,window,console,CustomEvent:window.CustomEvent,
+const OptionCtor=window.Option || function Option(text,value){const el=document.createElement('option');el.textContent=text;el.value=value;return el;};
+const ctx=vm.createContext({document,window,console,CustomEvent:window.CustomEvent,Option:OptionCtor,
   setTimeout(fn){const id=++serial;timers.set(id,fn);return id;},
   clearTimeout(id){timers.delete(id);}
 });
