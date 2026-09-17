@@ -6,13 +6,13 @@ const {parseHTML}=require(process.argv[2] || 'linkedom');
 const {document,window}=parseHTML(fs.readFileSync('dist/index.html','utf8'));
 let serial=0;const timers=new Map();
 window.matchMedia=()=>({matches:false});
-const ctx=vm.createContext({document,window,console,
+const ctx=vm.createContext({document,window,console,CustomEvent:window.CustomEvent,
   setTimeout(fn){const id=++serial;timers.set(id,fn);return id;},
   clearTimeout(id){timers.delete(id);}
 });
 function flush(){for(const [id,fn] of [...timers]){timers.delete(id);fn();}}
 const run=s=>vm.runInContext(s,ctx);
-for(const f of ['chemistry.js','journey.js','primary-animation.js','app.js']) run(fs.readFileSync('dist/'+f,'utf8'));
+for(const f of ['chemistry.js','journey.js','primary-animation.js','secondary.js','tertiary.js','app.js']) run(fs.readFileSync('dist/'+f,'utf8'));
 assert.equal(document.querySelectorAll('[data-scene-panel]').length,6);
 assert.equal(document.querySelectorAll('.scale-step').length,6);
 assert.deepEqual([...document.querySelectorAll('[data-scene-panel]')].map(p=>p.dataset.scenePanel),['blocks','nucleoside','nucleotide','primary','secondary','tertiary']);
