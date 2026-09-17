@@ -60,3 +60,8 @@
 #seHeatLegend p {font-size:12px;color:var(--muted);line-height:1.5;}
 .se-heat-bar {height:14px;border-radius:4px;margin:10px 0;}
 #seResidueMetadata {overflow-wrap:anywhere;}
+.se-viewport {overflow:hidden;}
+.se-viewport.se-panning,.se-viewport.se-panning * {cursor:grabbing!important;user-select:none;}
+#seIndexChoices {display:grid;grid-template-columns:repeat(4,1fr);max-height:220px;overflow:auto;gap:4px;}
+#seIndexChoices label {display:flex;justify-content:flex-start;gap:5px;margin:3px;font:14px monospace;}
+.se-index-dropdown {border:1px solid var(--line);padding:8px!important;margin-left:0!important;}

@@ -11,6 +11,8 @@ const SecondaryExplorer = (() => {
   let seq="", db="", defaultSeq="", defaultDb="", pairs=[], partner=[], selected=0;
   let layout="radial", overrides={}, annotations={}, onDefaultSelect=()=>{};
   let residueOverrides={}, backboneOverrides={}, selectedBackbone=0, zoom=1;
+  let panX=0,panY=0,indexMode="default",indexSelection=new Set(),indexOverrides={};
+  const indexSettings={color:"#bacbd7",size:12,font:"monospace",fontStyle:"normal"};
   let metadata={}, heatEnabled=false, heatTheme="viridis", heatRange=[0,1], metadataTicket=0;
   const defaults={...settings};
   const palettes={
@@ -43,7 +45,7 @@ const SecondaryExplorer = (() => {
         if(c!==","){if(row.some(v=>v!==""))rows.push(row);row=[];if(c==="\r"&&csv[i+1]==="\n")i++;}
       }else {if(closed&&!/\s/.test(c))throw Error("Invalid text after quoted field.");cell+=c;}
     }
-    if(!rows.length||rows[0].join(",")!=="Residue_Index,Residue_ID,Residue_Information")throw Error("CSV headers must be Residue_Index,Residue_ID,Residue_Information, in that order.");
+    if(!rows.length||rows[0].map(v=>v.toLowerCase()).join(",")!=="residue_index,residue_id,residue_information")throw Error("CSV headers must be Residue_Index,Residue_ID,Residue_Information, in that order (capitalization does not matter).");
     const data={};let count=0;
     rows.slice(1).forEach((r,i)=>{
       if(r.length!==3)throw Error("CSV row "+(i+2)+" must contain three columns.");
@@ -83,7 +85,7 @@ const SecondaryExplorer = (() => {
     return {pairs:result.sort((a,b)=>a[0]-b[0]),partner:p};
   }
   function radial(n, p) {
-    const out=Array(n), step=32, width=70;
+    const out=Array(n), step=44, width=90;
     function branch(a,b,origin,d) {
       const right={x:d.y,y:-d.x};
       let center={...origin};
@@ -135,7 +137,12 @@ const SecondaryExplorer = (() => {
         const min=Math.min(...xs),max=Math.max(...xs);
         for(let j=i;j<=end;j++) out[j].x+=cursor-min;
         cursor+=max-min+step*2;i=end;
-      } else {out[i]={x:cursor,y:step};cursor+=step;}
+      } else {
+        // Extend exterior unpaired residues from their actual predecessor,
+        // rather than from the bounding box of the entire folded domain.
+        out[i]=i>0?{x:out[i-1].x-step/Math.SQRT2,y:out[i-1].y+step/Math.SQRT2}:{x:cursor,y:step};
+        cursor=Math.max(cursor,out[i].x+step);
+      }
     }
     return out;
   }
@@ -253,7 +260,7 @@ const SecondaryExplorer = (() => {
     const xs=pos.map(p=>p.x),ys=pos.map(p=>p.y);
     let minX=Math.min(...xs)-52,maxX=Math.max(...xs)+52,minY=Math.min(...ys)-55,maxY=Math.max(...ys)+55;
     if(layout==="arc") for(const [a,b] of pairs) minY=Math.min(minY,-Math.abs(pos[b].x-pos[a].x)/2-55);
-    root.setAttribute("viewBox",`${minX} ${minY} ${Math.max(150,maxX-minX)} ${Math.max(150,maxY-minY)}`);
+    root.dataset.fullViewBox=`${minX} ${minY} ${Math.max(150,maxX-minX)} ${Math.max(150,maxY-minY)}`;
     root.setAttribute("aria-label",`${layout} RNA secondary structure with ${seq.length} nucleotides`);
     applyZoom();
     for(let i=0;i<pos.length-1;i++){
@@ -277,8 +284,11 @@ const SecondaryExplorer = (() => {
       const away=partner[i]>=0?{x:p.x-pos[partner[i]].x,y:p.y-pos[partner[i]].y}
         :{x:-(next.y-prev.y),y:next.x-prev.x};
       const norm=Math.hypot(away.x,away.y)||1;
-      const number=text(g,String(i+1),{x:away.x/norm*28,y:away.y/norm*28+3,fill:"#bacbd7","font-size":10,"font-family":"monospace","text-anchor":"middle"});
-      number.setAttribute("class","se-index");
+      if(indexMode==="all" || indexMode==="selected"&&indexSelection.has(i) || indexMode==="default"&&(i===0||(i+1)%5===0||i===seq.length-1)){
+        const style={...indexSettings,...indexOverrides[i]};
+        const number=text(g,String(i+1),{x:layout==="arc"?0:away.x/norm*30,y:layout==="arc"?36:away.y/norm*30+4,fill:style.color,"font-size":style.size,"font-family":style.font,"font-style":style.fontStyle==="italic"?"italic":"normal","font-weight":style.fontStyle==="bold"?700:400,"text-anchor":"middle"});
+        number.setAttribute("class","se-index");
+      }
       const title=svg("title");title.textContent=`${seq[i]}${i+1}`+(metadata[i]?` · ${metadata[i].id} · ${metadata[i].value??"No value"}`:"");g.append(title);
       g.addEventListener("click",()=>select(i));
       g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select(i);}});
@@ -293,7 +303,8 @@ const SecondaryExplorer = (() => {
     const parsed=parse(sequence,structure);
     const changed=sequence!==seq||structure!==db;
     seq=sequence;db=structure;pairs=parsed.pairs;partner=parsed.partner;selected=0;
-    if(changed){overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;zoom=1;
+    if(changed){overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;zoom=1;panX=panY=0;
+      indexMode="default";indexOverrides={};indexSelection=new Set([...sequence].map((_,i)=>i).filter(i=>i===0||(i+1)%5===0||i===sequence.length-1));
       if($("seMetadataFile"))$("seMetadataFile").value="";
       if($("seMetadataStatus"))$("seMetadataStatus").textContent="Upload metadata for the current sequence.";
     }
@@ -302,11 +313,13 @@ const SecondaryExplorer = (() => {
     for(let i=0;i<seq.length-1;i++)$("seBackList").append(new Option(`${i+1}–${i+2}`,String(i)));
     $("sePairList").replaceChildren(new Option("Select a pair by residue indices",""));
     pairs.forEach(([a,b])=>$("sePairList").append(new Option(`${a+1}–${b+1}  (${seq[a]}–${seq[b]})`,keyOf(a,b))));
-    $("seIndices").replaceChildren();
+    $("seResidueList").replaceChildren();$("seIndexChoices").replaceChildren();
     [...seq].forEach((base,i)=>{
-      const button=document.createElement("button");button.type="button";
-      button.dataset.residueIndex=i;button.textContent=`${base}${i+1}`;
-      button.addEventListener("click",()=>select(i));$("seIndices").append(button);
+      $("seResidueList").append(new Option(`${base}${i+1}`,String(i)));
+      const label=document.createElement("label"),checkbox=document.createElement("input");
+      checkbox.type="checkbox";checkbox.checked=indexSelection.has(i);checkbox.dataset.indexChoice=i;
+      label.append(checkbox,document.createTextNode(String(i+1)));$("seIndexChoices").append(label);
+      checkbox.addEventListener("change",()=>{if(checkbox.checked)indexSelection.add(i);else indexSelection.delete(i);indexMode="selected";panel();render();});
     });
     panel();render();
   }
@@ -327,11 +340,12 @@ const SecondaryExplorer = (() => {
   function reorganizeControls(controls){
     const old=[...controls.children].filter(el=>el.tagName==="DETAILS");
     function group(name){
-      const el=document.createElement("details");el.open=name==="Residues";
+      const el=document.createElement("details");el.open=name==="Residue ID";
       el.innerHTML='<summary>'+name+'</summary><details open><summary>Selected</summary></details><details><summary>All</summary></details>';
       controls.insertBefore(el,old[0]);return [el.children[1],el.children[2]];
     }
-    const [bs,ba]=group("Backbone"),[rs,ra]=group("Residues"),[ps,pa]=group("Base pairs");
+    const [bs,ba]=group("Backbone"),[rs,ra]=group("Residue ID"),[ps,pa]=group("Base pairs"),[ixs,ixa]=group("Residue index");
+    setupIndexControls(ixs,ixa);
     backFields.forEach(([k])=>ba.append($("se-"+k).closest("label")));
     ba.insertAdjacentHTML("afterbegin","<p>Phosphodiester connections between consecutive residues.</p>");
     bs.innerHTML+='<label>Connection indices<select id="seBackList"></select></label><fieldset id="seBackEditor"><legend>Selected connection</legend>'+localFields(backFields,"seBack-")+'<button id="seBackReset" type="button">Reset selected connection</button></fieldset>';
@@ -341,12 +355,12 @@ const SecondaryExplorer = (() => {
     ra.append(fill.firstElementChild);
     [...old[1].children].filter(el=>el.tagName!=="SUMMARY").forEach(el=>ra.append(el));
     rs.innerHTML+='<strong id="seResidueSelected"></strong><p id="seResidueMetadata"></p>'+localFields(residueFields,"seResidue-")+'<button id="seResidueReset" type="button">Reset selected residue</button>';
-    rs.append($("seIndices"));
-    const instructions=document.createElement("p");instructions.textContent="Select a residue in the drawing or by its index below. Selected styles override All styles.";
-    rs.insertBefore(instructions,$("seIndices"));
+    rs.insertAdjacentHTML("beforeend",'<label>Selected residue<select id="seResidueList"></select></label>');
+    $("seResidueList").addEventListener("change",e=>select(Number(e.target.value)));
     ps.append($("seSelected"),$("sePairList").closest("label"),$("sePairEditor"));
     ra.insertAdjacentHTML("beforeend",'<button id="seNaturalColors" type="button">Restore A/G/C/U fill colors</button><fieldset><legend>CSV heatmap</legend><p>Headers: Residue_Index, Residue_ID, Residue_Information. Indices start at 1. Numeric values are mapped linearly; blank or NA values keep the standard nucleotide color. Upload applies the heatmap and resets other colors to defaults; you can edit them afterward.</p><label>Metadata CSV<input id="seMetadataFile" type="file" accept=".csv,text/csv"></label><label>Heatmap theme<select id="seHeatTheme"><option value="viridis">Viridis</option><option value="magma">Magma</option><option value="blueRed">Blue–white–red</option><option value="cividis">Cividis</option></select></label><label><input type="checkbox" id="seHeatEnabled">Use metadata colors</label><button id="seClearMetadata" type="button">Clear metadata</button><p id="seMetadataStatus" role="status">Upload metadata for the current sequence.</p></fieldset>');
     old.forEach(el=>el.remove());
+    $("seMetadataFile").closest("fieldset").insertAdjacentHTML("afterbegin",'<button type="button" id="seExample">Load example reactivity CSV</button><p><a href="data/rna_residue_reactivity.csv" download>Download example CSV</a> · Values supplied for the default tRNA.</p>');
     $("seBackList").addEventListener("change",e=>{selectedBackbone=Number(e.target.value);panel();});
     const bindLocal=(fields,prefix,target,index)=>fields.forEach(([k])=>$(prefix+k).addEventListener("input",e=>{
       if(!e.target.checkValidity())return;
@@ -376,6 +390,22 @@ const SecondaryExplorer = (() => {
       try{
         if(file.size>2*1024*1024)throw Error("CSV must be smaller than 2 MB.");
         const csv=await file.text();if(ticket!==metadataTicket)return;
+        applyMetadata(csv);
+      }catch(error){if(ticket===metadataTicket)$("seMetadataStatus").textContent="Upload failed: "+error.message;}
+    });
+    $("seExample").addEventListener("click",async()=>{
+      const ticket=++metadataTicket;$("seMetadataStatus").textContent="Loading example…";
+      try{
+        const response=await fetch("data/rna_residue_reactivity.csv");
+        if(!response.ok)throw Error("Could not load example CSV.");
+        const csv=await response.text();if(ticket!==metadataTicket)return;
+        if(seq!==defaultSeq||db!==defaultDb){
+          $("secondarySequence").value=defaultSeq;$("secondaryDotBracket").value=defaultDb;load(defaultSeq,defaultDb);
+        }
+        applyMetadata(csv);
+      }catch(error){$("seMetadataStatus").textContent=error.message;}
+    });
+    function applyMetadata(csv){
         const data=parseMetadata(csv,seq.length);
         const values=Object.values(data).map(r=>r.value).filter(v=>v!==null);
         metadata=data;heatRange=[Math.min(...values),Math.max(...values)];heatEnabled=true;
@@ -387,8 +417,22 @@ const SecondaryExplorer = (() => {
         controls.querySelectorAll("[data-setting]").forEach(el=>{if(settings[el.dataset.setting]!==undefined)el.value=settings[el.dataset.setting];});
         $("seMetadataStatus").textContent=values.length+" numeric values loaded; "+(seq.length-values.length)+" residues without values. Manual edits now override the heatmap.";
         panel();render();
-      }catch(error){if(ticket===metadataTicket)$("seMetadataStatus").textContent=error.message;}
+    }
+  }
+  const indexFields=[["color","Index color","color"],["size","Index size","number",8,26,1],["font","Index font family","select",["monospace","sans-serif","serif"]],["fontStyle","Index font style","select",["normal","bold","italic"]]];
+  function setupIndexControls(selectedPanel,allPanel){
+    selectedPanel.innerHTML+='<p>Check the indices to show and style together.</p><details class="se-index-dropdown"><summary>Choose indices</summary><div id="seIndexChoices"></div></details><button id="seIndexNone" type="button">Clear selection</button><button id="seIndexShow" type="button">Show selected indices</button>'+localFields(indexFields,"seIndexSelected-")+'<button id="seIndexReset" type="button">Reset selected index styles</button>';
+    allPanel.innerHTML+='<button id="seIndexAll" type="button">Show all indices</button><button id="seIndexDefault" type="button">Default: 1, every 5, and last</button><p id="seIndexMode" role="status"></p>'+localFields(indexFields,"seIndexAll-");
+    indexFields.forEach(([key])=>{
+      $("seIndexAll-"+key).value=indexSettings[key];$("seIndexSelected-"+key).value=indexSettings[key];
+      $("seIndexAll-"+key).addEventListener("input",e=>{if(!e.target.checkValidity())return;indexSettings[key]=e.target.type==="number"?Number(e.target.value):e.target.value;render();});
+      $("seIndexSelected-"+key).addEventListener("input",e=>{if(!e.target.checkValidity())return;indexSelection.forEach(i=>{indexOverrides[i]??={};indexOverrides[i][key]=e.target.type==="number"?Number(e.target.value):e.target.value;});render();});
     });
+    $("seIndexAll").addEventListener("click",()=>{indexMode="all";panel();render();});
+    $("seIndexDefault").addEventListener("click",()=>{indexMode="default";panel();render();});
+    $("seIndexShow").addEventListener("click",()=>{indexMode="selected";panel();render();});
+    $("seIndexNone").addEventListener("click",()=>{indexSelection.clear();indexMode="selected";document.querySelectorAll("[data-index-choice]").forEach(el=>el.checked=false);panel();render();});
+    $("seIndexReset").addEventListener("click",()=>{indexSelection.forEach(i=>delete indexOverrides[i]);render();});
   }
   function extendedPanel(){
     if(!$("seBackList"))return;
@@ -401,6 +445,8 @@ const SecondaryExplorer = (() => {
     const m=metadata[selected];
     $("seResidueMetadata").textContent=m?"Residue ID: "+m.id+" · Information: "+(m.value??"No value"):"No metadata for this residue.";
     $("seHeatEnabled").checked=heatEnabled;
+    $("seResidueList").value=String(selected);
+    $("seIndexMode").textContent="Showing: "+(indexMode==="default"?"1, every 5, and last":indexMode==="all"?"all indices":indexSelection.size+" selected indices");
   }
   function renderHeatLegend(){
     const box=$("seHeatLegend");if(!box)return;
@@ -411,10 +457,12 @@ const SecondaryExplorer = (() => {
     box.append(title,bar,label);
   }
   function applyZoom(){
-    const root=$("secondarySvg"),v=root.getAttribute("viewBox").split(/\s+/).map(Number);
-    const viewport=root.parentElement,fitWidth=Math.max(280,viewport.clientWidth||700);
-    const fit=Math.min(fitWidth/v[2],560/v[3]);
-    root.style.width=(v[2]*fit*zoom)+"px";root.style.height=(v[3]*fit*zoom)+"px";
+    const root=$("secondarySvg"),v=root.dataset.fullViewBox.split(/\s+/).map(Number);
+    const viewport=root.parentElement,fitWidth=viewport.clientWidth||700,fitHeight=viewport.clientHeight||560;
+    const fit=Math.min(fitWidth/v[2],fitHeight/v[3]);
+    const width=fitWidth/fit/zoom,height=fitHeight/fit/zoom;
+    root.setAttribute("viewBox",[v[0]+v[2]/2-width/2+panX,v[1]+v[3]/2-height/2+panY,width,height].join(" "));
+    root.style.width="100%";root.style.height="100%";
     root.style.minWidth="0";root.style.minHeight="0";root.style.maxWidth="none";root.style.flexShrink="0";
     if($("seZoomValue"))$("seZoomValue").textContent=Math.round(zoom*100)+"%";
     if($("seZoomOut"))$("seZoomOut").disabled=zoom<=.25;
@@ -424,7 +472,8 @@ const SecondaryExplorer = (() => {
     const button=$("seDownload"),status=$("seExportStatus");button.disabled=true;status.textContent="Preparing transparent PNG…";
     try{
       const source=$("secondarySvg"),clone=source.cloneNode(true);
-      const [, ,w,h]=source.getAttribute("viewBox").split(/\s+/).map(Number);
+      const [, ,w,h]=source.dataset.fullViewBox.split(/\s+/).map(Number);
+      clone.setAttribute("viewBox",source.dataset.fullViewBox);
       // Use explicit presentation attributes, not page CSS. Export the full drawing.
       clone.removeAttribute("style");clone.setAttribute("xmlns",NS);
       const scale=Math.min(2,8192/w,8192/h,Math.sqrt(16000000/(w*h)));
@@ -454,10 +503,30 @@ const SecondaryExplorer = (() => {
     viewport.before(toolbar);
     const message=document.createElement("p");message.id="seExportStatus";message.setAttribute("role","status");message.className="se-export-status";viewport.after(message);
     const legend=document.createElement("div");legend.id="seHeatLegend";legend.hidden=true;stage.append(legend);
-    function changeZoom(factor){zoom=Math.max(.25,Math.min(8,zoom*factor));applyZoom();}
+    function changeZoom(factor,clientX,clientY){
+      const root=$("secondarySvg"),rect=root.getBoundingClientRect(),before=root.getAttribute("viewBox").split(/\s+/).map(Number);
+      const x=clientX===undefined?.5:(clientX-rect.left)/rect.width,y=clientY===undefined?.5:(clientY-rect.top)/rect.height;
+      zoom=Math.max(.25,Math.min(8,zoom*factor));applyZoom();
+      const after=root.getAttribute("viewBox").split(/\s+/).map(Number);
+      panX+=before[0]+x*before[2]-after[0]-x*after[2];panY+=before[1]+y*before[3]-after[1]-y*after[3];applyZoom();
+    }
     $("seZoomIn").addEventListener("click",()=>changeZoom(1.25));
     $("seZoomOut").addEventListener("click",()=>changeZoom(.8));
-    $("seZoomReset").addEventListener("click",()=>{zoom=1;applyZoom();viewport.scrollTop=0;viewport.scrollLeft=0;});
+    $("seZoomReset").addEventListener("click",()=>{zoom=1;panX=panY=0;applyZoom();});
+    viewport.addEventListener("wheel",e=>{e.preventDefault();const delta=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?560:1);changeZoom(Math.exp(-Math.max(-200,Math.min(200,delta))*.003),e.clientX,e.clientY);},{passive:false});
+    let drag=null,suppressMenu=false;
+    viewport.addEventListener("pointerdown",e=>{if(e.button!==2)return;e.preventDefault();drag={id:e.pointerId,x:e.clientX,y:e.clientY};viewport.setPointerCapture(e.pointerId);viewport.classList.add("se-panning");});
+    viewport.addEventListener("pointermove",e=>{
+      if(!drag||e.pointerId!==drag.id)return;
+      const root=$("secondarySvg"),rect=root.getBoundingClientRect(),v=root.getAttribute("viewBox").split(/\s+/).map(Number);
+      const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+      if(dx||dy)suppressMenu=true;
+      panX-=dx/rect.width*v[2];panY-=dy/rect.height*v[3];drag.x=e.clientX;drag.y=e.clientY;applyZoom();
+    });
+    const endDrag=e=>{if(drag&&e.pointerId===drag.id){drag=null;viewport.classList.remove("se-panning");if(viewport.hasPointerCapture(e.pointerId))viewport.releasePointerCapture(e.pointerId);setTimeout(()=>suppressMenu=false,100);}};
+    viewport.addEventListener("pointerup",endDrag);viewport.addEventListener("pointercancel",endDrag);
+    viewport.addEventListener("contextmenu",e=>{if(drag||suppressMenu)e.preventDefault();});
+    toolbar.insertAdjacentHTML("afterend",'<p class="se-export-status">Mouse wheel: zoom · Right-button drag: pan · Reset view: fit structure</p>');
     $("seDownload").addEventListener("click",exportPng);
     if(typeof ResizeObserver!=="undefined")new ResizeObserver(()=>{if(seq)applyZoom();}).observe(viewport);
   }
@@ -530,7 +599,7 @@ const SecondaryExplorer = (() => {
       layout=button.dataset.secondaryLayout;
       document.querySelectorAll("[data-secondary-layout]").forEach(b=>{
         b.classList.toggle("active",b===button);b.setAttribute("aria-pressed",String(b===button));
-      });zoom=1;render();
+      });zoom=1;panX=panY=0;render();
     }));
     controls.querySelectorAll("[data-setting]").forEach(el=>el.addEventListener("input",()=>{
       if(el.type==="number"&&!el.checkValidity())return;
