@@ -149,10 +149,13 @@ const SecondaryExplorer = (() => {
   }
   function orientFivePrimeLeft(pos) {
     if(pos.length<2) return pos;
-    const first=pos[0],last=pos[pos.length-1];
-    if(first.x<=last.x) return pos;
-    const center=(first.x+last.x)/2;
-    return pos.map(p=>({x:2*center-p.x,y:p.y}));
+    const first=pos[0],last=pos[pos.length-1],dx=last.x-first.x,dy=last.y-first.y;
+    if(Math.hypot(dx,dy)<1e-6) return pos;
+    const angle=-Math.atan2(dy,dx),cx=(first.x+last.x)/2,cy=(first.y+last.y)/2;
+    return pos.map(p=>{
+      const x=p.x-cx,y=p.y-cy;
+      return {x:cx+x*Math.cos(angle)-y*Math.sin(angle),y:cy+x*Math.sin(angle)+y*Math.cos(angle)};
+    });
   }
   function coordinates() {
     const n=seq.length;
