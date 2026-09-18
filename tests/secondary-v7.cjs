@@ -26,7 +26,7 @@ class Element{
 }
 const nodes=new Map(),get=id=>{if(!nodes.has(id))nodes.set(id,new Element(id));return nodes.get(id);};
 const document={getElementById:get,createElementNS:(ns,name)=>new Element(name),createElement:name=>new Element(name),querySelectorAll:()=>[]};
-const instrumented=source.replace("return {setup,render,parse,parseMetadata,radial,followDefault(index)",'return {inspect(){return {settings,zoom,metadata,heatEnabled};},setState(v){seq=v.seq;db=v.db;partner=parse(seq,db).partner;pairs=parse(seq,db).pairs;layout=v.layout||"arc";metadata=v.metadata||{};heatEnabled=!!v.heatEnabled;heatRange=v.heatRange||[0,1];residueOverrides=v.residueOverrides||{};backboneOverrides=v.backboneOverrides||{};zoom=v.zoom||1;},residueStyle,heatColor,applyZoom,setup,render,parse,parseMetadata,radial,followDefault(index)');
+const instrumented=source.replace("return {setup,render,parse,parseMetadata,radial,", 'return {inspect(){return {settings,zoom,metadata,heatEnabled};},setState(v){seq=v.seq;db=v.db;partner=parse(seq,db).partner;pairs=parse(seq,db).pairs;layout=v.layout||"arc";metadata=v.metadata||{};heatEnabled=!!v.heatEnabled;heatRange=v.heatRange||[0,1];residueOverrides=v.residueOverrides||{};backboneOverrides=v.backboneOverrides||{};zoom=v.zoom||1;},residueStyle,heatColor,applyZoom,setup,render,parse,parseMetadata,radial,');
 const editor=new Function("document",instrumented+"\nreturn SecondaryExplorer;")(document);
 editor.setState({seq:"GAGCAAAAAUUC",db:"((((....))))",metadata:{0:{id:"G",value:0},1:{id:"A",value:1}},heatEnabled:true,residueOverrides:{1:{fillColor:"#abcdef",letterSize:23}},backboneOverrides:{0:{backColor:"#123456",backWidth:5}}});
 editor.render();
@@ -50,5 +50,12 @@ editor.render();assert(root.children.filter(el=>el.attrs.class==="se-backbone").
 for(const layout of ["radial","circular","arc"]){editor.setState({seq:"GAGCAAAAAUUC",db:"((((....))))",layout});editor.render();assert(!root.getAttribute("viewBox").includes("NaN"),layout+" finite bounds");}
 assert(source.includes('context.clearRect(0,0,width,height);context.drawImage')&&!source.includes("context.fillRect"),"Export does not paint a background");
 assert(source.includes('clone.removeAttribute("style")')&&source.includes('data-export-remove],title'),"Export strips zoom styles and highlights");
+assert(source.includes('orientFivePrimeLeft'),"Secondary layouts enforce 5-prime-left orientation");
+assert(source.includes('data-arc-style="square"'),"Arc figure includes square pair connector option");
+assert(source.includes('seExportScale')&&source.includes('exportScale'),"2D export resolution is user-adjustable");
+assert(source.includes('"Arial"')&&source.includes('"Calibri"')&&source.includes('"Times New Roman"'),"Expanded font families are available");
+assert(source.includes('"Font color"')&&source.includes('"Font size"'),"Residue typography labels use font terminology");
+assert(source.includes('se-color-code'),"Color picker has editable color-code companion");
+assert(source.includes('"rna-secondary-select"'),"Custom Secondary selection can synchronize with Tertiary");
 
-console.log("PASS: secondary v7 logic and rendering-unit checks (not a browser integration test).");
+console.log("PASS: secondary v10 logic and rendering-unit checks (not a browser integration test).");
