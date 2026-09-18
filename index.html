@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=secondary-8" />
   <link rel="stylesheet" href="secondary.css?v=secondary-9" />
-  <link rel="stylesheet" href="tertiary.css?v=tertiary-1" />
+  <link rel="stylesheet" href="tertiary.css?v=tertiary-2" />
 </head>
 <body>
   <div class="app-shell">
@@ -182,7 +182,6 @@
           <div class="visual-stage tertiary-stage" id="tertiaryStage">
             <div class="te-toolbar" aria-label="Tertiary structure view controls">
               <button id="teZoomOut" type="button" aria-label="Zoom out">−</button>
-              <output id="teZoomValue" aria-live="polite">100%</output>
               <button id="teZoomIn" type="button" aria-label="Zoom in">+</button>
               <button id="teResetView" type="button">Reset view</button>
               <button id="teCenterSelected" type="button">Center selected</button>
@@ -195,17 +194,17 @@
                 </div>
                 <svg id="tertiaryMiniSvg" viewBox="0 0 340 430" role="img" aria-label="Linked secondary-structure map"></svg>
               </aside>
-              <div class="te-viewport" id="tertiaryViewport">
-                <svg id="tertiarySvg" viewBox="0 0 720 520" role="img" aria-label="Rotatable C4-prime trace of yeast phenylalanine tRNA"></svg>
-                <div class="te-tooltip" id="teTooltip" hidden></div>
+              <div class="te-viewport te-molecular-viewport" id="tertiaryViewport">
+                <div id="tertiaryMolecularViewer" class="tertiary-molecular-viewer" role="img" aria-label="Interactive all-atom molecular view of yeast phenylalanine tRNA from PDB 1EHZ"></div>
+                <div class="te-molecular-status" id="teMolecularStatus" aria-live="polite" hidden></div>
               </div>
             </div>
             <div class="te-legend-row">
               <div class="te-heat-legend" id="teHeatLegend" hidden></div>
               <div class="te-region-legend" id="teRegionLegendStage" hidden></div>
             </div>
-            <p class="te-interaction-help">Left drag: rotate · Mouse wheel: zoom · Right drag: pan · Arrow keys: rotate</p>
-            <p class="stage-note">Experimental C4′ residue trace · PDB 1EHZ · Base-pair lines are mapped secondary-structure connections, not atom-level hydrogen bonds.</p>
+            <p class="te-interaction-help">Left drag: rotate · Mouse wheel: zoom · Ctrl/⌘ + drag or middle drag: pan · Click an atom to select its nucleotide</p>
+            <p class="stage-note">All-atom molecular coordinates · PDB 1EHZ · 3Dmol.js renderer · Pair connectors are mapped secondary-structure relationships, not hydrogen-bond geometry.</p>
           </div>
         </section>
       </div>
@@ -223,14 +222,14 @@
     <p class="eyebrow">About the beta</p>
     <h2>A teaching model, not a folding simulation</h2>
     <p>The first three views introduce building blocks and simplified condensation schemes. Primary, secondary, and tertiary views describe the same tRNA; they do not imply a sequential folding pathway.</p>
-    <p>The secondary view is a simplified educational map of a 76-nucleotide tRNA. The tertiary view traces the C4′ positions from the experimentally determined yeast tRNA-Phe structure <a href="https://www.rcsb.org/structure/1EHZ" target="_blank" rel="noreferrer">PDB 1EHZ</a>, without showing every atom.</p>
+    <p>The secondary view is a simplified educational map of a 76-nucleotide tRNA. The tertiary view uses the experimentally determined all-atom coordinates of yeast tRNA-Phe from <a href="https://www.rcsb.org/structure/1EHZ" target="_blank" rel="noreferrer">PDB 1EHZ</a> and renders them interactively with 3Dmol.js.</p>
   </dialog>
 
   <script src="chemistry.js"></script>
   <script src="journey.js"></script>
   <script src="primary-animation.js"></script>
   <script src="secondary.js?v=secondary-9"></script>
-  <script src="tertiary.js?v=tertiary-1"></script>
-  <script src="app.js?v=tertiary-1"></script>
+  <script src="tertiary.js?v=tertiary-2"></script>
+  <script src="app.js?v=tertiary-2"></script>
 </body>
 </html>
