@@ -331,7 +331,7 @@ const TertiaryExplorer = (() => {
     if(!model||!model.selectedAtoms({}).length)throw new Error("No atoms could be parsed from this structure file.");
     state.sourceIsDefault=sourceIsDefault;state.currentFileName=fileName;state.currentFormat=format;
     state.sameMoleculeConfirmed=false;
-    extractChains();chooseBestChain();populateChainSelect();buildResidueLookup();state.indexSelection=defaultIndices();evaluateMapping();setupInteractions();
+    extractChains();chooseBestChain();populateChainSelect();buildResidueLookup();evaluateMapping();state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();
     applyStyles(false);viewer.zoomTo({},0);viewer.render();initialView=viewer.getView?viewer.getView():null;
     updateSourceCopy();
   }
@@ -611,7 +611,7 @@ const TertiaryExplorer = (() => {
     $("teMeasureToggle").addEventListener("click",()=>{state.measureEnabled=!state.measureEnabled;if(!state.measureEnabled){state.measureA=null;state.measureB=null;}render();});
     $("teSplit").addEventListener("change",e=>{state.split=e.target.checked&&state.mapping.enabled;render();});
     $("teSameMolecule").addEventListener("change",e=>{state.sameMoleculeConfirmed=e.target.checked;evaluateMapping();render();});
-    $("teChainSelect").addEventListener("change",e=>{state.activeChain=e.target.value;state.sameMoleculeConfirmed=false;buildResidueLookup();state.indexSelection=defaultIndices();evaluateMapping();setupInteractions();render();});
+    $("teChainSelect").addEventListener("change",e=>{state.activeChain=e.target.value;state.sameMoleculeConfirmed=false;buildResidueLookup();evaluateMapping();state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();render();});
     $("teStructureFile").addEventListener("change",async e=>{
       const file=e.target.files[0];if(!file)return;
       setStatus("Loading "+file.name+"…");
@@ -656,8 +656,10 @@ const TertiaryExplorer = (() => {
     const changed=detail.sequence!==state.secondarySequence||detail.structure!==state.structure;
     state.secondarySequence=detail.sequence;state.structure=detail.structure;state.secondaryIsDefault=Boolean(detail.isDefault);
     const parsed=parseStructure(state.structure,state.secondarySequence.length);pairs=parsed.pairs;partner=parsed.partner;
-    if(changed){state.indexSelection=defaultIndices();if(!isCuratedDefaultPair()){state.sameMoleculeConfirmed=false;state.metadata={};state.heatEnabled=false;}}
-    evaluateMapping();render();
+    if(changed&&!isCuratedDefaultPair()){state.sameMoleculeConfirmed=false;state.metadata={};state.heatEnabled=false;}
+    evaluateMapping();
+    if(changed){state.indexSelection=defaultIndices();buildIndexChoices();}
+    render();
   }
 
   function setup(config){
