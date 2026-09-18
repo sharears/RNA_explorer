@@ -48,8 +48,23 @@ const tertiary = read("tertiary.js");
   "cdn.jsdelivr.net/npm/3dmol@2.5.5",
   "files.rcsb.org/download/1EHZ.pdb",
   "viewer.addModel",
-  "viewer.setClickable"
+  "viewer.setClickable",
+  "Upload 3D structure",
+  "I confirm that the Secondary and 3D inputs describe the same RNA molecule",
+  "teExportScale",
+  "setWidth(width)",
+  "pngURI()",
+  "sequence identity and residue count match"
 ].forEach(text => assert(tertiary.includes(text), "Missing tertiary feature: " + text));
+
+const tertiaryApi = new Function(tertiary + "\nreturn TertiaryExplorer;")();
+assert.strictEqual(tertiaryApi.normalizeBase("PSU"), "U", "Pseudouridine normalizes to U");
+assert.strictEqual(tertiaryApi.normalizeBase("2MG"), "G", "Modified guanosine normalizes to G");
+assert.strictEqual(tertiaryApi.normalizeBase("XYZ"), "?", "Unknown modification is flagged");
+const fakeChain = {residues:[{base:"A"},{base:"C"},{base:"G"},{base:"U"}]};
+assert.strictEqual(tertiaryApi.compareChain(fakeChain,"ACGU").exact,true,"Exact sequence mapping is recognized");
+assert.strictEqual(tertiaryApi.compareChain(fakeChain,"ACGA").mismatches.length,1,"Sequence mismatch is detected");
+assert.strictEqual(tertiaryApi.compareChain(fakeChain,"ACG").lengthMatch,false,"Length mismatch is detected");
 
 assert(!html.includes('id="tertiarySvg"'), "Legacy SVG tertiary canvas should be removed");
 assert(html.includes("All-atom molecular coordinates"), "Tertiary description should identify the all-atom model");

@@ -14,6 +14,7 @@ const SecondaryExplorer = (() => {
   let panX=0,panY=0,indexMode="default",indexSelection=new Set(),indexOverrides={};
   const indexSettings={color:"#bacbd7",size:12,font:"monospace",fontStyle:"normal"};
   let metadata={}, heatEnabled=false, heatTheme="viridis", heatRange=[0,1], metadataTicket=0;
+  let arcPairStyle="arc", exportScale=2;
   const defaults={...settings};
   const palettes={
     viridis:["#440154","#3b528b","#21918c","#5ec962","#fde725"],
@@ -146,15 +147,25 @@ const SecondaryExplorer = (() => {
     }
     return out;
   }
+  function orientFivePrimeLeft(pos) {
+    if(pos.length<2) return pos;
+    const first=pos[0],last=pos[pos.length-1],dx=last.x-first.x,dy=last.y-first.y;
+    if(Math.hypot(dx,dy)<1e-6) return pos;
+    const angle=-Math.atan2(dy,dx),cx=(first.x+last.x)/2,cy=(first.y+last.y)/2;
+    return pos.map(p=>{
+      const x=p.x-cx,y=p.y-cy;
+      return {x:cx+x*Math.cos(angle)-y*Math.sin(angle),y:cy+x*Math.sin(angle)+y*Math.cos(angle)};
+    });
+  }
   function coordinates() {
     const n=seq.length;
-    if(layout==="radial") return radial(n,partner);
+    if(layout==="radial") return orientFivePrimeLeft(radial(n,partner));
     if(layout==="arc") return Array.from({length:n},(_,i)=>({x:i*56,y:0}));
     const r=Math.max(60,n*36/(2*Math.PI));
-    return Array.from({length:n},(_,i)=>{
+    return orientFivePrimeLeft(Array.from({length:n},(_,i)=>{
       const angle=-Math.PI/2+i*(2*Math.PI-0.18)/Math.max(1,n-1);
       return {x:r*Math.cos(angle),y:r*Math.sin(angle)};
-    });
+    }));
   }
   const keyOf = (a,b) => `${Math.min(a,b)}:${Math.max(a,b)}`;
   function activeKey(){return partner[selected]<0?null:keyOf(selected,partner[selected]);}
@@ -176,18 +187,22 @@ const SecondaryExplorer = (() => {
     const dx=q.x-p.x,dy=q.y-p.y,len=Math.hypot(dx,dy)||1;
     const normal={x:-dy/len,y:dx/len},trim=Math.min(17,len/4);
     const start={x:p.x+dx/len*trim,y:p.y+dy/len*trim},end={x:q.x-dx/len*trim,y:q.y-dy/len*trim};
-    const arch=layout==="arc"&&!preview;
+    const arch=layout==="arc"&&!preview&&arcPairStyle==="arc";
+    const square=layout==="arc"&&!preview&&arcPairStyle==="square";
     let path="";
     for(let k=0;k<count;k++){
       const offset=(k-(count-1)/2)*5;
+      const topY=p.y-Math.max(42,Math.abs(dx)*.42)-offset*2;
       path=arch
         ?`M ${p.x} ${p.y-17-offset} Q ${(p.x+q.x)/2} ${p.y-Math.abs(dx)-offset*2} ${q.x} ${q.y-17-offset}`
-        :`M ${start.x+normal.x*offset} ${start.y+normal.y*offset} L ${end.x+normal.x*offset} ${end.y+normal.y*offset}`;
+        :square
+          ?`M ${p.x} ${p.y-17-offset} L ${p.x} ${topY} L ${q.x} ${topY} L ${q.x} ${q.y-17-offset}`
+          :`M ${start.x+normal.x*offset} ${start.y+normal.y*offset} L ${end.x+normal.x*offset} ${end.y+normal.y*offset}`;
       g.append(svg("path",{d:path,fill:"none",stroke:s.pairColor,"stroke-width":s.pairWidth,
         "stroke-dasharray":dashed?"5 5":"none","stroke-linecap":"round"}));
     }
     if(s.mode==="lw"&&code) {
-      const midpoint={x:(p.x+q.x)/2,y:arch?p.y-Math.abs(dx)/2-8.5:(p.y+q.y)/2};
+      const midpoint={x:(p.x+q.x)/2,y:(arch||square)?(p.y-Math.max(42,Math.abs(dx)*.42)):(p.y+q.y)/2};
       if(code[1]===code[2]) symbol(g,code[1],midpoint.x,midpoint.y,code[0],s.pairColor);
       else {
         symbol(g,code[1],midpoint.x-dx/len*10,midpoint.y-dy/len*10,code[0],s.pairColor);
@@ -206,8 +221,11 @@ const SecondaryExplorer = (() => {
     parent.append(g);
   }
   function select(index,notify=true) {
-    selected=index;selectedBackbone=Math.min(index,Math.max(0,seq.length-2));panel();render();
-    if(notify&&seq===defaultSeq&&db===defaultDb) onDefaultSelect(index);
+    selected=Math.max(0,Math.min(seq.length-1,index));selectedBackbone=Math.min(selected,Math.max(0,seq.length-2));panel();render();
+    if(notify){
+      window.dispatchEvent(new CustomEvent("rna-secondary-select",{detail:{index:selected,sequence:seq,isDefault:seq===defaultSeq&&db===defaultDb}}));
+      if(seq===defaultSeq&&db===defaultDb) onDefaultSelect(selected);
+    }
   }
   function panel() {
     extendedPanel();
@@ -303,7 +321,7 @@ const SecondaryExplorer = (() => {
     const isDefault=seq===defaultSeq&&db===defaultDb;
     window.dispatchEvent(new CustomEvent("rna-secondary-context",{detail:{isDefault,sequence:seq,structure:db}}));
     window.dispatchEvent(new CustomEvent("rna-metadata-change",{detail:{
-      isDefault,metadata:{...metadata},heatEnabled,heatTheme,heatRange:[...heatRange]
+      isDefault,sequence:seq,metadata:{...metadata},heatEnabled,heatTheme,heatRange:[...heatRange]
     }}));
   }
   function load(sequence,structure) {
@@ -334,8 +352,8 @@ const SecondaryExplorer = (() => {
   const residueFields=[
     ["fillColor","Circle fill","color"],["circleColor","Circle outline color","color"],
     ["circleWidth","Circle outline thickness","number",0,8,.5],
-    ["letterColor","Letter color","color"],["letterSize","Letter size","number",8,26,1],
-    ["font","Font family","select",["monospace","sans-serif","serif"]],
+    ["letterColor","Font color","color"],["letterSize","Font size","number",8,52,1],
+    ["font","Font family","select",["monospace","sans-serif","serif","Arial","Calibri","Times New Roman"]],
     ["fontStyle","Font style","select",["normal","bold","italic"]]
   ];
   const backFields=[["backColor","Backbone color","color"],["backWidth","Backbone thickness","number",0,10,.5],["backOpacity","Backbone opacity (0–1)","number",0,1,.05]];
@@ -343,6 +361,24 @@ const SecondaryExplorer = (() => {
     return fields.map(([k,label,type,min,max,step])=>'<label>'+label+(type==="select"
       ?'<select id="'+prefix+k+'">'+min.map(v=>'<option value="'+v+'">'+v+'</option>').join("")+'</select>'
       :'<input id="'+prefix+k+'" type="'+type+'" '+(type==="number"?'min="'+min+'" max="'+max+'" step="'+step+'"':'')+'>')+'</label>').join("");
+  }
+  function enhanceColorInputs(container){
+    container.querySelectorAll('input[type="color"]').forEach(color=>{
+      if(color.dataset.hexEnhanced)return;
+      color.dataset.hexEnhanced="true";
+      const code=document.createElement("input");
+      code.type="text";code.className="se-color-code";code.value=color.value.toUpperCase();
+      code.setAttribute("aria-label","Hex color code");code.maxLength=7;code.placeholder="#RRGGBB";
+      color.insertAdjacentElement("afterend",code);
+      color.addEventListener("input",()=>{code.value=color.value.toUpperCase();code.classList.remove("invalid");});
+      const apply=()=>{
+        const value=code.value.trim();
+        if(/^#[0-9a-fA-F]{6}$/.test(value)){
+          code.classList.remove("invalid");color.value=value;color.dispatchEvent(new Event("input",{bubbles:true}));
+        }else code.classList.add("invalid");
+      };
+      code.addEventListener("change",apply);code.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();apply();}});
+    });
   }
   function reorganizeControls(controls){
     const old=[...controls.children].filter(el=>el.tagName==="DETAILS");
@@ -412,6 +448,7 @@ const SecondaryExplorer = (() => {
         applyMetadata(csv);
       }catch(error){$("seMetadataStatus").textContent=error.message;}
     });
+    enhanceColorInputs(controls);
     function applyMetadata(csv){
         const data=parseMetadata(csv,seq.length);
         const values=Object.values(data).map(r=>r.value).filter(v=>v!==null);
@@ -426,7 +463,7 @@ const SecondaryExplorer = (() => {
         panel();render();broadcastContext();
     }
   }
-  const indexFields=[["color","Index color","color"],["size","Index size","number",8,26,1],["font","Index font family","select",["monospace","sans-serif","serif"]],["fontStyle","Index font style","select",["normal","bold","italic"]]];
+  const indexFields=[["color","Index color","color"],["size","Index size","number",8,40,1],["font","Index font family","select",["monospace","sans-serif","serif","Arial","Calibri","Times New Roman"]],["fontStyle","Index font style","select",["normal","bold","italic"]]];
   function setupIndexControls(selectedPanel,allPanel){
     selectedPanel.innerHTML+='<p>Check the indices to show and style together.</p><details class="se-index-dropdown"><summary>Choose indices</summary><div id="seIndexChoices"></div></details><button id="seIndexNone" type="button">Clear selection</button><button id="seIndexShow" type="button">Show selected indices</button>'+localFields(indexFields,"seIndexSelected-")+'<button id="seIndexReset" type="button">Reset selected index styles</button>';
     allPanel.innerHTML+='<button id="seIndexAll" type="button">Show all indices</button><button id="seIndexDefault" type="button">Default: 1, every 5, and last</button><p id="seIndexMode" role="status"></p>'+localFields(indexFields,"seIndexAll-");
@@ -483,7 +520,7 @@ const SecondaryExplorer = (() => {
       clone.setAttribute("viewBox",source.dataset.fullViewBox);
       // Use explicit presentation attributes, not page CSS. Export the full drawing.
       clone.removeAttribute("style");clone.setAttribute("xmlns",NS);
-      const scale=Math.min(2,8192/w,8192/h,Math.sqrt(16000000/(w*h)));
+      const scale=Math.min(exportScale,8192/w,8192/h,Math.sqrt(16000000/(w*h)));
       const width=Math.max(1,Math.round(w*scale)),height=Math.max(1,Math.round(h*scale));
       clone.setAttribute("width",width);clone.setAttribute("height",height);
       clone.querySelectorAll("[data-export-remove],title").forEach(el=>el.remove());
@@ -506,7 +543,7 @@ const SecondaryExplorer = (() => {
   }
   function setupToolbar(viewport,stage){
     const toolbar=document.createElement("div");toolbar.className="se-toolbar";
-    toolbar.innerHTML='<button id="seZoomOut" type="button" aria-label="Zoom out">−</button><output id="seZoomValue" aria-live="polite">100%</output><button id="seZoomIn" type="button" aria-label="Zoom in">+</button><button id="seZoomReset" type="button">Reset view</button><button id="seDownload" type="button">Download PNG</button>';
+    toolbar.innerHTML='<button id="seZoomOut" type="button" aria-label="Zoom out">−</button><output id="seZoomValue" aria-live="polite">100%</output><button id="seZoomIn" type="button" aria-label="Zoom in">+</button><button id="seZoomReset" type="button">Reset view</button><label class="se-resolution-control">Export resolution <input id="seExportScale" type="range" min="1" max="4" step=".5" value="2"><output id="seExportScaleValue">2×</output></label><button id="seDownload" type="button">Download PNG</button>';
     viewport.before(toolbar);
     const message=document.createElement("p");message.id="seExportStatus";message.setAttribute("role","status");message.className="se-export-status";viewport.after(message);
     const legend=document.createElement("div");legend.id="seHeatLegend";legend.hidden=true;stage.append(legend);
@@ -534,6 +571,7 @@ const SecondaryExplorer = (() => {
     viewport.addEventListener("pointerup",endDrag);viewport.addEventListener("pointercancel",endDrag);
     viewport.addEventListener("contextmenu",e=>{if(drag||suppressMenu)e.preventDefault();});
     toolbar.insertAdjacentHTML("afterend",'<p class="se-export-status">Mouse wheel: zoom · Right-button drag: pan · Reset view: fit structure</p>');
+    $("seExportScale").addEventListener("input",e=>{exportScale=Number(e.target.value);$("seExportScaleValue").textContent=exportScale+"×";});
     $("seDownload").addEventListener("click",exportPng);
     if(typeof ResizeObserver!=="undefined")new ResizeObserver(()=>{if(seq)applyZoom();}).observe(viewport);
   }
@@ -562,9 +600,9 @@ const SecondaryExplorer = (() => {
       <details><summary>Nucleotide circles & letters</summary>
       ${input("circleColor","Circle outline color","color",settings.circleColor)}
       ${input("circleWidth","Circle outline thickness","number",1,0,8,.5)}
-      ${input("letterColor","Letter color","color",settings.letterColor)}
-      ${input("letterSize","Letter size","number",16,8,26,1)}
-      <label>Font family<select data-setting="font"><option value="monospace">Monospace</option><option value="sans-serif">Sans serif</option><option value="serif">Serif</option></select></label>
+      ${input("letterColor","Font color","color",settings.letterColor)}
+      ${input("letterSize","Font size","number",16,8,52,1)}
+      <label>Font family<select data-setting="font"><option value="monospace">Monospace</option><option value="sans-serif">Sans serif</option><option value="serif">Serif</option><option value="Arial">Arial</option><option value="Calibri">Calibri</option><option value="Times New Roman">Times New Roman</option></select></label>
       <label>Font style<select data-setting="fontStyle"><option value="normal">Regular</option><option value="bold">Bold</option><option value="italic">Italic</option></select></label>
       </details>
       <details open><summary>Selected residue / pair</summary>
@@ -582,12 +620,20 @@ const SecondaryExplorer = (() => {
       </fieldset>
       <p>Click a residue index below or in the drawing.</p><div id="seIndices" aria-label="Residue indices"></div>
       </details>
-      <p class="se-disclaimer">Custom input changes this secondary view only. Primary and tertiary remain the original tRNA. Layouts are schematic, not a folding prediction.</p>
+      <p class="se-disclaimer">Custom secondary input can be linked to a 3D structure in the Tertiary tab only after sequence/length validation and user confirmation that the inputs represent the same molecule. Layouts are schematic, not a folding prediction.</p>
       <a href="https://rnajournal.cshlp.org/content/7/4/499.long" target="_blank" rel="noreferrer">Leontis & Westhof (2001)</a>`;
     copy.append(controls);
     reorganizeControls(controls);
     $("secondarySequence").value=sequence;$("secondaryDotBracket").value=structure;
     const stage=document.querySelector(".secondary-stage"),root=$("secondarySvg");
+    const arcStyleControl=document.createElement("div");arcStyleControl.id="seArcPairStyle";arcStyleControl.className="se-arc-style";arcStyleControl.hidden=true;
+    arcStyleControl.innerHTML='<span>Pair shape</span><button type="button" data-arc-style="arc" class="active" aria-pressed="true">Arc</button><button type="button" data-arc-style="square" aria-pressed="false">Square</button>';
+    stage.querySelector(".secondary-layout-picker").insertAdjacentElement("afterend",arcStyleControl);
+    arcStyleControl.querySelectorAll("[data-arc-style]").forEach(button=>button.addEventListener("click",()=>{
+      arcPairStyle=button.dataset.arcStyle;
+      arcStyleControl.querySelectorAll("[data-arc-style]").forEach(b=>{b.classList.toggle("active",b===button);b.setAttribute("aria-pressed",String(b===button));});
+      render();
+    }));
     const viewport=document.createElement("div");viewport.className="se-viewport";root.before(viewport);viewport.append(root);
     const legend=document.createElement("div");legend.id="seLegend";legend.setAttribute("aria-label","Base-pair legend");stage.append(legend);
     setupToolbar(viewport,stage);
@@ -606,7 +652,9 @@ const SecondaryExplorer = (() => {
       layout=button.dataset.secondaryLayout;
       document.querySelectorAll("[data-secondary-layout]").forEach(b=>{
         b.classList.toggle("active",b===button);b.setAttribute("aria-pressed",String(b===button));
-      });zoom=1;panX=panY=0;render();
+      });
+      if($("seArcPairStyle"))$("seArcPairStyle").hidden=layout!=="arc";
+      zoom=1;panX=panY=0;render();
     }));
     controls.querySelectorAll("[data-setting]").forEach(el=>el.addEventListener("input",()=>{
       if(el.type==="number"&&!el.checkValidity())return;
@@ -636,7 +684,9 @@ const SecondaryExplorer = (() => {
     $("seResetPair").addEventListener("click",()=>{delete overrides[activeKey()];panel();render();});
     load(sequence,structure);
   }
-  return {setup,render,parse,parseMetadata,radial,followDefault(index){
-    if(seq===defaultSeq&&db===defaultDb&&selected!==index)select(index,false);
-  }};
+  return {setup,render,parse,parseMetadata,radial,
+    followDefault(index){if(seq===defaultSeq&&db===defaultDb&&selected!==index)select(index,false);},
+    followExternal(index){if(index>=0&&index<seq.length&&selected!==index)select(index,false);},
+    getContext(){return {sequence:seq,structure:db,isDefault:seq===defaultSeq&&db===defaultDb,selected};}
+  };
 })();

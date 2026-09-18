@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=secondary-8" />
-  <link rel="stylesheet" href="secondary.css?v=secondary-9" />
-  <link rel="stylesheet" href="tertiary.css?v=tertiary-2" />
+  <link rel="stylesheet" href="secondary.css?v=secondary-10" />
+  <link rel="stylesheet" href="tertiary.css?v=tertiary-3" />
 </head>
 <body>
   <div class="app-shell">
@@ -170,7 +170,7 @@
           <div class="scene-copy">
             <p class="scene-number">06 / 06</p>
             <h2 id="tertiaryTitle">Tertiary structure is the 3D arrangement</h2>
-            <p>See how the same residues and secondary-structure elements occupy three-dimensional space in the experimental tRNA structure.</p>
+            <p>See how the same residues and secondary-structure elements occupy three-dimensional space. Use the example 1EHZ structure or upload your own PDB/mmCIF file and validate it against the Secondary sequence before linking the views.</p>
             <div class="fact-panel residue-panel" aria-live="polite">
               <span class="fact-label">FOLLOWING</span>
               <h3 class="selected-residue-title">Guanine · G1</h3>
@@ -222,14 +222,14 @@
     <p class="eyebrow">About the beta</p>
     <h2>A teaching model, not a folding simulation</h2>
     <p>The first three views introduce building blocks and simplified condensation schemes. Primary, secondary, and tertiary views describe the same tRNA; they do not imply a sequential folding pathway.</p>
-    <p>The secondary view is a simplified educational map of a 76-nucleotide tRNA. The tertiary view uses the experimentally determined all-atom coordinates of yeast tRNA-Phe from <a href="https://www.rcsb.org/structure/1EHZ" target="_blank" rel="noreferrer">PDB 1EHZ</a> and renders them interactively with 3Dmol.js.</p>
+    <p>The default secondary view is a simplified educational map of a 76-nucleotide tRNA, and the default tertiary view uses the experimentally determined all-atom coordinates of yeast tRNA-Phe from <a href="https://www.rcsb.org/structure/1EHZ" target="_blank" rel="noreferrer">PDB 1EHZ</a>. Custom Secondary and 3D inputs can be linked only after residue-count/sequence validation and user confirmation that they represent the same RNA molecule.</p>
   </dialog>
 
   <script src="chemistry.js"></script>
   <script src="journey.js"></script>
   <script src="primary-animation.js"></script>
-  <script src="secondary.js?v=secondary-9"></script>
-  <script src="tertiary.js?v=tertiary-2"></script>
-  <script src="app.js?v=tertiary-2"></script>
+  <script src="secondary.js?v=secondary-10"></script>
+  <script src="tertiary.js?v=tertiary-3"></script>
+  <script src="app.js?v=tertiary-3"></script>
 </body>
 </html>

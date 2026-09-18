@@ -38,6 +38,8 @@ for(let i=0;i<6;i++){run('showScene('+i+')');flush();assert.equal(document.query
 assert.equal(document.querySelectorAll('.nt').length,76);
 assert.equal(document.querySelectorAll('.se-node').length,76);
 assert.ok(document.getElementById('tertiaryMolecularViewer'),'All-atom tertiary viewer container is present');
+assert.ok(document.getElementById('teStructureFile'),'Custom 3D upload control is present');
+assert.ok(document.getElementById('teSameMolecule'),'2D/3D same-molecule confirmation is present');
 run('showScene(3)');
 assert.equal(document.querySelectorAll('.growth-residue').length,1);
 for(let i=0;i<4;i++)flush();

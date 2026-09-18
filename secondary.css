@@ -65,3 +65,58 @@
 #seIndexChoices {display:grid;grid-template-columns:repeat(4,1fr);max-height:220px;overflow:auto;gap:4px;}
 #seIndexChoices label {display:flex;justify-content:flex-start;gap:5px;margin:3px;font:14px monospace;}
 .se-index-dropdown {border:1px solid var(--line);padding:8px!important;margin-left:0!important;}
+
+/* Secondary UX additions */
+.se-color-code {
+  width: 92px !important;
+  font-family: "DM Mono", monospace !important;
+  text-transform: uppercase;
+}
+.se-color-code.invalid {
+  border-color: #d9808e !important;
+  box-shadow: 0 0 0 1px rgba(217,128,142,.25);
+}
+.se-resolution-control {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 7px !important;
+  margin: 0 !important;
+  color: var(--muted);
+  font-size: 12px;
+}
+.se-resolution-control input[type=range] {
+  width: 110px;
+  padding: 0;
+}
+.se-resolution-control output {
+  min-width: 28px;
+}
+.se-arc-style {
+  align-self: flex-end;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: -8px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(10,17,32,.84);
+  font: 12px "DM Mono",monospace;
+  color: var(--muted);
+}
+.se-arc-style[hidden] { display:none; }
+.se-arc-style span { padding: 0 6px; }
+.se-arc-style button {
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  padding: 7px 9px;
+  cursor: pointer;
+}
+.se-arc-style button.active,
+.se-arc-style button:hover {
+  background: var(--mint);
+  color: var(--ink);
+}
