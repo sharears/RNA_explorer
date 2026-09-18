@@ -15,7 +15,7 @@ const duplicates = ids.filter((id, index) => ids.indexOf(id) !== index);
 assert.deepStrictEqual([...new Set(duplicates)], [], "index.html should not contain duplicate IDs");
 
 [
-  "tertiaryControls","tertiaryViewport","tertiarySvg","tertiaryMiniPanel",
+  "tertiaryControls","tertiaryViewport","tertiaryMolecularViewer","teMolecularStatus","tertiaryMiniPanel",
   "tertiaryMiniSvg","teZoomIn","teZoomOut","teResetView","teCenterSelected"
 ].forEach(id => assert(ids.includes(id), "Missing tertiary control #" + id));
 
@@ -38,12 +38,19 @@ assert(secondary.includes('"rna-metadata-change"'), "Secondary view should broad
 
 const tertiary = read("tertiary.js");
 [
-  "Show secondary-structure pair connections",
+  "PyMOL-style sticks",
+  "Show mapped secondary-structure pair connections",
   "Highlight 3D proximity",
   "Measure C4′ distance",
   "2D + 3D linked view",
   "Secondary element",
-  "Residue information"
+  "Residue information",
+  "cdn.jsdelivr.net/npm/3dmol@2.5.5",
+  "files.rcsb.org/download/1EHZ.pdb",
+  "viewer.addModel",
+  "viewer.setClickable"
 ].forEach(text => assert(tertiary.includes(text), "Missing tertiary feature: " + text));
 
-console.log("tertiary/static checks passed");
+assert(!html.includes('id="tertiarySvg"'), "Legacy SVG tertiary canvas should be removed");
+assert(html.includes("All-atom molecular coordinates"), "Tertiary description should identify the all-atom model");
+console.log("tertiary molecular/static checks passed");
