@@ -30,7 +30,7 @@ const TertiaryExplorer = (() => {
     secondaryIsDefault:true,sourceIsDefault:true,sameMoleculeConfirmed:false,
     proximityEnabled:false,proximityCutoff:12,measureEnabled:false,measureA:null,measureB:null,
     split:false,exportScale:2,currentFileName:"PDB 1EHZ",currentFormat:"pdb",
-    chains:[],activeChain:null,residueIndexByKey:new Map(),
+    chains:[],activeChain:null,chainNeedsChoice:false,residueIndexByKey:new Map(),
     mapping:{enabled:false,level:"pending",message:""}
   };
 
@@ -172,7 +172,7 @@ const TertiaryExplorer = (() => {
     });
     const byChain=new Map();
     [...residues.values()].sort((a,b)=>a.first-b.first).forEach(r=>{
-      if(r.base==="?"&&!r.hasSugar&&!r.hasP)return;
+      if(r.base==="?"&&!r.hasSugar)return;
       if(!r.coord&&r.sum.n)r.coord={x:r.sum.x/r.sum.n,y:r.sum.y/r.sum.n,z:r.sum.z/r.sum.n};
       if(!byChain.has(r.chain))byChain.set(r.chain,[]);
       byChain.get(r.chain).push(r);
@@ -200,6 +200,7 @@ const TertiaryExplorer = (() => {
   function chooseBestChain(){
     const sequence=state.secondarySequence;
     if(!state.chains.length){state.activeChain=null;return;}
+    state.chainNeedsChoice=false;
     if(state.sourceIsDefault){
       const chainA=state.chains.find(c=>c.id==="A");
       state.activeChain=(chainA||state.chains[0]).id;return;
@@ -209,17 +210,20 @@ const TertiaryExplorer = (() => {
       const score=Math.abs(chain.residues.length-sequence.length)*1000+cmp.mismatches.length*100+cmp.unknown;
       return {chain,cmp,score};
     }).sort((a,b)=>a.score-b.score);
-    state.activeChain=scored[0].chain.id;
+    if(scored.length>1&&scored[0].score===scored[1].score){
+      state.activeChain=null;state.chainNeedsChoice=true;
+    }else state.activeChain=scored[0].chain.id;
   }
 
   function populateChainSelect(){
     const select=$("teChainSelect");if(!select)return;
     select.replaceChildren();
+    if(state.chainNeedsChoice)select.append(new Option("Choose an RNA chain…",""));
     state.chains.forEach(chain=>{
       const label=(chain.id||"(blank)")+" · "+chain.residues.length+" RNA-like residues · "+chain.recognized+" recognized";
       select.append(new Option(label,chain.id));
     });
-    if(state.activeChain!=null)select.value=state.activeChain;
+    if(state.activeChain!=null)select.value=state.activeChain;else select.value="";
     select.disabled=state.chains.length<=1;
   }
 
@@ -232,7 +236,7 @@ const TertiaryExplorer = (() => {
     const sequence=state.secondarySequence;
     let level="error",message="",enabled=false;
     if(!chain){
-      message="No RNA-like chain is available for 2D/3D mapping.";
+      message=state.chainNeedsChoice?"Multiple RNA chains are equally compatible with the Secondary sequence. Choose the intended RNA chain before linking.":"No RNA-like chain is available for 2D/3D mapping.";
     }else if(isCuratedDefaultPair()){
       if(chain.residues.length===sequence.length){
         enabled=true;level="verified";
@@ -611,7 +615,7 @@ const TertiaryExplorer = (() => {
     $("teMeasureToggle").addEventListener("click",()=>{state.measureEnabled=!state.measureEnabled;if(!state.measureEnabled){state.measureA=null;state.measureB=null;}render();});
     $("teSplit").addEventListener("change",e=>{state.split=e.target.checked&&state.mapping.enabled;render();});
     $("teSameMolecule").addEventListener("change",e=>{state.sameMoleculeConfirmed=e.target.checked;evaluateMapping();render();});
-    $("teChainSelect").addEventListener("change",e=>{state.activeChain=e.target.value;state.sameMoleculeConfirmed=false;buildResidueLookup();evaluateMapping();state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();render();});
+    $("teChainSelect").addEventListener("change",e=>{state.activeChain=e.target.value;state.chainNeedsChoice=false;state.sameMoleculeConfirmed=false;buildResidueLookup();evaluateMapping();state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();render();});
     $("teStructureFile").addEventListener("change",async e=>{
       const file=e.target.files[0];if(!file)return;
       setStatus("Loading "+file.name+"…");
