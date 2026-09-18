@@ -489,8 +489,12 @@ const TertiaryExplorer = (() => {
     panel.hidden=!state.split||!state.mapping.enabled;if(panel.hidden)return;root.replaceChildren();
     let pos;try{if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.radial)pos=SecondaryExplorer.radial(state.secondarySequence.length,partner);}catch(_){}
     if(!pos?.length)return;
-    if(pos[0]?.x>pos[pos.length-1]?.x){
-      const center=(pos[0].x+pos[pos.length-1].x)/2;pos=pos.map(p=>({x:2*center-p.x,y:p.y}));
+    if(pos.length>1){
+      const first=pos[0],last=pos[pos.length-1],dx=last.x-first.x,dy=last.y-first.y;
+      if(Math.hypot(dx,dy)>1e-6){
+        const angle=-Math.atan2(dy,dx),cx=(first.x+last.x)/2,cy=(first.y+last.y)/2;
+        pos=pos.map(p=>{const x=p.x-cx,y=p.y-cy;return {x:cx+x*Math.cos(angle)-y*Math.sin(angle),y:cy+x*Math.sin(angle)+y*Math.cos(angle)};});
+      }
     }
     const NS="http://www.w3.org/2000/svg",make=(name,attrs={})=>{const e=document.createElementNS(NS,name);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));return e;};
     const minX=Math.min(...pos.map(p=>p.x)),maxX=Math.max(...pos.map(p=>p.x)),minY=Math.min(...pos.map(p=>p.y)),maxY=Math.max(...pos.map(p=>p.y));
