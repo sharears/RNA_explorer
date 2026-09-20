@@ -36,7 +36,7 @@ const MoleculeEditor = (() => {
   function graphFromBase(base){
     const src=savedBases[base]||BASES[base]||BASES.A;
     return {
-      atoms:src.atoms.map(a=>({id:a.id,element:a[1]||a.element,x:a[2]??a.x,y:a[3]??a.y,charge:a[4]??a.charge??0,label:a.id})),
+      atoms:src.atoms.map(a=>({id:a[0]||a.id,element:a[1]||a.element,x:a[2]??a.x,y:a[3]??a.y,charge:a[4]??a.charge??0,label:a[0]||a.id})),
       bonds:src.bonds.map((b,i)=>({id:"b"+i,a:b[0]||b.a,b:b[1]||b.b,order:b[2]||b.order||1})),
       hbonds:[]
     };
