@@ -62,13 +62,18 @@ const MoleculeEditor = (() => {
   }
   function pairTemplate(kind,left,right){
     const p=mergePair(left,right);
-    const add=(a,b)=>{if(p.leftIds.get(a)&&p.rightIds.get(b))p.hbonds.push({id:"h"+p.hbonds.length,a:p.leftIds.get(a),b:p.rightIds.get(b)});};
+    const sideFor=baseName=>left===baseName?p.leftIds:right===baseName?p.rightIds:null;
+    const add=(baseA,atomA,baseB,atomB)=>{
+      const sa=sideFor(baseA),sb=sideFor(baseB);
+      const a=sa?.get(atomA),b=sb?.get(atomB);
+      if(a&&b)p.hbonds.push({id:"h"+p.hbonds.length,a,b});
+    };
     if(kind==="AU"){
-      add("N6","O4");add("N1","N3");
+      add("A","N6","U","O4");add("A","N1","U","N3");
     } else if(kind==="GC"){
-      add("O6","N4");add("N1","N3");add("N2","O2");
+      add("G","O6","C","N4");add("G","N1","C","N3");add("G","N2","C","O2");
     } else if(kind==="GU"){
-      add("O6","N3");add("N1","O2");
+      add("G","O6","U","N3");add("G","N1","U","O2");
     }
     return p;
   }
