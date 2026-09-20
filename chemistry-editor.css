@@ -1,0 +1,48 @@
+.chem-editor-dialog {
+  width:min(1100px,96vw);
+  max-width:none;
+  padding:0;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:#08111e;
+  color:var(--text);
+}
+.chem-editor-dialog::backdrop { background:rgba(2,7,14,.78); backdrop-filter:blur(3px); }
+.chem-editor-shell { display:grid; gap:12px; padding:18px; }
+.chem-editor-shell header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+.chem-editor-shell h2 { margin:.1rem 0 0; }
+.chem-editor-close { border:0; background:transparent; color:var(--muted); font-size:28px; cursor:pointer; }
+.chem-editor-toolbar,.chem-pair-controls,.chem-editor-footer { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.chem-editor-toolbar button,.chem-pair-controls button,.chem-editor-footer button {
+  border:1px solid var(--line); background:var(--ink-soft); color:var(--text);
+  border-radius:7px; padding:8px 10px; cursor:pointer;
+}
+.chem-editor-toolbar button.active { border-color:var(--mint); color:var(--mint); }
+.chem-editor-toolbar label,.chem-pair-controls label { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); }
+.chem-editor-toolbar select,.chem-pair-controls select {
+  border:1px solid var(--line); background:var(--ink); color:var(--text); border-radius:6px; padding:7px;
+}
+.chem-editor-canvas-wrap {
+  border:1px solid var(--line); border-radius:10px; overflow:hidden;
+  background:radial-gradient(circle at 50% 45%,rgba(48,75,92,.22),transparent 58%),#0a1421;
+}
+#chemEditorSvg { width:100%; height:min(58vh,600px); display:block; touch-action:none; }
+.chem-editor-bond line { stroke:#dbe7ef; stroke-width:2.3; stroke-linecap:round; }
+.chem-editor-bond { cursor:pointer; }
+.chem-editor-hbonds line { stroke:#74d7b6; stroke-width:2; stroke-dasharray:6 5; opacity:.95; cursor:pointer; }
+.chem-editor-atom { cursor:pointer; }
+.chem-editor-atom circle { fill:#0d1b2b; stroke:#60798d; stroke-width:1.5; }
+.chem-editor-atom.selected circle { stroke:#fff; stroke-width:3; filter:drop-shadow(0 0 6px rgba(255,255,255,.45)); }
+.chem-editor-atom.pending circle { stroke:var(--mint); stroke-width:3; }
+.chem-editor-atom text { fill:#fff; text-anchor:middle; dominant-baseline:central; font:600 15px "DM Mono",monospace; pointer-events:none; }
+.chem-editor-atom .chem-atom-id { fill:#7890a3; font-size:9px; dominant-baseline:auto; }
+.chem-editor-footer { justify-content:space-between; }
+.chem-editor-footer p { margin:0; color:var(--muted); font-size:12px; line-height:1.5; max-width:70%; }
+.chem-editor-footer p.warning { color:#efc178; }
+#editNucleobaseButton { margin-top:8px; }
+@media(max-width:720px){
+  .chem-editor-dialog { width:98vw; }
+  #chemEditorSvg { height:52vh; }
+  .chem-editor-footer { align-items:flex-start; }
+  .chem-editor-footer p { max-width:100%; }
+}

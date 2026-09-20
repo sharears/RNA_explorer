@@ -26,7 +26,7 @@ class Element{
 }
 const nodes=new Map(),get=id=>{if(!nodes.has(id))nodes.set(id,new Element(id));return nodes.get(id);};
 const document={getElementById:get,createElementNS:(ns,name)=>new Element(name),createElement:name=>new Element(name),querySelectorAll:()=>[]};
-const instrumented=source.replace("return {setup,render,parse,parseMetadata,radial,", 'return {inspect(){return {settings,zoom,metadata,heatEnabled};},setState(v){seq=v.seq;db=v.db;partner=parse(seq,db).partner;pairs=parse(seq,db).pairs;layout=v.layout||"arc";metadata=v.metadata||{};heatEnabled=!!v.heatEnabled;heatRange=v.heatRange||[0,1];residueOverrides=v.residueOverrides||{};backboneOverrides=v.backboneOverrides||{};zoom=v.zoom||1;},residueStyle,heatColor,applyZoom,setup,render,parse,parseMetadata,radial,');
+const instrumented=source.replace("return {setup,render,parse,parseMetadata,parsePairProbabilities,radial,", 'return {inspect(){return {settings,zoom,metadata,heatEnabled};},setState(v){seq=v.seq;db=v.db;partner=parse(seq,db).partner;pairs=parse(seq,db).pairs;layout=v.layout||"arc";metadata=v.metadata||{};heatEnabled=!!v.heatEnabled;heatRange=v.heatRange||[0,1];residueOverrides=v.residueOverrides||{};backboneOverrides=v.backboneOverrides||{};zoom=v.zoom||1;},residueStyle,heatColor,applyZoom,setup,render,parse,parseMetadata,parsePairProbabilities,radial,');
 const editor=new Function("document",instrumented+"\nreturn SecondaryExplorer;")(document);
 editor.setState({seq:"GAGCAAAAAUUC",db:"((((....))))",metadata:{0:{id:"G",value:0},1:{id:"A",value:1}},heatEnabled:true,residueOverrides:{1:{fillColor:"#abcdef",letterSize:23}},backboneOverrides:{0:{backColor:"#123456",backWidth:5}}});
 editor.render();
@@ -57,5 +57,12 @@ assert(source.includes('"Arial"')&&source.includes('"Calibri"')&&source.includes
 assert(source.includes('"Font color"')&&source.includes('"Font size"'),"Residue typography labels use font terminology");
 assert(source.includes('se-color-code'),"Color picker has editable color-code companion");
 assert(source.includes('"rna-secondary-select"'),"Custom Secondary selection can synchronize with Tertiary");
+let sparse=api.parsePairProbabilities("Residue_i,Residue_j,Probability\n1,4,0.8\n2,3,0.25",4);
+assert(Math.abs(sparse["0:3"]-.8)<1e-9&&Math.abs(sparse["1:2"]-.25)<1e-9,"Sparse pair probabilities parse");
+let matrix=api.parsePairProbabilities("0 0.1 0.2\n0.1 0 0.7\n0.2 0.7 0",3);
+assert(Math.abs(matrix["1:2"]-.7)<1e-9,"Square pair-probability matrix parses");
+throws(()=>api.parsePairProbabilities("Residue_i,Residue_j,Probability\n1,2,1.2",3),"Reject probabilities outside 0–1");
+assert(source.includes("sePairProbFile")&&source.includes("pairProbEnabled"),"Pair-probability layer is available");
+assert(source.includes("MoleculeEditor.openPair"),"Secondary base pairs open the shared chemistry editor");
 
 console.log("PASS: secondary v10 logic and rendering-unit checks (not a browser integration test).");

@@ -13,7 +13,7 @@ const ctx=vm.createContext({document,window,console,CustomEvent:window.CustomEve
 });
 function flush(){for(const [id,fn] of [...timers]){timers.delete(id);fn();}}
 const run=s=>vm.runInContext(s,ctx);
-for(const f of ['chemistry.js','journey.js','primary-animation.js','secondary.js','tertiary.js','app.js']) run(fs.readFileSync('dist/'+f,'utf8'));
+for(const f of ['chemistry.js','chemistry-editor.js','journey.js','primary-animation.js','secondary.js','tertiary.js','app.js']) run(fs.readFileSync('dist/'+f,'utf8'));
 assert.equal(document.querySelectorAll('[data-scene-panel]').length,6);
 assert.equal(document.querySelectorAll('.scale-step').length,6);
 assert.deepEqual([...document.querySelectorAll('[data-scene-panel]')].map(p=>p.dataset.scenePanel),['blocks','nucleoside','nucleotide','primary','secondary','tertiary']);
@@ -40,6 +40,10 @@ assert.equal(document.querySelectorAll('.se-node').length,76);
 assert.ok(document.getElementById('tertiaryMolecularViewer'),'All-atom tertiary viewer container is present');
 assert.ok(document.getElementById('teStructureFile'),'Custom 3D upload control is present');
 assert.ok(document.getElementById('teSameMolecule'),'2D/3D same-molecule confirmation is present');
+assert.ok(document.getElementById('editNucleobaseButton'),'Building Blocks has a nucleobase editor button');
+assert.ok(document.getElementById('chemEditorDialog'),'Shared molecular chemistry editor is initialized');
+assert.ok(document.getElementById('sePairChemButton'),'Selected Secondary pair can open chemistry editor');
+assert.ok(document.getElementById('sePairProbFile'),'Secondary has pair-probability upload');
 run('showScene(3)');
 assert.equal(document.querySelectorAll('.growth-residue').length,1);
 for(let i=0;i<4;i++)flush();

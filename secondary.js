@@ -14,6 +14,7 @@ const SecondaryExplorer = (() => {
   let panX=0,panY=0,indexMode="default",indexSelection=new Set(),indexOverrides={};
   const indexSettings={color:"#bacbd7",size:12,font:"monospace",fontStyle:"normal"};
   let metadata={}, heatEnabled=false, heatTheme="viridis", heatRange=[0,1], metadataTicket=0;
+  let pairProbabilities={}, pairProbEnabled=false, pairProbTheme="viridis", pairProbTicket=0, pairChemistry={};
   let arcPairStyle="arc", exportScale=2;
   const defaults={...settings};
   const palettes={
@@ -29,6 +30,41 @@ const SecondaryExplorer = (() => {
   }
   function residueStyle(i) {
     return {...settings,fillColor:heatEnabled&&metadata[i]?.value!=null?heatColor(metadata[i].value):settings.fillColor||colors[seq[i]],...residueOverrides[i]};
+  }
+  function probabilityColor(value) {
+    const t=Math.max(0,Math.min(1,Number(value))),stops=palettes[pairProbTheme],x=t*(stops.length-1);
+    const i=Math.min(stops.length-2,Math.floor(x)),f=x-i;
+    return "#"+[1,3,5].map(k=>Math.round(parseInt(stops[i].slice(k,k+2),16)*(1-f)+parseInt(stops[i+1].slice(k,k+2),16)*f).toString(16).padStart(2,"0")).join("");
+  }
+  function parsePairProbabilities(input,n) {
+    const text=String(input||"").replace(/^\uFEFF/,"").trim();
+    if(!text)throw Error("Pair-probability data are empty.");
+    const lines=text.split(/\r?\n/).map(s=>s.trim()).filter(s=>s&&!s.startsWith("#"));
+    const first=lines[0].toLowerCase().replace(/\s/g,"");
+    const out={};
+    if(first==="residue_i,residue_j,probability"||first==="i,j,probability"){
+      lines.slice(1).forEach((line,row)=>{
+        const fields=line.split(",").map(s=>s.trim());
+        if(fields.length!==3)throw Error("Sparse probability row "+(row+2)+" must have Residue_i, Residue_j, Probability.");
+        const i=Number(fields[0]),j=Number(fields[1]),p=Number(fields[2]);
+        if(!Number.isInteger(i)||!Number.isInteger(j)||i<1||j<1||i>n||j>n||i===j)throw Error("Invalid residue indices on probability row "+(row+2)+".");
+        if(!Number.isFinite(p)||p<0||p>1)throw Error("Probability must be between 0 and 1 on row "+(row+2)+".");
+        out[keyOf(i-1,j-1)]=p;
+      });
+    } else {
+      let rows=lines.map(line=>line.includes(",")?line.split(",").map(s=>s.trim()):line.split(/\s+/));
+      if(rows.length===n+1&&rows[0].length>=n){rows=rows.slice(1);}
+      rows=rows.map(row=>row.length===n+1?row.slice(1):row);
+      if(rows.length!==n||rows.some(row=>row.length!==n))throw Error("Probability matrix must be "+n+" × "+n+", or use sparse CSV headers Residue_i,Residue_j,Probability.");
+      const matrix=rows.map((row,r)=>row.map((v,col)=>{
+        const p=Number(v);
+        if(!Number.isFinite(p)||p<0||p>1)throw Error("Matrix probability at row "+(r+1)+", column "+(col+1)+" must be between 0 and 1.");
+        return p;
+      }));
+      for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)out[keyOf(i,j)]=(matrix[i][j]+matrix[j][i])/2;
+    }
+    if(!Object.keys(out).length)throw Error("No pair probabilities were found.");
+    return out;
   }
   function parseMetadata(csv,n) {
     const rows=[];let row=[],cell="",quoted=false,closed=false;
@@ -179,6 +215,8 @@ const SecondaryExplorer = (() => {
   }
   function pairGraphic(parent,a,b,pos,key,preview=false) {
     const s=effective(key), p=pos[a],q=pos[b];
+    const probability=pairProbabilities[key];
+    const pairColor=pairProbEnabled&&probability!=null&&!overrides[key]?.pairColor?probabilityColor(probability):s.pairColor;
     const g=svg("g",{"data-pair":key,class:"se-pair",opacity:s.pairOpacity});
     const code=annotations[key];
     const identity=seq[a]+seq[b];
@@ -198,22 +236,22 @@ const SecondaryExplorer = (() => {
         :square
           ?`M ${p.x} ${p.y-17-offset} L ${p.x} ${topY} L ${q.x} ${topY} L ${q.x} ${q.y-17-offset}`
           :`M ${start.x+normal.x*offset} ${start.y+normal.y*offset} L ${end.x+normal.x*offset} ${end.y+normal.y*offset}`;
-      g.append(svg("path",{d:path,fill:"none",stroke:s.pairColor,"stroke-width":s.pairWidth,
+      g.append(svg("path",{d:path,fill:"none",stroke:pairColor,"stroke-width":s.pairWidth,
         "stroke-dasharray":dashed?"5 5":"none","stroke-linecap":"round"}));
     }
     if(s.mode==="lw"&&code) {
       const midpoint={x:(p.x+q.x)/2,y:(arch||square)?(p.y-Math.max(42,Math.abs(dx)*.42)):(p.y+q.y)/2};
-      if(code[1]===code[2]) symbol(g,code[1],midpoint.x,midpoint.y,code[0],s.pairColor);
+      if(code[1]===code[2]) symbol(g,code[1],midpoint.x,midpoint.y,code[0],pairColor);
       else {
-        symbol(g,code[1],midpoint.x-dx/len*10,midpoint.y-dy/len*10,code[0],s.pairColor);
-        symbol(g,code[2],midpoint.x+dx/len*10,midpoint.y+dy/len*10,code[0],s.pairColor);
+        symbol(g,code[1],midpoint.x-dx/len*10,midpoint.y-dy/len*10,code[0],pairColor);
+        symbol(g,code[2],midpoint.x+dx/len*10,midpoint.y+dy/len*10,code[0],pairColor);
       }
     }
     if(!preview) {
       const hit=svg("path",{d:path,fill:"none",stroke:"transparent","stroke-width":18,"pointer-events":"stroke"});
       g.append(hit);
       g.setAttribute("tabindex","0");g.setAttribute("role","button");
-      g.setAttribute("aria-label",`Base pair ${a+1}–${b+1}${code?", "+code:""}`);
+      g.setAttribute("aria-label",`Base pair ${a+1}–${b+1}${probability!=null?", probability "+probability.toFixed(3):""}${code?", "+code:""}`);
       const choose=()=>select(a);
       g.addEventListener("click",choose);
       g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();choose();}});
@@ -232,11 +270,13 @@ const SecondaryExplorer = (() => {
     const other=partner[selected],key=activeKey();
     $("seSelected").textContent=other<0?`${seq[selected]}${selected+1} · unpaired`:`${seq[selected]}${selected+1} — ${seq[other]}${other+1}`;
     $("sePairEditor").disabled=!key;
+    if($("sePairChemButton"))$("sePairChemButton").disabled=!key;
     $("sePairList").value=key||"";
     $("seLw").value=annotations[key]||"";
     const s=effective(key);
     ["pairColor","pairWidth","pairOpacity"].forEach(k=>$("seLocal-"+k).value=s[k]);
     $("seLocal-mode").value=overrides[key]?.mode||"inherit";
+    if($("sePairChemStatus"))$("sePairChemStatus").textContent=key&&pairChemistry[key]?"Custom chemical drawing saved for this pair.":key?"Open the chemistry editor to inspect or modify this base pair.":"Select a base pair to open its chemistry.";
     document.querySelectorAll("[data-residue-index]").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.residueIndex===selected)));
   }
   function renderLegend() {
@@ -315,7 +355,7 @@ const SecondaryExplorer = (() => {
     text(root,"5′",{x:pos[0].x-30,y:pos[0].y,fill:"#74d7b6","font-size":16,"text-anchor":"end"});
     text(root,"3′",{x:pos.at(-1).x+30,y:pos.at(-1).y,fill:"#74d7b6","font-size":16});
     $("secondaryStageNote").textContent=`${layout[0].toUpperCase()+layout.slice(1)} · ${seq.length} residues · ${pairs.length} pairs · Select a residue index or pair`;
-    renderLegend();renderHeatLegend();
+    renderLegend();renderHeatLegend();renderPairProbabilityLegend();
   }
   function broadcastContext() {
     const isDefault=seq===defaultSeq&&db===defaultDb;
@@ -328,10 +368,12 @@ const SecondaryExplorer = (() => {
     const parsed=parse(sequence,structure);
     const changed=sequence!==seq||structure!==db;
     seq=sequence;db=structure;pairs=parsed.pairs;partner=parsed.partner;selected=0;
-    if(changed){overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;zoom=1;panX=panY=0;
+    if(changed){overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;pairProbabilities={};pairProbEnabled=false;pairProbTicket++;pairChemistry={};zoom=1;panX=panY=0;
       indexMode="default";indexOverrides={};indexSelection=new Set([...sequence].map((_,i)=>i).filter(i=>i===0||(i+1)%5===0||i===sequence.length-1));
       if($("seMetadataFile"))$("seMetadataFile").value="";
       if($("seMetadataStatus"))$("seMetadataStatus").textContent="Upload metadata for the current sequence.";
+      if($("sePairProbFile"))$("sePairProbFile").value="";
+      if($("sePairProbStatus"))$("sePairProbStatus").textContent="Upload a probability matrix or sparse CSV for the current sequence.";
     }
     selectedBackbone=0;
     $("seBackList").replaceChildren();
@@ -394,6 +436,7 @@ const SecondaryExplorer = (() => {
     bs.innerHTML+='<label>Connection indices<select id="seBackList"></select></label><fieldset id="seBackEditor"><legend>Selected connection</legend>'+localFields(backFields,"seBack-")+'<button id="seBackReset" type="button">Reset selected connection</button></fieldset>';
     ["pairColor","pairWidth","pairOpacity","mode"].forEach(k=>pa.append($("se-"+k).closest("label")));
     pa.append($("seLegendToggle"));
+    pa.insertAdjacentHTML("beforeend",'<button type="button" id="seStandardPairChemistry">Standard WCF / G–U chemistry</button><fieldset><legend>Base-pair probability</legend><p>Upload either an N × N probability matrix (comma- or whitespace-separated) or sparse CSV with headers Residue_i,Residue_j,Probability. Values must be 0–1. This colors pair connectors independently of residue reactivity.</p><label>Probability data<input id="sePairProbFile" type="file" accept=".csv,.txt,text/csv,text/plain"></label><label>Probability theme<select id="sePairProbTheme"><option value="viridis">Viridis</option><option value="magma">Magma</option><option value="blueRed">Blue–white–red</option><option value="cividis">Cividis</option></select></label><label><input type="checkbox" id="sePairProbEnabled">Color pairs by probability</label><button type="button" id="sePairProbClear">Clear pair probabilities</button><p id="sePairProbStatus" role="status">Upload a probability matrix or sparse CSV for the current sequence.</p></fieldset>');
     const fill=document.createElement("div");fill.innerHTML=input("fillColor","All circle fills (replaces heatmap)","color","#2f6b57");
     ra.append(fill.firstElementChild);
     [...old[1].children].filter(el=>el.tagName!=="SUMMARY").forEach(el=>ra.append(el));
@@ -401,6 +444,7 @@ const SecondaryExplorer = (() => {
     rs.insertAdjacentHTML("beforeend",'<label>Selected residue<select id="seResidueList"></select></label>');
     $("seResidueList").addEventListener("change",e=>select(Number(e.target.value)));
     ps.append($("seSelected"),$("sePairList").closest("label"),$("sePairEditor"));
+    $("sePairEditor").insertAdjacentHTML("beforeend",'<button type="button" id="sePairChemButton">Open base-pair chemistry</button><p id="sePairChemStatus">Select a base pair to open its chemistry.</p>');
     ra.insertAdjacentHTML("beforeend",'<button id="seNaturalColors" type="button">Restore A/G/C/U fill colors</button><fieldset><legend>CSV heatmap</legend><p>Headers: Residue_Index, Residue_ID, Residue_Information. Indices start at 1. Numeric values are mapped linearly; blank or NA values keep the standard nucleotide color. Upload applies the heatmap and resets other colors to defaults; you can edit them afterward.</p><label>Metadata CSV<input id="seMetadataFile" type="file" accept=".csv,text/csv"></label><label>Heatmap theme<select id="seHeatTheme"><option value="viridis">Viridis</option><option value="magma">Magma</option><option value="blueRed">Blue–white–red</option><option value="cividis">Cividis</option></select></label><label><input type="checkbox" id="seHeatEnabled">Use metadata colors</label><button id="seClearMetadata" type="button">Clear metadata</button><p id="seMetadataStatus" role="status">Upload metadata for the current sequence.</p></fieldset>');
     old.forEach(el=>el.remove());
     $("seMetadataFile").closest("fieldset").insertAdjacentHTML("afterbegin",'<button type="button" id="seExample">Load example reactivity CSV</button><p><a href="data/rna_residue_reactivity.csv" download>Download example CSV</a> · Values supplied for the default tRNA.</p>');
@@ -435,6 +479,35 @@ const SecondaryExplorer = (() => {
         const csv=await file.text();if(ticket!==metadataTicket)return;
         applyMetadata(csv);
       }catch(error){if(ticket===metadataTicket)$("seMetadataStatus").textContent="Upload failed: "+error.message;}
+    });
+    $("seStandardPairChemistry").addEventListener("click",()=>{
+      if(typeof MoleculeEditor!=="undefined")MoleculeEditor.openPair("G","C");
+    });
+    $("sePairChemButton").addEventListener("click",()=>{
+      const key=activeKey();if(!key)return;
+      const [a,b]=key.split(":").map(Number);
+      if(typeof MoleculeEditor!=="undefined")MoleculeEditor.openPair(seq[a],seq[b],drawing=>{pairChemistry[key]=drawing;panel();});
+    });
+    $("sePairProbTheme").addEventListener("change",e=>{pairProbTheme=e.target.value;render();});
+    $("sePairProbEnabled").addEventListener("change",e=>{
+      pairProbEnabled=e.target.checked&&Object.keys(pairProbabilities).length>0;
+      if(e.target.checked&&!pairProbEnabled)$("sePairProbStatus").textContent="Upload probability data first.";
+      render();
+    });
+    $("sePairProbClear").addEventListener("click",()=>{
+      pairProbTicket++;pairProbabilities={};pairProbEnabled=false;$("sePairProbFile").value="";$("sePairProbEnabled").checked=false;
+      $("sePairProbStatus").textContent="Pair-probability data cleared.";render();
+    });
+    $("sePairProbFile").addEventListener("change",async e=>{
+      const file=e.target.files[0];if(!file)return;const ticket=++pairProbTicket;
+      try{
+        if(file.size>5*1024*1024)throw Error("Probability file must be smaller than 5 MB.");
+        const data=parsePairProbabilities(await file.text(),seq.length);if(ticket!==pairProbTicket)return;
+        pairProbabilities=data;pairProbEnabled=true;$("sePairProbEnabled").checked=true;
+        const matched=pairs.filter(([a,b])=>data[keyOf(a,b)]!=null).length;
+        $("sePairProbStatus").textContent=Object.keys(data).length+" pair probabilities loaded; "+matched+" currently displayed base pairs have values.";
+        render();
+      }catch(error){if(ticket===pairProbTicket)$("sePairProbStatus").textContent="Upload failed: "+error.message;}
     });
     $("seExample").addEventListener("click",async()=>{
       const ticket=++metadataTicket;$("seMetadataStatus").textContent="Loading example…";
@@ -492,6 +565,14 @@ const SecondaryExplorer = (() => {
     $("seResidueList").value=String(selected);
     $("seIndexMode").textContent="Showing: "+(indexMode==="default"?"1, every 5, and last":indexMode==="all"?"all indices":indexSelection.size+" selected indices");
   }
+  function renderPairProbabilityLegend(){
+    const box=$("sePairProbLegend");if(!box)return;
+    box.hidden=!pairProbEnabled;box.replaceChildren();if(!pairProbEnabled)return;
+    const title=document.createElement("strong");title.textContent="Base-pair probability · "+pairProbTheme;
+    const bar=document.createElement("div");bar.className="se-heat-bar";bar.style.background="linear-gradient(to right,"+palettes[pairProbTheme].join(",")+")";
+    const label=document.createElement("p");label.textContent="0 → 1. Pair connectors with loaded values use this scale; selected manual pair-color overrides take priority.";
+    box.append(title,bar,label);
+  }
   function renderHeatLegend(){
     const box=$("seHeatLegend");if(!box)return;
     box.hidden=!heatEnabled;box.replaceChildren();if(!heatEnabled)return;
@@ -547,6 +628,7 @@ const SecondaryExplorer = (() => {
     viewport.before(toolbar);
     const message=document.createElement("p");message.id="seExportStatus";message.setAttribute("role","status");message.className="se-export-status";viewport.after(message);
     const legend=document.createElement("div");legend.id="seHeatLegend";legend.hidden=true;stage.append(legend);
+    const pairLegend=document.createElement("div");pairLegend.id="sePairProbLegend";pairLegend.hidden=true;stage.append(pairLegend);
     function changeZoom(factor,clientX,clientY){
       const root=$("secondarySvg"),rect=root.getBoundingClientRect(),before=root.getAttribute("viewBox").split(/\s+/).map(Number);
       const x=clientX===undefined?.5:(clientX-rect.left)/rect.width,y=clientY===undefined?.5:(clientY-rect.top)/rect.height;
@@ -646,7 +728,7 @@ const SecondaryExplorer = (() => {
     });
     $("restoreTrnaButton").addEventListener("click",()=>{
       $("secondarySequence").value=defaultSeq;$("secondaryDotBracket").value=defaultDb;
-      overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;zoom=1;$("seMetadataFile").value="";$("seMetadataStatus").textContent="Upload metadata for the current sequence.";load(defaultSeq,defaultDb);status("Default tRNA restored; pair overrides and annotations cleared.");
+      overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;pairProbabilities={};pairProbEnabled=false;pairProbTicket++;pairChemistry={};zoom=1;$("seMetadataFile").value="";$("seMetadataStatus").textContent="Upload metadata for the current sequence.";if($("sePairProbFile"))$("sePairProbFile").value="";load(defaultSeq,defaultDb);status("Default tRNA restored; pair overrides, probability data, chemistry drawings, and annotations cleared.");
     });
     document.querySelectorAll("[data-secondary-layout]").forEach(button=>button.addEventListener("click",()=>{
       layout=button.dataset.secondaryLayout;
@@ -684,7 +766,7 @@ const SecondaryExplorer = (() => {
     $("seResetPair").addEventListener("click",()=>{delete overrides[activeKey()];panel();render();});
     load(sequence,structure);
   }
-  return {setup,render,parse,parseMetadata,radial,
+  return {setup,render,parse,parseMetadata,parsePairProbabilities,radial,
     followDefault(index){if(seq===defaultSeq&&db===defaultDb&&selected!==index)select(index,false);},
     followExternal(index){if(index>=0&&index<seq.length&&selected!==index)select(index,false);},
     getContext(){return {sequence:seq,structure:db,isDefault:seq===defaultSeq&&db===defaultDb,selected};}

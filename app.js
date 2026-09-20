@@ -309,6 +309,7 @@ function initialize() {
   }
   setupNavigation();
   setupChemicalJourney();
+  MoleculeEditor.setup();
   renderPrimary();
   setupPrimaryAnimation();
   setupSecondaryWorkspace();
