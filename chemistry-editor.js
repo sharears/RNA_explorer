@@ -79,7 +79,7 @@ const MoleculeEditor = (() => {
   }
 
   let dialog=null,svg=null,status=null,title=null,mode="base",base="A",leftBase="G",rightBase="C";
-  let graph={atoms:[],bonds:[],hbonds:[]},tool="select",element="C",bondOrder=1,selectedAtom=null,pendingAtom=null,drag=null,onSave=null;
+  let graph={atoms:[],bonds:[],hbonds:[]},tool="select",element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,onSave=null;
   let atomSerial=1,bondSerial=1,hbondSerial=1;
 
   const atomById=id=>graph.atoms.find(a=>a.id===id);
@@ -93,6 +93,7 @@ const MoleculeEditor = (() => {
         <header><div><p class="eyebrow">RNA chemistry editor</p><h2 id="chemEditorTitle">Nucleobase editor</h2></div><button id="chemEditorClose" class="chem-editor-close" type="button" aria-label="Close">×</button></header>
         <div class="chem-editor-toolbar" role="toolbar" aria-label="Molecular drawing tools">
           <button type="button" data-chem-tool="select" class="active">Select / move</button>
+          <button type="button" id="chemSelectAll">Select all</button>
           <button type="button" data-chem-tool="atom">Add atom</button>
           <button type="button" data-chem-tool="bond">Add bond</button>
           <button type="button" data-chem-tool="hbond">H-bond</button>
@@ -105,6 +106,9 @@ const MoleculeEditor = (() => {
           <label>Left base<select id="chemLeftBase"><option>A</option><option>G</option><option>C</option><option>U</option></select></label>
           <label>Right base<select id="chemRightBase"><option>A</option><option>G</option><option>C</option><option>U</option></select></label>
           <button type="button" id="chemLoadPair">Load bases</button>
+          <button type="button" id="chemSelectLeft">Select left base</button>
+          <button type="button" id="chemSelectRight">Select right base</button>
+          <button type="button" id="chemSelectPair">Select whole pair</button>
           <button type="button" data-pair-template="GC">G–C WCF</button>
           <button type="button" data-pair-template="AU">A–U WCF</button>
           <button type="button" data-pair-template="GU">G–U wobble</button>
@@ -124,6 +128,10 @@ const MoleculeEditor = (() => {
       tool=b.dataset.chemTool;pendingAtom=null;
       dialog.querySelectorAll("[data-chem-tool]").forEach(x=>x.classList.toggle("active",x===b));render();
     }));
+    dialog.querySelector("#chemSelectAll").addEventListener("click",()=>{selectAtoms(graph.atoms.map(a=>a.id));render();});
+    dialog.querySelector("#chemSelectLeft").addEventListener("click",()=>{selectAtoms(graph.atoms.filter(a=>a.id.startsWith("L_")).map(a=>a.id));render();});
+    dialog.querySelector("#chemSelectRight").addEventListener("click",()=>{selectAtoms(graph.atoms.filter(a=>a.id.startsWith("R_")).map(a=>a.id));render();});
+    dialog.querySelector("#chemSelectPair").addEventListener("click",()=>{selectAtoms(graph.atoms.map(a=>a.id));render();});
     dialog.querySelector("#chemElement").addEventListener("change",e=>{
       element=e.target.value;
       if(selectedAtom){const a=atomById(selectedAtom);if(a){a.element=element;a.label=element;render();validate();}}
@@ -152,21 +160,53 @@ const MoleculeEditor = (() => {
     svg.addEventListener("pointermove",canvasPointerMove);
     svg.addEventListener("pointerup",canvasPointerUp);
     svg.addEventListener("pointercancel",canvasPointerUp);
+    svg.addEventListener("dblclick",e=>{
+      const atomEl=e.target.closest?.("[data-atom-id]");if(!atomEl||tool!=="select")return;
+      e.preventDefault();selectAtoms(covalentComponent(atomEl.dataset.atomId));render();validate();
+    });
     dialog.addEventListener("keydown",e=>{
-      if((e.key==="Delete"||e.key==="Backspace")&&selectedAtom){deleteAtom(selectedAtom);selectedAtom=null;render();validate();}
+      if(e.key==="Escape"&&selectedAtoms.size){selectedAtoms.clear();selectedAtom=null;render();return;}
+      if((e.key==="Delete"||e.key==="Backspace")&&(selectedAtoms.size||selectedAtom)){
+        e.preventDefault();deleteAtoms(selectedAtoms.size?[...selectedAtoms]:[selectedAtom]);selectedAtom=null;render();validate();
+      }
     });
   }
 
   function renumber(){
-    atomSerial=graph.atoms.length+1;bondSerial=graph.bonds.length+1;hbondSerial=graph.hbonds.length+1;selectedAtom=null;pendingAtom=null;
+    atomSerial=graph.atoms.length+1;bondSerial=graph.bonds.length+1;hbondSerial=graph.hbonds.length+1;
+    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;drag=null;selectionBox=null;
+  }
+  function selectAtoms(ids,activeId=null){
+    selectedAtoms=new Set(ids.filter(id=>atomById(id)));
+    selectedAtom=activeId&&selectedAtoms.has(activeId)?activeId:(selectedAtoms.values().next().value||null);
+    if(selectedAtom){
+      const a=atomById(selectedAtom);element=a?.element||element;
+      if(dialog&&a&&dialog.querySelector("#chemElement"))dialog.querySelector("#chemElement").value=element;
+    }
+  }
+  function toggleAtom(id){
+    if(selectedAtoms.has(id))selectedAtoms.delete(id);else selectedAtoms.add(id);
+    selectedAtom=selectedAtoms.has(id)?id:(selectedAtoms.values().next().value||null);
+  }
+  function covalentComponent(startId){
+    const seen=new Set([startId]),queue=[startId];
+    while(queue.length){
+      const id=queue.shift();
+      graph.bonds.forEach(b=>{
+        let next=null;if(b.a===id)next=b.b;else if(b.b===id)next=b.a;
+        if(next&&!seen.has(next)){seen.add(next);queue.push(next);}
+      });
+    }
+    return [...seen];
   }
   function loadCurrent(){
     graph=mode==="base"?graphFromBase(base):mergePair(leftBase,rightBase);renumber();render();validate();
   }
   function changeCharge(delta){
-    if(!selectedAtom){status.textContent="Select an atom first.";return;}
-    const a=atomById(selectedAtom);if(!a)return;
-    a.charge=Math.max(-4,Math.min(4,(a.charge||0)+delta));render();validate();
+    const ids=selectedAtoms.size?[...selectedAtoms]:(selectedAtom?[selectedAtom]:[]);
+    if(!ids.length){status.textContent="Select one or more atoms first.";return;}
+    ids.forEach(id=>{const a=atomById(id);if(a)a.charge=Math.max(-4,Math.min(4,(a.charge||0)+delta));});
+    render();validate();
   }
   function point(event){
     const rect=svg.getBoundingClientRect();
@@ -185,16 +225,20 @@ const MoleculeEditor = (() => {
     if(tool==="atom"&&!atomEl){
       const p=point(e),id="X"+atomSerial++;
       graph.atoms.push({id,element,x:p.x,y:p.y,charge:0,label:element});
-      selectedAtom=id;render();validate();return;
+      selectAtoms([id],id);render();validate();return;
     }
     if(atomEl){
       const id=atomEl.dataset.atomId;
       if(tool==="select"){
-        selectedAtom=id;const a=atomById(id);element=a.element;dialog.querySelector("#chemElement").value=element;
-        drag={id,pointer:e.pointerId};svg.setPointerCapture?.(e.pointerId);render();validate();return;
+        if(e.shiftKey)toggleAtom(id);
+        else if(!selectedAtoms.has(id)||selectedAtoms.size===0)selectAtoms([id],id);
+        else selectedAtom=id;
+        const a=atomById(id);element=a.element;dialog.querySelector("#chemElement").value=element;
+        const p=point(e);
+        drag={ids:[...selectedAtoms],pointer:e.pointerId,last:p};svg.setPointerCapture?.(e.pointerId);render();validate();return;
       }
       if(tool==="bond"||tool==="hbond"){
-        if(!pendingAtom){pendingAtom=id;selectedAtom=id;render();return;}
+        if(!pendingAtom){pendingAtom=id;selectAtoms([id],id);render();return;}
         if(pendingAtom===id){pendingAtom=null;render();return;}
         if(tool==="bond"){
           const existing=bondBetween(pendingAtom,id);
@@ -204,25 +248,47 @@ const MoleculeEditor = (() => {
           const dup=graph.hbonds.some(h=>(h.a===pendingAtom&&h.b===id)||(h.a===id&&h.b===pendingAtom));
           if(!dup)graph.hbonds.push({id:"h"+hbondSerial++,a:pendingAtom,b:id});
         }
-        pendingAtom=null;selectedAtom=id;render();validate();return;
+        pendingAtom=null;selectAtoms([id],id);render();validate();return;
       }
     }
     if(bondEl&&tool==="select"){
-      const b=graph.bonds.find(x=>x.id===bondEl.dataset.bondId);if(b){b.order=bondOrder;status.textContent="Selected bond changed to order "+bondOrder+".";render();validate();}
+      const b=graph.bonds.find(x=>x.id===bondEl.dataset.bondId);if(b){b.order=bondOrder;status.textContent="Selected bond changed to order "+bondOrder+".";render();validate();return;}
+    }
+    if(tool==="select"&&!atomEl&&!bondEl&&!hEl){
+      const p=point(e);
+      if(!e.shiftKey){selectedAtoms.clear();selectedAtom=null;}
+      selectionBox={pointer:e.pointerId,start:p,current:p,additive:e.shiftKey};
+      svg.setPointerCapture?.(e.pointerId);render();
     }
   }
   function canvasPointerMove(e){
-    if(!drag||e.pointerId!==drag.pointer)return;
-    const a=atomById(drag.id),p=point(e);if(!a)return;a.x=clamp(p.x,24,796);a.y=clamp(p.y,24,446);render();
+    if(drag&&e.pointerId===drag.pointer){
+      const p=point(e),dx0=p.x-drag.last.x,dy0=p.y-drag.last.y;
+      const atoms=drag.ids.map(atomById).filter(Boolean);if(!atoms.length)return;
+      const minX=Math.min(...atoms.map(a=>a.x)),maxX=Math.max(...atoms.map(a=>a.x)),minY=Math.min(...atoms.map(a=>a.y)),maxY=Math.max(...atoms.map(a=>a.y));
+      const dx=clamp(dx0,24-minX,796-maxX),dy=clamp(dy0,24-minY,446-maxY);
+      atoms.forEach(a=>{a.x+=dx;a.y+=dy;});drag.last=p;render();return;
+    }
+    if(selectionBox&&e.pointerId===selectionBox.pointer){selectionBox.current=point(e);render();}
   }
-  function canvasPointerUp(e){if(drag&&e.pointerId===drag.pointer){drag=null;svg.releasePointerCapture?.(e.pointerId);validate();}}
+  function canvasPointerUp(e){
+    if(drag&&e.pointerId===drag.pointer){drag=null;if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);validate();return;}
+    if(selectionBox&&e.pointerId===selectionBox.pointer){
+      const {start,current,additive}=selectionBox,loX=Math.min(start.x,current.x),hiX=Math.max(start.x,current.x),loY=Math.min(start.y,current.y),hiY=Math.max(start.y,current.y);
+      const ids=graph.atoms.filter(a=>a.x>=loX&&a.x<=hiX&&a.y>=loY&&a.y<=hiY).map(a=>a.id);
+      if(!additive)selectedAtoms.clear();ids.forEach(id=>selectedAtoms.add(id));selectedAtom=ids.at(-1)||selectedAtoms.values().next().value||null;
+      selectionBox=null;if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);render();validate();
+    }
+  }
   function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
   function deleteAtom(id){
     graph.atoms=graph.atoms.filter(a=>a.id!==id);
     graph.bonds=graph.bonds.filter(b=>b.a!==id&&b.b!==id);
     graph.hbonds=graph.hbonds.filter(h=>h.a!==id&&h.b!==id);
+    selectedAtoms.delete(id);if(selectedAtom===id)selectedAtom=selectedAtoms.values().next().value||null;
     if(pendingAtom===id)pendingAtom=null;
   }
+  function deleteAtoms(ids){[...new Set(ids.filter(Boolean))].forEach(deleteAtom);}
 
   function bondLines(a,b,order){
     const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1,ox=-dy/len*4,oy=dx/len*4;
@@ -251,13 +317,18 @@ const MoleculeEditor = (() => {
     const atomLayer=document.createElementNS(NS,"g");atomLayer.setAttribute("class","chem-editor-atoms");
     graph.atoms.forEach(a=>{
       const g=document.createElementNS(NS,"g");g.dataset.atomId=a.id;g.setAttribute("transform",`translate(${a.x} ${a.y})`);
-      g.setAttribute("class","chem-editor-atom"+(selectedAtom===a.id?" selected":"")+(pendingAtom===a.id?" pending":""));
+      g.setAttribute("class","chem-editor-atom"+(selectedAtoms.has(a.id)?" selected":"")+(pendingAtom===a.id?" pending":""));
       const circle=document.createElementNS(NS,"circle");circle.setAttribute("r","18");g.append(circle);
       const text=document.createElementNS(NS,"text");text.textContent=atomText(a);text.setAttribute("y","1");g.append(text);
       const sub=document.createElementNS(NS,"text");sub.textContent=a.id;sub.setAttribute("class","chem-atom-id");sub.setAttribute("y","31");g.append(sub);
       atomLayer.append(g);
     });
     svg.append(bondLayer,hLayer,atomLayer);
+    if(selectionBox){
+      const x=Math.min(selectionBox.start.x,selectionBox.current.x),y=Math.min(selectionBox.start.y,selectionBox.current.y);
+      const rect=document.createElementNS(NS,"rect");rect.setAttribute("class","chem-selection-box");rect.setAttribute("x",x);rect.setAttribute("y",y);
+      rect.setAttribute("width",Math.abs(selectionBox.current.x-selectionBox.start.x));rect.setAttribute("height",Math.abs(selectionBox.current.y-selectionBox.start.y));svg.append(rect);
+    }
   }
 
   function validate(){
@@ -272,7 +343,7 @@ const MoleculeEditor = (() => {
       const a=atomById(h.a),b=atomById(h.b);
       if(a&&b&&!["N","O","S"].includes(a.element)&&!["N","O","S"].includes(b.element))warnings.push("An H-bond does not involve an N/O/S atom");
     });
-    status.textContent=warnings.length?warnings.join(" · "):"Ready. Drag atoms in Select mode; use Bond/H-bond tools by clicking two atoms.";
+    status.textContent=warnings.length?warnings.join(" · "):"Ready. Click an atom to move it; Shift-click or drag a box to select multiple atoms. Double-click an atom to select its whole covalent structure, then drag any selected atom to move the group.";
     status.classList.toggle("warning",warnings.length>0);
     return warnings;
   }

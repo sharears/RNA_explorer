@@ -46,3 +46,15 @@
   .chem-editor-footer { align-items:flex-start; }
   .chem-editor-footer p { max-width:100%; }
 }
+.chem-selection-box {
+  fill: rgba(116,215,182,.10);
+  stroke: var(--mint);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+.chem-editor-atom.selected circle {
+  fill: #10283a;
+}
+#chemEditorSvg { cursor: crosshair; }
+.chem-editor-toolbar button[data-chem-tool="select"].active ~ * {}
