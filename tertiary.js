@@ -494,6 +494,9 @@ const TertiaryExplorer = (() => {
       if(Math.hypot(dx,dy)>1e-6){
         const angle=-Math.atan2(dy,dx),cx=(first.x+last.x)/2,cy=(first.y+last.y)/2;
         pos=pos.map(p=>{const x=p.x-cx,y=p.y-cy;return {x:cx+x*Math.cos(angle)-y*Math.sin(angle),y:cy+x*Math.sin(angle)+y*Math.cos(angle)};});
+        const baseline=(pos[0].y+pos[pos.length-1].y)/2,interior=pos.slice(1,-1);
+        const meanY=interior.length?interior.reduce((sum,p)=>sum+p.y,0)/interior.length:baseline;
+        if(meanY>baseline)pos=pos.map(p=>({x:p.x,y:2*baseline-p.y}));
       }
     }
     const NS="http://www.w3.org/2000/svg",make=(name,attrs={})=>{const e=document.createElementNS(NS,name);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));return e;};
