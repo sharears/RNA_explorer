@@ -131,3 +131,32 @@
 #sePairProbLegend p { font-size:12px; color:var(--muted); line-height:1.5; }
 #sePairChemStatus { font-size:12px; color:var(--muted); line-height:1.5; }
 #sePairProbStatus { overflow-wrap:anywhere; }
+
+
+/* Independent Secondary data layers */
+.se-data-layers {
+  border:1px solid var(--line);
+  border-radius:9px;
+  padding:12px;
+  margin:0 0 10px;
+  background:rgba(10,17,32,.55);
+}
+.se-data-layers legend {
+  color:var(--text);
+  font-weight:600;
+}
+.se-data-layers > p {
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.55;
+}
+.se-data-layers label {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:7px 0;
+}
+#seLayerStatus {
+  font-family:"DM Mono",monospace;
+  color:var(--mint);
+}
