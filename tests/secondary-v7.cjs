@@ -26,7 +26,7 @@ class Element{
 }
 const nodes=new Map(),get=id=>{if(!nodes.has(id))nodes.set(id,new Element(id));return nodes.get(id);};
 const document={getElementById:get,createElementNS:(ns,name)=>new Element(name),createElement:name=>new Element(name),querySelectorAll:()=>[]};
-const instrumented=source.replace("return {setup,render,parse,parseMetadata,parsePairProbabilities,radial,", 'return {inspect(){return {settings,zoom,metadata,heatEnabled};},setState(v){seq=v.seq;db=v.db;partner=parse(seq,db).partner;pairs=parse(seq,db).pairs;layout=v.layout||"arc";metadata=v.metadata||{};heatEnabled=!!v.heatEnabled;heatRange=v.heatRange||[0,1];residueOverrides=v.residueOverrides||{};backboneOverrides=v.backboneOverrides||{};zoom=v.zoom||1;},residueStyle,heatColor,applyZoom,setup,render,parse,parseMetadata,parsePairProbabilities,radial,');
+const instrumented=source.replace("return {setup,render,parse,parseMetadata,parsePairProbabilities,radial,orientEndsBottom,", 'return {inspect(){return {settings,zoom,metadata,heatEnabled};},setState(v){seq=v.seq;db=v.db;partner=parse(seq,db).partner;pairs=parse(seq,db).pairs;layout=v.layout||"arc";metadata=v.metadata||{};heatEnabled=!!v.heatEnabled;heatRange=v.heatRange||[0,1];residueOverrides=v.residueOverrides||{};backboneOverrides=v.backboneOverrides||{};zoom=v.zoom||1;},residueStyle,heatColor,applyZoom,setup,render,parse,parseMetadata,parsePairProbabilities,radial,orientEndsBottom,');
 const editor=new Function("document",instrumented+"\nreturn SecondaryExplorer;")(document);
 editor.setState({seq:"GAGCAAAAAUUC",db:"((((....))))",metadata:{0:{id:"G",value:0},1:{id:"A",value:1}},heatEnabled:true,residueOverrides:{1:{fillColor:"#abcdef",letterSize:23}},backboneOverrides:{0:{backColor:"#123456",backWidth:5}}});
 editor.render();
@@ -50,7 +50,12 @@ editor.render();assert(root.children.filter(el=>el.attrs.class==="se-backbone").
 for(const layout of ["radial","circular","arc"]){editor.setState({seq:"GAGCAAAAAUUC",db:"((((....))))",layout});editor.render();assert(!root.getAttribute("viewBox").includes("NaN"),layout+" finite bounds");}
 assert(source.includes('context.clearRect(0,0,width,height);context.drawImage')&&!source.includes("context.fillRect"),"Export does not paint a background");
 assert(source.includes('clone.removeAttribute("style")')&&source.includes('data-export-remove],title'),"Export strips zoom styles and highlights");
-assert(source.includes('orientFivePrimeLeft'),"Secondary layouts enforce 5-prime-left orientation");
+const oriented=api.orientEndsBottom(api.radial(12,parsed.partner));
+const baseline=(oriented[0].y+oriented.at(-1).y)/2;
+const meanInterior=oriented.slice(1,-1).reduce((s,p)=>s+p.y,0)/(oriented.length-2);
+assert(oriented[0].x<oriented.at(-1).x&&Math.abs(oriented[0].y-oriented.at(-1).y)<1e-6,"5-prime is left and 3-prime is right on a common baseline");
+assert(meanInterior<=baseline+1e-6,"Secondary structure extends above the bottom end baseline");
+assert(source.includes('orientEndsBottom'),"Secondary layouts enforce bottom-left 5-prime and bottom-right 3-prime orientation");
 assert(source.includes('data-arc-style="square"'),"Arc figure includes square pair connector option");
 assert(source.includes('seExportScale')&&source.includes('exportScale'),"2D export resolution is user-adjustable");
 assert(source.includes('"Arial"')&&source.includes('"Calibri"')&&source.includes('"Times New Roman"'),"Expanded font families are available");
@@ -63,6 +68,8 @@ let matrix=api.parsePairProbabilities("0 0.1 0.2\n0.1 0 0.7\n0.2 0.7 0",3);
 assert(Math.abs(matrix["1:2"]-.7)<1e-9,"Square pair-probability matrix parses");
 throws(()=>api.parsePairProbabilities("Residue_i,Residue_j,Probability\n1,2,1.2",3),"Reject probabilities outside 0–1");
 assert(source.includes("sePairProbFile")&&source.includes("pairProbEnabled"),"Pair-probability layer is available");
+assert(source.includes("seLayerReactivity")&&source.includes("seLayerPairProb"),"Loaded reactivity and pair-probability layers have independent top-level toggles");
+assert(source.includes("base-pair probability data and pair styling were left unchanged"),"Loading reactivity preserves the pair-probability layer");
 assert(source.includes("MoleculeEditor.openPair"),"Secondary base pairs open the shared chemistry editor");
 
-console.log("PASS: secondary v10 logic and rendering-unit checks (not a browser integration test).");
+console.log("PASS: secondary Sept-24 logic and rendering-unit checks (not a browser integration test).");
