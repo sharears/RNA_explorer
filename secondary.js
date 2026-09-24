@@ -183,22 +183,27 @@ const SecondaryExplorer = (() => {
     }
     return out;
   }
-  function orientFivePrimeLeft(pos) {
+  function orientEndsBottom(pos) {
     if(pos.length<2) return pos;
     const first=pos[0],last=pos[pos.length-1],dx=last.x-first.x,dy=last.y-first.y;
     if(Math.hypot(dx,dy)<1e-6) return pos;
     const angle=-Math.atan2(dy,dx),cx=(first.x+last.x)/2,cy=(first.y+last.y)/2;
-    return pos.map(p=>{
+    let oriented=pos.map(p=>{
       const x=p.x-cx,y=p.y-cy;
       return {x:cx+x*Math.cos(angle)-y*Math.sin(angle),y:cy+x*Math.sin(angle)+y*Math.cos(angle)};
     });
+    const baseline=(oriented[0].y+oriented[oriented.length-1].y)/2;
+    const interior=oriented.slice(1,-1);
+    const meanY=interior.length?interior.reduce((sum,p)=>sum+p.y,0)/interior.length:baseline;
+    if(meanY>baseline)oriented=oriented.map(p=>({x:p.x,y:2*baseline-p.y}));
+    return oriented;
   }
   function coordinates() {
     const n=seq.length;
-    if(layout==="radial") return orientFivePrimeLeft(radial(n,partner));
+    if(layout==="radial") return orientEndsBottom(radial(n,partner));
     if(layout==="arc") return Array.from({length:n},(_,i)=>({x:i*56,y:0}));
     const r=Math.max(60,n*36/(2*Math.PI));
-    return orientFivePrimeLeft(Array.from({length:n},(_,i)=>{
+    return orientEndsBottom(Array.from({length:n},(_,i)=>{
       const angle=-Math.PI/2+i*(2*Math.PI-0.18)/Math.max(1,n-1);
       return {x:r*Math.cos(angle),y:r*Math.sin(angle)};
     }));
@@ -355,7 +360,7 @@ const SecondaryExplorer = (() => {
     text(root,"5′",{x:pos[0].x-30,y:pos[0].y,fill:"#74d7b6","font-size":16,"text-anchor":"end"});
     text(root,"3′",{x:pos.at(-1).x+30,y:pos.at(-1).y,fill:"#74d7b6","font-size":16});
     $("secondaryStageNote").textContent=`${layout[0].toUpperCase()+layout.slice(1)} · ${seq.length} residues · ${pairs.length} pairs · Select a residue index or pair`;
-    renderLegend();renderHeatLegend();renderPairProbabilityLegend();
+    renderLegend();renderHeatLegend();renderPairProbabilityLegend();updateLayerSummary();
   }
   function broadcastContext() {
     const isDefault=seq===defaultSeq&&db===defaultDb;
@@ -430,13 +435,17 @@ const SecondaryExplorer = (() => {
       controls.insertBefore(el,old[0]);return [el.children[1],el.children[2]];
     }
     const [bs,ba]=group("Backbone"),[rs,ra]=group("Residue ID"),[ps,pa]=group("Base pairs"),[ixs,ixa]=group("Residue index");
+    const layerBox=document.createElement("fieldset");
+    layerBox.className="se-data-layers";
+    layerBox.innerHTML='<legend>Data layers</legend><p>Load reactivity/residue information, base-pair probabilities, or both. Loaded data stay available while you turn each visual layer on or off independently.</p><label><input id="seLayerReactivity" type="checkbox" disabled> Show reactivity colors</label><label><input id="seLayerPairProb" type="checkbox" disabled> Show base-pair probability colors</label><p id="seLayerStatus" role="status">Reactivity: not loaded · Pair probability: not loaded</p>';
+    controls.insertBefore(layerBox,controls.firstElementChild);
     setupIndexControls(ixs,ixa);
     backFields.forEach(([k])=>ba.append($("se-"+k).closest("label")));
     ba.insertAdjacentHTML("afterbegin","<p>Phosphodiester connections between consecutive residues.</p>");
     bs.innerHTML+='<label>Connection indices<select id="seBackList"></select></label><fieldset id="seBackEditor"><legend>Selected connection</legend>'+localFields(backFields,"seBack-")+'<button id="seBackReset" type="button">Reset selected connection</button></fieldset>';
     ["pairColor","pairWidth","pairOpacity","mode"].forEach(k=>pa.append($("se-"+k).closest("label")));
     pa.append($("seLegendToggle"));
-    pa.insertAdjacentHTML("beforeend",'<button type="button" id="seStandardPairChemistry">Standard WCF / G–U chemistry</button><fieldset><legend>Base-pair probability</legend><p>Upload either an N × N probability matrix (comma- or whitespace-separated) or sparse CSV with headers Residue_i,Residue_j,Probability. Values must be 0–1. This colors pair connectors independently of residue reactivity.</p><label>Probability data<input id="sePairProbFile" type="file" accept=".csv,.txt,text/csv,text/plain"></label><label>Probability theme<select id="sePairProbTheme"><option value="viridis">Viridis</option><option value="magma">Magma</option><option value="blueRed">Blue–white–red</option><option value="cividis">Cividis</option></select></label><label><input type="checkbox" id="sePairProbEnabled">Color pairs by probability</label><button type="button" id="sePairProbClear">Clear pair probabilities</button><p id="sePairProbStatus" role="status">Upload a probability matrix or sparse CSV for the current sequence.</p></fieldset>');
+    pa.insertAdjacentHTML("beforeend",'<button type="button" id="seStandardPairChemistry">Standard WCF / G–U chemistry</button><fieldset><legend>Base-pair probability</legend><p>Upload either an N × N probability matrix (comma- or whitespace-separated) or sparse CSV with headers Residue_i,Residue_j,Probability. Values must be 0–1. This colors pair connectors independently of residue reactivity.</p><label>Probability data<input id="sePairProbFile" type="file" accept=".csv,.txt,text/csv,text/plain"></label><label>Probability theme<select id="sePairProbTheme"><option value="viridis">Viridis</option><option value="magma">Magma</option><option value="blueRed">Blue–white–red</option><option value="cividis">Cividis</option></select></label><label><input type="checkbox" id="sePairProbEnabled">Show base-pair probability colors</label><button type="button" id="sePairProbClear">Clear pair probabilities</button><p id="sePairProbStatus" role="status">Upload a probability matrix or sparse CSV for the current sequence.</p></fieldset>');
     const fill=document.createElement("div");fill.innerHTML=input("fillColor","All circle fills (replaces heatmap)","color","#2f6b57");
     ra.append(fill.firstElementChild);
     [...old[1].children].filter(el=>el.tagName!=="SUMMARY").forEach(el=>ra.append(el));
@@ -445,7 +454,7 @@ const SecondaryExplorer = (() => {
     $("seResidueList").addEventListener("change",e=>select(Number(e.target.value)));
     ps.append($("seSelected"),$("sePairList").closest("label"),$("sePairEditor"));
     $("sePairEditor").insertAdjacentHTML("beforeend",'<button type="button" id="sePairChemButton">Open base-pair chemistry</button><p id="sePairChemStatus">Select a base pair to open its chemistry.</p>');
-    ra.insertAdjacentHTML("beforeend",'<button id="seNaturalColors" type="button">Restore A/G/C/U fill colors</button><fieldset><legend>CSV heatmap</legend><p>Headers: Residue_Index, Residue_ID, Residue_Information. Indices start at 1. Numeric values are mapped linearly; blank or NA values keep the standard nucleotide color. Upload applies the heatmap and resets other colors to defaults; you can edit them afterward.</p><label>Metadata CSV<input id="seMetadataFile" type="file" accept=".csv,text/csv"></label><label>Heatmap theme<select id="seHeatTheme"><option value="viridis">Viridis</option><option value="magma">Magma</option><option value="blueRed">Blue–white–red</option><option value="cividis">Cividis</option></select></label><label><input type="checkbox" id="seHeatEnabled">Use metadata colors</label><button id="seClearMetadata" type="button">Clear metadata</button><p id="seMetadataStatus" role="status">Upload metadata for the current sequence.</p></fieldset>');
+    ra.insertAdjacentHTML("beforeend",'<button id="seNaturalColors" type="button">Restore A/G/C/U fill colors</button><fieldset><legend>Reactivity / residue information</legend><p>Headers: Residue_Index, Residue_ID, Residue_Information. Indices start at 1. Numeric values are mapped linearly; blank or NA values keep the standard nucleotide color. Upload applies the heatmap and resets other colors to defaults; you can edit them afterward.</p><label>Reactivity / metadata CSV<input id="seMetadataFile" type="file" accept=".csv,text/csv"></label><label>Heatmap theme<select id="seHeatTheme"><option value="viridis">Viridis</option><option value="magma">Magma</option><option value="blueRed">Blue–white–red</option><option value="cividis">Cividis</option></select></label><label><input type="checkbox" id="seHeatEnabled">Show reactivity colors</label><button id="seClearMetadata" type="button">Clear metadata</button><p id="seMetadataStatus" role="status">Upload metadata for the current sequence.</p></fieldset>');
     old.forEach(el=>el.remove());
     $("seMetadataFile").closest("fieldset").insertAdjacentHTML("afterbegin",'<button type="button" id="seExample">Load example reactivity CSV</button><p><a href="data/rna_residue_reactivity.csv" download>Download example CSV</a> · Values supplied for the default tRNA.</p>');
     $("seBackList").addEventListener("change",e=>{selectedBackbone=Number(e.target.value);panel();});
@@ -460,6 +469,16 @@ const SecondaryExplorer = (() => {
     $("seResidueReset").addEventListener("click",()=>{delete residueOverrides[selected];panel();render();});
     $("seNaturalColors").addEventListener("click",()=>{
       delete settings.fillColor;heatEnabled=false;Object.values(residueOverrides).forEach(o=>delete o.fillColor);panel();render();broadcastContext();
+    });
+    $("seLayerReactivity").addEventListener("change",e=>{
+      heatEnabled=e.target.checked&&Object.keys(metadata).length>0;
+      if(e.target.checked&&!heatEnabled)$("seMetadataStatus").textContent="Load reactivity/residue-information data first.";
+      panel();render();broadcastContext();
+    });
+    $("seLayerPairProb").addEventListener("change",e=>{
+      pairProbEnabled=e.target.checked&&Object.keys(pairProbabilities).length>0;
+      if(e.target.checked&&!pairProbEnabled)$("sePairProbStatus").textContent="Load base-pair probability data first.";
+      render();
     });
     $("seHeatTheme").addEventListener("change",e=>{heatTheme=e.target.value;panel();render();broadcastContext();});
     $("seHeatEnabled").addEventListener("change",e=>{
@@ -527,12 +546,9 @@ const SecondaryExplorer = (() => {
         const values=Object.values(data).map(r=>r.value).filter(v=>v!==null);
         metadata=data;heatRange=[Math.min(...values),Math.max(...values)];heatEnabled=true;
         delete settings.fillColor;
-        ["backColor","pairColor","circleColor","letterColor"].forEach(k=>settings[k]=defaults[k]);
-        Object.values(overrides).forEach(o=>delete o.pairColor);
-        Object.values(backboneOverrides).forEach(o=>delete o.backColor);
-        Object.values(residueOverrides).forEach(o=>["fillColor","circleColor","letterColor"].forEach(k=>delete o[k]));
+        Object.values(residueOverrides).forEach(o=>delete o.fillColor);
         controls.querySelectorAll("[data-setting]").forEach(el=>{if(settings[el.dataset.setting]!==undefined)el.value=settings[el.dataset.setting];});
-        $("seMetadataStatus").textContent=values.length+" numeric values loaded; "+(seq.length-values.length)+" residues without values. Manual edits now override the heatmap.";
+        $("seMetadataStatus").textContent=values.length+" numeric values loaded; "+(seq.length-values.length)+" residues without values. Reactivity coloring is on; base-pair probability data and pair styling were left unchanged.";
         panel();render();broadcastContext();
     }
   }
@@ -551,6 +567,16 @@ const SecondaryExplorer = (() => {
     $("seIndexNone").addEventListener("click",()=>{indexSelection.clear();indexMode="selected";document.querySelectorAll("[data-index-choice]").forEach(el=>el.checked=false);panel();render();});
     $("seIndexReset").addEventListener("click",()=>{indexSelection.forEach(i=>delete indexOverrides[i]);render();});
   }
+  function updateLayerSummary(){
+    const reactivityLoaded=Object.keys(metadata).length>0,pairLoaded=Object.keys(pairProbabilities).length>0;
+    if($("seLayerReactivity")){$("seLayerReactivity").disabled=!reactivityLoaded;$("seLayerReactivity").checked=heatEnabled;}
+    if($("seLayerPairProb")){$("seLayerPairProb").disabled=!pairLoaded;$("seLayerPairProb").checked=pairProbEnabled;}
+    if($("seHeatEnabled"))$("seHeatEnabled").checked=heatEnabled;
+    if($("sePairProbEnabled"))$("sePairProbEnabled").checked=pairProbEnabled;
+    if($("seLayerStatus"))$("seLayerStatus").textContent=
+      "Reactivity: "+(reactivityLoaded?(heatEnabled?"loaded · ON":"loaded · OFF"):"not loaded")+
+      " · Pair probability: "+(pairLoaded?(pairProbEnabled?"loaded · ON":"loaded · OFF"):"not loaded");
+  }
   function extendedPanel(){
     if(!$("seBackList"))return;
     $("seBackList").value=String(selectedBackbone);
@@ -562,6 +588,7 @@ const SecondaryExplorer = (() => {
     const m=metadata[selected];
     $("seResidueMetadata").textContent=m?"Residue ID: "+m.id+" · Information: "+(m.value??"No value"):"No metadata for this residue.";
     $("seHeatEnabled").checked=heatEnabled;
+    updateLayerSummary();
     $("seResidueList").value=String(selected);
     $("seIndexMode").textContent="Showing: "+(indexMode==="default"?"1, every 5, and last":indexMode==="all"?"all indices":indexSelection.size+" selected indices");
   }
