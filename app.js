@@ -126,6 +126,24 @@ function setupNavigation() {
   document.getElementById("nextButton").addEventListener("click", () => showScene(state.sceneIndex + 1));
 }
 
+function setupHomePaths() {
+  const jump=(sceneIndex,focusId)=>{
+    showScene(sceneIndex);
+    const target=document.getElementById(focusId);
+    if(target){
+      target.scrollIntoView({behavior:"smooth",block:"center"});
+      if(typeof target.focus==="function")setTimeout(()=>target.focus({preventScroll:true}),250);
+    }
+  };
+  document.getElementById("homeLearnButton")?.addEventListener("click",()=>jump(0,"scene-blocks"));
+  document.getElementById("homeExampleButton")?.addEventListener("click",()=>jump(4,"secondarySvg"));
+  document.getElementById("homeAnalyzeButton")?.addEventListener("click",()=>jump(4,"secondarySequence"));
+  document.getElementById("homeUpload3DButton")?.addEventListener("click",()=>{
+    showScene(5);
+    document.getElementById("teStructureFile")?.click();
+  });
+}
+
 
 function renderPrimary() {
   const container = document.getElementById("primarySequence");
@@ -308,6 +326,7 @@ function initialize() {
     console.error("RNA data length mismatch.");
   }
   setupNavigation();
+  setupHomePaths();
   setupChemicalJourney();
   MoleculeEditor.setup();
   renderPrimary();
