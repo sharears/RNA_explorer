@@ -91,6 +91,8 @@ function showScene(index) {
   cancelPrimaryAnimation();
   state.sceneIndex = Math.max(0, Math.min(SCENES.length - 1, index));
   const activeName = SCENES[state.sceneIndex];
+  const homePaths=document.querySelector(".home-paths");
+  if(homePaths)homePaths.hidden=state.sceneIndex!==0;
 
   document.querySelectorAll("[data-scene-panel]").forEach(panel => {
     const active = panel.dataset.scenePanel === activeName;
@@ -135,6 +137,7 @@ function setupHomePaths() {
       if(typeof target.focus==="function")setTimeout(()=>target.focus({preventScroll:true}),250);
     }
   };
+  document.querySelector(".brand")?.addEventListener("click",e=>{e.preventDefault();showScene(0);window.scrollTo({top:0,behavior:"smooth"});});
   document.getElementById("homeLearnButton")?.addEventListener("click",()=>jump(0,"scene-blocks"));
   document.getElementById("homeExampleButton")?.addEventListener("click",()=>jump(4,"secondarySvg"));
   document.getElementById("homeAnalyzeButton")?.addEventListener("click",()=>jump(4,"secondarySequence"));
