@@ -793,7 +793,7 @@ const SecondaryExplorer = (() => {
     $("seResetPair").addEventListener("click",()=>{delete overrides[activeKey()];panel();render();});
     load(sequence,structure);
   }
-  return {setup,render,parse,parseMetadata,parsePairProbabilities,radial,
+  return {setup,render,parse,parseMetadata,parsePairProbabilities,radial,orientEndsBottom,
     followDefault(index){if(seq===defaultSeq&&db===defaultDb&&selected!==index)select(index,false);},
     followExternal(index){if(index>=0&&index<seq.length&&selected!==index)select(index,false);},
     getContext(){return {sequence:seq,structure:db,isDefault:seq===defaultSeq&&db===defaultDb,selected};}
