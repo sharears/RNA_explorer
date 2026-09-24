@@ -9,10 +9,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=secondary-8" />
-  <link rel="stylesheet" href="secondary.css?v=secondary-10" />
-  <link rel="stylesheet" href="tertiary.css?v=tertiary-3" />
-  <link rel="stylesheet" href="chemistry-editor.css?v=chem-editor-1" />
+  <link rel="stylesheet" href="styles.css?v=homepage-1" />
+  <link rel="stylesheet" href="secondary.css?v=secondary-12" />
+  <link rel="stylesheet" href="tertiary.css?v=tertiary-4" />
+  <link rel="stylesheet" href="chemistry-editor.css?v=chem-editor-2" />
 </head>
 <body>
   <div class="app-shell">
@@ -31,7 +31,28 @@
           <p class="eyebrow">Explore RNA at different scales</p>
           <h1 id="pageTitle">Build it. Trace it. See it fold.</h1>
         </div>
-        <p>Follow one RNA molecule from its chemical parts to its three-dimensional shape. Each view describes the same connected chain.</p>
+        <p>Learn RNA structure step by step, or jump directly into the analysis workspace with your own RNA data.</p>
+      </section>
+
+      <section class="home-paths" aria-label="Choose how to start">
+        <article class="home-path-card">
+          <span class="home-path-kicker">LEARN</span>
+          <h2>Learn RNA structure</h2>
+          <p>Follow the guided six-scale journey from chemical building blocks through primary, secondary, and tertiary structure.</p>
+          <div class="home-path-actions">
+            <button class="primary-action" id="homeLearnButton" type="button">Start guided journey</button>
+            <button class="secondary-action" id="homeExampleButton" type="button">Open example tRNA</button>
+          </div>
+        </article>
+        <article class="home-path-card">
+          <span class="home-path-kicker">ANALYZE</span>
+          <h2>Analyze your own RNA</h2>
+          <p>Enter a sequence and secondary structure, load reactivity and/or base-pair probability data, then link a matching 3D structure.</p>
+          <div class="home-path-actions">
+            <button class="primary-action" id="homeAnalyzeButton" type="button">Open Secondary workspace</button>
+            <button class="secondary-action" id="homeUpload3DButton" type="button">Upload 3D structure</button>
+          </div>
+        </article>
       </section>
 
       <nav class="scale-nav" aria-label="RNA structural scale">
@@ -46,7 +67,7 @@
       <div class="explorer" id="explorer">
         <section class="scene active" id="scene-blocks" data-scene-panel="blocks" aria-labelledby="blocksTitle">
           <div class="scene-copy">
-            <p class="scene-number">01 / 05</p>
+            <p class="scene-number">01 / 06</p>
             <h2 id="blocksTitle">What is RNA made of?</h2>
             <p>An RNA nucleotide has three chemical parts. Select each part to see the job it performs.</p>
             <div class="fact-panel" id="blockFact" aria-live="polite">
@@ -86,7 +107,7 @@
 
         <section class="scene" id="scene-nucleotide" data-scene-panel="nucleotide" aria-labelledby="nucleotideTitle" hidden>
           <div class="scene-copy">
-            <p class="scene-number">02 / 05</p>
+            <p class="scene-number">03 / 06</p>
             <h2 id="nucleotideTitle">Build a nucleotide</h2>
             <p>The sugar and phosphate stay the same. Choose a base, then assemble the three parts.</p>
             <div class="base-picker" role="group" aria-label="Choose a nitrogenous base">
@@ -114,7 +135,7 @@
 
         <section class="scene" id="scene-primary" data-scene-panel="primary" aria-labelledby="primaryTitle" hidden>
           <div class="scene-copy">
-            <p class="scene-number">03 / 05</p>
+            <p class="scene-number">04 / 06</p>
             <h2 id="primaryTitle">Primary structure is the order</h2>
             <p>Every letter represents one nucleotide. The sequence is read from the 5′ end toward the 3′ end.</p>
             <div class="fact-panel residue-panel" aria-live="polite">
@@ -132,7 +153,7 @@
 
         <section class="scene" id="scene-secondary" data-scene-panel="secondary" aria-labelledby="secondaryTitle" hidden>
           <div class="scene-copy">
-            <p class="scene-number">04 / 05</p>
+            <p class="scene-number">05 / 06</p>
             <h2 id="secondaryTitle">Secondary structure maps local pairing</h2>
             <p>Enter an RNA sequence and its dot-bracket structure, then compare three ways of viewing the same base pairs.</p>
             <div class="secondary-inputs" aria-label="RNA secondary-structure input">
@@ -227,11 +248,11 @@
   </dialog>
 
   <script src="chemistry.js"></script>
-  <script src="chemistry-editor.js?v=chem-editor-1"></script>
+  <script src="chemistry-editor.js?v=chem-editor-2"></script>
   <script src="journey.js"></script>
   <script src="primary-animation.js"></script>
-  <script src="secondary.js?v=secondary-11"></script>
-  <script src="tertiary.js?v=tertiary-3"></script>
-  <script src="app.js?v=chem-editor-1"></script>
+  <script src="secondary.js?v=secondary-12"></script>
+  <script src="tertiary.js?v=tertiary-4"></script>
+  <script src="app.js?v=homepage-1"></script>
 </body>
 </html>
