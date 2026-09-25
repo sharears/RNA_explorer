@@ -592,8 +592,10 @@ const TertiaryExplorer = (() => {
     });
   }
   function miniSecondary(){
-    const panel=$("tertiaryMiniPanel"),root=$("tertiaryMiniSvg");if(!panel||!root)return;
-    panel.hidden=!state.split||!state.mapping.enabled;if(panel.hidden){root.replaceChildren();return;}
+    const panel=$("tertiaryMiniPanel"),root=$("tertiaryMiniSvg"),shell=$("tertiarySplitShell");if(!panel||!root)return;
+    const linked=state.split&&state.mapping.enabled;
+    panel.hidden=!linked;if(shell)shell.classList.toggle("linked",linked);
+    if(panel.hidden){root.replaceChildren();return;}
     const source=$("secondarySvg");
     if(source&&source.childNodes.length){
       root.replaceChildren(...[...source.childNodes].map(node=>node.cloneNode(true)));
