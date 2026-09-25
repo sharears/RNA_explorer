@@ -26,6 +26,12 @@ const TertiaryExplorer = (() => {
   const IONS=new Set(["NA","K","MG","CA","ZN","CL","MN","FE","CO","CU","NI","SR","CS","BA","CD","HG","PB","BR","IOD","F"]);
   const AMINO=new Set(["ALA","ARG","ASN","ASP","CYS","GLN","GLU","GLY","HIS","ILE","LEU","LYS","MET","PHE","PRO","SER","THR","TRP","TYR","VAL","SEC","PYL"]);
   const BACKBONE_ATOMS=["P","OP1","OP2","O1P","O2P","O5'","O5*","C5'","C5*","C4'","C4*","C3'","C3*","O3'","O3*"];
+  const HBOND_CHEM={
+    A:{donors:new Set(["N6"]),acceptors:new Set(["N1","N3","N7"])},
+    G:{donors:new Set(["N1","N2"]),acceptors:new Set(["O6","N3","N7"])},
+    C:{donors:new Set(["N4"]),acceptors:new Set(["N3","O2"])},
+    U:{donors:new Set(["N3"]),acceptors:new Set(["O2","O4"])}
+  };
 
   const state={
     defaultSequence:"",defaultStructure:"",secondarySequence:"",structure:"",
@@ -41,6 +47,8 @@ const TertiaryExplorer = (() => {
     surfaceEnabled:false,surfaceOpacity:0.35,uniformColor:"#74d7b6",backgroundColor:"#07111c",orthographic:false,
     visibility:{rna:true,protein:true,solvent:false,ions:true,other:true,hydrogen:false},
     selectionIndices:new Set(),selectionLabels:false,
+    selectionStyle:{color:"#f2c66d",radius:.24,opacity:.28},
+    selectedPairs:new Set(),hbondStyles:{},hbondCutoff:3.5,
     savedObjects:[],objectSerial:1,isolateObjectId:null,
     savedViews:[],viewSerial:1,
     comparison:{model:null,name:"",rmsd:null,count:0,visible:true,status:""},
@@ -291,7 +299,7 @@ const TertiaryExplorer = (() => {
   }
   function resetModelState(){
     hoverLabel=null;initialView=null;state.selected=0;state.measurementPicks=[];state.measurements=[];state.measurementMode="off";
-    state.selectionIndices.clear();state.savedObjects=[];state.isolateObjectId=null;state.savedViews=[];clearComparison(false);
+    state.selectionIndices.clear();state.selectedPairs.clear();state.hbondStyles={};state.savedObjects=[];state.isolateObjectId=null;state.savedViews=[];clearComparison(false);
   }
   async function setModelFromText(text,format,sourceIsDefault,fileName){
     if(!viewer)throw new Error("3D viewer is not ready.");
@@ -434,6 +442,41 @@ const TertiaryExplorer = (() => {
   const vcross=(a,b)=>({x:a.y*b.z-a.z*b.y,y:a.z*b.x-a.x*b.z,z:a.x*b.y-a.y*b.x});
   const vnorm=a=>Math.hypot(a.x,a.y,a.z);
   function atomDistance(a,b){return Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);}
+  function atomName(a){return String(a?.atom||"").trim().toUpperCase().replace(/\*/g,"'");}
+  function pairKey(a,b){return Math.min(a,b)+":"+Math.max(a,b);}
+  function bondKey(a,b){return String(a.serial??atomName(a))+"|"+String(b.serial??atomName(b));}
+  function pairHydrogenBonds(a,b){
+    const ra=activeResidues()[a],rb=activeResidues()[b];if(!ra||!rb)return [];
+    const ca=HBOND_CHEM[baseAt(a)],cb=HBOND_CHEM[baseAt(b)];if(!ca||!cb)return [];
+    const hits=[],seen=new Set();
+    const scan=(donorResidue,donorChem,acceptorResidue,acceptorChem)=>{
+      donorResidue.atoms.filter(x=>donorChem.donors.has(atomName(x))).forEach(d=>{
+        acceptorResidue.atoms.filter(x=>acceptorChem.acceptors.has(atomName(x))).forEach(acc=>{
+          const dist=atomDistance(d,acc);
+          if(dist>=2.2&&dist<=state.hbondCutoff){
+            const k=bondKey(d,acc);if(!seen.has(k)){seen.add(k);hits.push({key:k,a:d,b:acc,d:dist});}
+          }
+        });
+      });
+    };
+    scan(ra,ca,rb,cb);scan(rb,cb,ra,ca);return hits.sort((x,y)=>x.d-y.d);
+  }
+  function defaultLineStyle(){return {visible:true,lineStyle:"dashed",radius:.055,color:"#74d7b6",opacity:.92,labelVisible:false};}
+  function addStyledLine(start,end,style){
+    if(!viewer||style?.visible===false)return;
+    const st={...defaultLineStyle(),...(style||{})},radius=Math.max(.012,Number(st.radius)||.055),opacity=clamp(Number(st.opacity),0,1);
+    if(st.lineStyle==="solid"){viewer.addCylinder({start,end,radius,color:st.color,opacity,fromCap:1,toCap:1});return;}
+    const dx=end.x-start.x,dy=end.y-start.y,dz=end.z-start.z,len=Math.hypot(dx,dy,dz)||1;
+    const segments=st.lineStyle==="dotted"?Math.max(3,Math.ceil(len/.42)):Math.max(4,Math.ceil(len/.55));
+    for(let i=0;i<segments;i++){
+      if(st.lineStyle==="dotted"){
+        const t=(i+.5)/segments;viewer.addSphere({center:{x:start.x+dx*t,y:start.y+dy*t,z:start.z+dz*t},radius:radius*1.25,color:st.color,opacity});
+      }else if(i%2===0){
+        const t1=i/segments,t2=Math.min(1,(i+.72)/segments);
+        viewer.addCylinder({start:{x:start.x+dx*t1,y:start.y+dy*t1,z:start.z+dz*t1},end:{x:start.x+dx*t2,y:start.y+dy*t2,z:start.z+dz*t2},radius,color:st.color,opacity,fromCap:1,toCap:1});
+      }
+    }
+  }
   function atomAngle(a,b,c){const u=vsub(a,b),v=vsub(c,b),den=vnorm(u)*vnorm(v);if(!den)return NaN;return Math.acos(clamp(vdot(u,v)/den,-1,1))*180/Math.PI;}
   function atomDihedral(a,b,c,d){
     const b0=vsub(b,a),b1=vsub(c,b),b2=vsub(d,c),n1=vcross(b0,b1),n2=vcross(b1,b2),b1n=vnorm(b1);
