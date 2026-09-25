@@ -352,7 +352,7 @@ const TertiaryExplorer = (() => {
       const i=state.residueIndexByKey.get(residueKey(atom.chain,atom.resi,atom.icode));
       if(Number.isInteger(i))state.selected=i;
       if(state.measurementMode!=="off"){handleAtomMeasurementClick(atom);return;}
-      if(Number.isInteger(i))chooseResidue(i);
+      if(Number.isInteger(i))toggleResidueSelection(i);
     });
     viewer.setHoverDuration(80);
     viewer.setHoverable(chainSel,true,(atom,v)=>{
@@ -641,7 +641,7 @@ const TertiaryExplorer = (() => {
     const residues=activeResidues();
     state.selectionIndices.forEach(i=>{
       if(!isVisibleIndex(i)||!residues[i])return;
-      const styled=state.residueStyles[i];model.addStyle(selectorForResidue(residues[i]),{stick:{radius:styled?.thickness?.18*Math.max(.5,styled.thickness):.24,color:styled?.color||"#f2c66d",opacity:styled?.opacity??1},sphere:{radius:.28*Math.max(.7,styled?.thickness||1),color:styled?.color||"#f2c66d",opacity:.22*(styled?.opacity??1)}});
+      const styled=state.residueStyles[i];model.addStyle(selectorForResidue(residues[i]),{stick:{radius:styled?.thickness ? .18*Math.max(.5,styled.thickness) : .24,color:styled?.color||"#f2c66d",opacity:styled?.opacity??1},sphere:{radius:.28*Math.max(.7,styled?.thickness||1),color:styled?.color||"#f2c66d",opacity:.22*(styled?.opacity??1)}});
       if(state.selectionLabels&&residues[i].coord)viewer.addLabel(baseAt(i)+(i+1),{position:residues[i].coord,fontSize:11,fontColor:"#07111c",backgroundColor:"#f2c66d",backgroundOpacity:.9,inFront:true});
     });
   }
@@ -677,10 +677,6 @@ const TertiaryExplorer = (() => {
     if(state.visibility.rna)residues.forEach((r,i)=>{if(isVisibleIndex(i))safe("residue style "+(i+1),()=>applyResidueRepresentation(r,i));});
     safe("component styles",applyCategoryStyles);
     if(state.comparison.model&&state.comparison.visible)safe("comparison style",()=>state.comparison.model.setStyle({},{line:{linewidth:2,color:"#f0a36f",opacity:.8}}));
-    if(state.mapping.enabled){
-      const mate=partner[state.selected];
-      if(mate>=0&&residues[mate]&&isVisibleIndex(mate))safe("paired highlight",()=>model.addStyle(selectorForResidue(residues[mate]),{stick:{radius:.25,color:"#74d7b6"},sphere:{radius:.28,color:"#74d7b6",opacity:.38}}));
-    }
     if(residues[state.selected]&&isVisibleIndex(state.selected))safe("selected highlight",()=>model.addStyle(selectorForResidue(residues[state.selected]),{stick:{radius:.34,color:"#ffffff"},sphere:{radius:.34,color:"#ffffff",opacity:.42}}));
     safe("selection highlights",addSelectionHighlights);safe("object highlights",addObjectHighlights);safe("pair connectors",addPairs);safe("selected pair hydrogen bonds",addSelectedPairHydrogenBonds);
     safe("indices",addIndices);safe("selected label",addSelectedLabel);safe("proximity",addProximity);safe("contacts",addContacts);
@@ -776,7 +772,7 @@ const TertiaryExplorer = (() => {
     const box=$("teSequencePanel");if(!box)return;box.replaceChildren();
     activeResidues().forEach((r,i)=>{
       const b=document.createElement("button");b.type="button";b.className="te-seq-residue"+(i===state.selected?" active":"")+(state.selectionIndices.has(i)?" chosen":"");
-      b.textContent=baseAt(i)+(i+1);b.title=(r.resn||baseAt(i))+(r.chain?" · chain "+r.chain:"");b.addEventListener("click",()=>chooseResidue(i));box.append(b);
+      b.textContent=baseAt(i)+(i+1);b.title=(r.resn||baseAt(i))+(r.chain?" · chain "+r.chain:"");b.addEventListener("click",()=>toggleResidueSelection(i));box.append(b);
     });
   }
   function renderObjectList(){
@@ -786,12 +782,13 @@ const TertiaryExplorer = (() => {
       const row=document.createElement("div");row.className="te-object-row";
       const name=document.createElement("input");name.value=o.name;name.setAttribute("aria-label","Object name");
       name.addEventListener("change",()=>{o.name=name.value.trim()||o.name;});
+      const select=document.createElement("button");select.type="button";select.textContent="Select";select.addEventListener("click",()=>{state.directSelectionIndices=new Set(o.indices);refreshCombinedSelection();render();});
       const show=document.createElement("button");show.type="button";show.textContent=o.visible?"Hide":"Show";show.addEventListener("click",()=>{o.visible=!o.visible;renderObjectList();refreshExportObjectOptions();render();});
       const isolate=document.createElement("button");isolate.type="button";isolate.textContent=state.isolateObjectId===o.id?"Show all":"Isolate";isolate.addEventListener("click",()=>{state.isolateObjectId=state.isolateObjectId===o.id?null:o.id;renderObjectList();refreshExportObjectOptions();render();});
       const pdb=document.createElement("button");pdb.type="button";pdb.textContent="PDB";pdb.addEventListener("click",()=>downloadStructure("pdb",o.indices,o.name));
       const cif=document.createElement("button");cif.type="button";cif.textContent="mmCIF";cif.addEventListener("click",()=>downloadStructure("cif",o.indices,o.name));
       const del=document.createElement("button");del.type="button";del.textContent="Delete";del.addEventListener("click",()=>{state.savedObjects=state.savedObjects.filter(x=>x.id!==o.id);if(state.isolateObjectId===o.id)state.isolateObjectId=null;renderObjectList();refreshExportObjectOptions();render();});
-      row.append(name,show,isolate,pdb,cif,del);box.append(row);
+      row.append(name,select,show,isolate,pdb,cif,del);box.append(row);
     });
   }
   function renderSavedViews(){
@@ -831,20 +828,20 @@ const TertiaryExplorer = (() => {
     const n=activeResidues().length,a=clamp(Math.floor(Number(start)||1),1,n),b=clamp(Math.floor(Number(end)||a),1,n),lo=Math.min(a,b),hi=Math.max(a,b);
     return new Set(Array.from({length:hi-lo+1},(_,k)=>lo-1+k));
   }
-  function selectRange(){state.selectionIndices=indicesFromRange($("teSelectStart")?.value,$("teSelectEnd")?.value);render();}
+  function selectRange(){state.directSelectionIndices=indicesFromRange($("teSelectStart")?.value,$("teSelectEnd")?.value);refreshCombinedSelection();render();}
   function selectBase(){
-    const base=$("teSelectBase")?.value||"A";state.selectionIndices=new Set(activeResidues().map((_,i)=>i).filter(i=>baseAt(i)===base));render();
+    const base=$("teSelectBase")?.value||"A";state.directSelectionIndices=new Set(activeResidues().map((_,i)=>i).filter(i=>baseAt(i)===base));refreshCombinedSelection();render();
   }
   function selectNearby(){
     const cutoff=clamp(Number($("teSelectNearCutoff")?.value)||5,1,30),center=state.selected;
-    state.selectionIndices=new Set(activeResidues().map((_,i)=>i).filter(i=>i===center||distance3D(center,i)<=cutoff));render();
+    state.directSelectionIndices=new Set(activeResidues().map((_,i)=>i).filter(i=>i===center||distance3D(center,i)<=cutoff));refreshCombinedSelection();render();
   }
-  function addCurrentToSelection(){state.selectionIndices.add(state.selected);render();}
-  function subtractCurrentFromSelection(){state.selectionIndices.delete(state.selected);render();}
-  function invertSelection(){const all=new Set(activeResidues().map((_,i)=>i));state.selectionIndices=new Set([...all].filter(i=>!state.selectionIndices.has(i)));render();}
-  function selectActiveChain(){state.selectionIndices=new Set(activeResidues().map((_,i)=>i));render();}
+  function addCurrentToSelection(){state.directSelectionIndices.add(state.selected);refreshCombinedSelection();render();}
+  function subtractCurrentFromSelection(){state.directSelectionIndices.delete(state.selected);refreshCombinedSelection();render();}
+  function invertSelection(){const all=new Set(activeResidues().map((_,i)=>i));state.directSelectionIndices=new Set([...all].filter(i=>!state.directSelectionIndices.has(i)));refreshCombinedSelection();render();}
+  function selectActiveChain(){state.directSelectionIndices=new Set(activeResidues().map((_,i)=>i));refreshCombinedSelection();render();}
   function createObject(){
-    const indices=state.selectionIndices.size?new Set(state.selectionIndices):new Set([state.selected]);
+    refreshCombinedSelection();const indices=state.selectionIndices.size?new Set(state.selectionIndices):new Set([state.selected]);
     const name=prompt("Object name","object_"+state.objectSerial);if(name===null)return;
     state.savedObjects.push({id:state.objectSerial,name:name.trim()||("object_"+state.objectSerial),indices,visible:true});state.objectSerial++;renderObjectList();refreshExportObjectOptions();render();
   }
