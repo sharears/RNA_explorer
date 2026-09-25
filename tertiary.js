@@ -377,15 +377,59 @@ const TertiaryExplorer = (() => {
     if(state.visibility.other&&other.length)model.setStyle({serial:other},{stick:{radius:.1,colorscheme:"Jmol",opacity:.75}});
     if(!state.visibility.hydrogen)model.setStyle({elem:"H"},{});
   }
-  function addPairs(){
-    if(!viewer||!state.showPairs||!state.mapping.enabled)return;
-    const residues=activeResidues(),selectedMate=partner[state.selected];
-    pairs.forEach(([a,b])=>{
-      if(!isVisibleIndex(a)||!isVisibleIndex(b))return;
-      const x=residues[a]?.coord,y=residues[b]?.coord;if(!x||!y)return;
-      const active=(a===state.selected&&b===selectedMate)||(b===state.selected&&a===selectedMate);
-      viewer.addCylinder({start:x,end:y,radius:active?.17:.065,color:active?"#74d7b6":"#71879a",opacity:active?.95:.55,fromCap:1,toCap:1});
+  function pairStyleFor(key){
+    state.hbondStyles[key]??={...defaultLineStyle(),bonds:{}};
+    return state.hbondStyles[key];
+  }
+  function renderPairHbondPanel(){
+    const box=$("tePairHbondPanel");if(!box)return;box.replaceChildren();
+    if(!state.selectedPairs.size){box.textContent="Select a base pair in the linked 2D view to inspect its 3D hydrogen bonds.";return;}
+    [...state.selectedPairs].forEach(key=>{
+      const [a,b]=key.split(":").map(Number),hits=pairHydrogenBonds(a,b),style=pairStyleFor(key);
+      const card=document.createElement("div");card.className="te-hbond-card";
+      const title=document.createElement("strong");title.textContent=baseAt(a)+(a+1)+" — "+baseAt(b)+(b+1);
+      const note=document.createElement("p");note.className="te-tool-note";
+      note.textContent=hits.length?hits.length+" donor–acceptor contact"+(hits.length===1?"":"s")+" ≤ "+state.hbondCutoff.toFixed(1)+" Å.":"No donor–acceptor hydrogen bond meets the current "+state.hbondCutoff.toFixed(1)+" Å threshold.";
+      const group=document.createElement("div");group.className="te-hbond-group-style";
+      group.innerHTML='<label>Line<select data-hb-group="lineStyle"><option value="dashed">Dashed</option><option value="dotted">Dotted</option><option value="solid">Solid</option></select></label><label>Thickness<input data-hb-group="radius" type="range" min="0.02" max="0.2" step="0.01"></label><label>Opacity<input data-hb-group="opacity" type="range" min="0.05" max="1" step="0.05"></label><label>Color<input data-hb-group="color" type="color"></label>';
+      group.querySelector('[data-hb-group="lineStyle"]').value=style.lineStyle;group.querySelector('[data-hb-group="radius"]').value=style.radius;group.querySelector('[data-hb-group="opacity"]').value=style.opacity;group.querySelector('[data-hb-group="color"]').value=style.color;
+      group.querySelectorAll("[data-hb-group]").forEach(input=>input.addEventListener("input",()=>{
+        const k=input.dataset.hbGroup;style[k]=input.type==="range"?Number(input.value):input.value;render();
+      }));
+      card.append(title,note,group);
+      hits.forEach((hit,idx)=>{
+        const bs=style.bonds[hit.key]??={visible:true};
+        const row=document.createElement("div");row.className="te-hbond-row";
+        const toggle=document.createElement("input");toggle.type="checkbox";toggle.checked=bs.visible!==false;toggle.setAttribute("aria-label","Show hydrogen bond "+(idx+1));
+        toggle.addEventListener("change",()=>{bs.visible=toggle.checked;style.bonds[hit.key]=bs;render();});
+        const label=document.createElement("span");label.textContent=atomName(hit.a)+" ↔ "+atomName(hit.b)+" · "+hit.d.toFixed(2)+" Å";
+        const individual=document.createElement("button");individual.type="button";individual.textContent="Style";individual.addEventListener("click",()=>{
+          const color=prompt("Hydrogen-bond color",bs.color||style.color);if(color&&/^#[0-9a-f]{6}$/i.test(color))bs.color=color;
+          const line=prompt("Line style: solid, dashed, or dotted",bs.lineStyle||style.lineStyle);if(["solid","dashed","dotted"].includes(line))bs.lineStyle=line;
+          const thick=Number(prompt("Thickness",String(bs.radius||style.radius)));if(Number.isFinite(thick))bs.radius=clamp(thick,.02,.2);
+          const op=Number(prompt("Opacity 0–1",String(bs.opacity??style.opacity)));if(Number.isFinite(op))bs.opacity=clamp(op,.05,1);
+          style.bonds[hit.key]=bs;render();
+        });
+        row.append(toggle,label,individual);card.append(row);
+      });
+      box.append(card);
     });
+  }
+  function addSelectedPairHbonds(){
+    if(!viewer||!state.mapping.enabled)return;
+    [...state.selectedPairs].forEach(key=>{
+      const [a,b]=key.split(":").map(Number);if(!isVisibleIndex(a)||!isVisibleIndex(b))return;
+      const pairStyle=pairStyleFor(key),hits=pairHydrogenBonds(a,b);
+      hits.forEach(hit=>{
+        const local={...pairStyle,...(pairStyle.bonds[hit.key]||{})};
+        if(local.visible===false)return;
+        addStyledLine(hit.a,hit.b,local);
+        if(local.labelVisible){
+          viewer.addLabel(hit.d.toFixed(2)+" Å",{position:{x:(hit.a.x+hit.b.x)/2,y:(hit.a.y+hit.b.y)/2,z:(hit.a.z+hit.b.z)/2},fontSize:11,fontColor:"#fff",backgroundColor:"#08111e",backgroundOpacity:.8,inFront:true});
+        }
+      });
+    });
+    renderPairHbondPanel();
   }
   function addIndices(){
     if(!viewer||!state.showIndices)return;
@@ -567,7 +611,7 @@ const TertiaryExplorer = (() => {
       if(mate>=0&&residues[mate]&&isVisibleIndex(mate))safe("paired highlight",()=>model.addStyle(selectorForResidue(residues[mate]),{stick:{radius:.25,color:"#74d7b6"},sphere:{radius:.28,color:"#74d7b6",opacity:.38}}));
     }
     if(residues[state.selected]&&isVisibleIndex(state.selected))safe("selected highlight",()=>model.addStyle(selectorForResidue(residues[state.selected]),{stick:{radius:.34,color:"#ffffff"},sphere:{radius:.34,color:"#ffffff",opacity:.42}}));
-    safe("selection highlights",addSelectionHighlights);safe("object highlights",addObjectHighlights);safe("pair connectors",addPairs);
+    safe("selection highlights",addSelectionHighlights);safe("object highlights",addObjectHighlights);safe("selected pair hydrogen bonds",addSelectedPairHbonds);
     safe("indices",addIndices);safe("selected label",addSelectedLabel);safe("proximity",addProximity);safe("contacts",addContacts);
     safe("measurements",addMeasurements);safe("surface",updateSurface);safe("clipping",applyClipping);
     if(renderNow)safe("render",()=>viewer.render());
