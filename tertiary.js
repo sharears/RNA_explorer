@@ -527,7 +527,7 @@ const TertiaryExplorer = (() => {
     const residues=activeResidues();
     state.selectionIndices.forEach(i=>{
       if(!isVisibleIndex(i)||!residues[i])return;
-      model.addStyle(selectorForResidue(residues[i]),{stick:{radius:.24,color:"#f2c66d"},sphere:{radius:.28,color:"#f2c66d",opacity:.28}});
+      model.setStyle(selectorForResidue(residues[i]),{stick:{radius:.24,color:"#f2c66d"},sphere:{radius:.28,color:"#f2c66d",opacity:.28}},true);
       if(state.selectionLabels&&residues[i].coord)viewer.addLabel(baseAt(i)+(i+1),{position:residues[i].coord,fontSize:11,fontColor:"#07111c",backgroundColor:"#f2c66d",backgroundOpacity:.9,inFront:true});
     });
   }
@@ -535,7 +535,7 @@ const TertiaryExplorer = (() => {
     const residues=activeResidues();
     state.savedObjects.filter(o=>o.visible&&state.isolateObjectId==null).forEach((o,oi)=>{
       const color=CHAIN_COLORS[(oi+2)%CHAIN_COLORS.length];
-      o.indices.forEach(i=>{if(residues[i])model.addStyle(selectorForResidue(residues[i]),{stick:{radius:.2,color},sphere:{radius:.25,color,opacity:.18}});});
+      o.indices.forEach(i=>{if(residues[i])model.setStyle(selectorForResidue(residues[i]),{stick:{radius:.2,color},sphere:{radius:.25,color,opacity:.18}},true);});
     });
   }
   function updateSurface(){
@@ -565,9 +565,9 @@ const TertiaryExplorer = (() => {
     if(state.comparison.model&&state.comparison.visible)state.comparison.model.setStyle({},{line:{linewidth:2,color:"#f0a36f",opacity:.8}});
     if(state.mapping.enabled){
       const mate=partner[state.selected];
-      if(mate>=0&&residues[mate]&&isVisibleIndex(mate))model.addStyle(selectorForResidue(residues[mate]),{stick:{radius:.25,color:"#74d7b6"},sphere:{radius:.28,color:"#74d7b6",opacity:.38}});
+      if(mate>=0&&residues[mate]&&isVisibleIndex(mate))model.setStyle(selectorForResidue(residues[mate]),{stick:{radius:.25,color:"#74d7b6"},sphere:{radius:.28,color:"#74d7b6",opacity:.38}},true);
     }
-    if(residues[state.selected]&&isVisibleIndex(state.selected))model.addStyle(selectorForResidue(residues[state.selected]),{stick:{radius:.34,color:"#ffffff"},sphere:{radius:.34,color:"#ffffff",opacity:.42}});
+    if(residues[state.selected]&&isVisibleIndex(state.selected))model.setStyle(selectorForResidue(residues[state.selected]),{stick:{radius:.34,color:"#ffffff"},sphere:{radius:.34,color:"#ffffff",opacity:.42}},true);
     addSelectionHighlights();addObjectHighlights();addPairs();addIndices();addSelectedLabel();addProximity();addContacts();addMeasurements();updateSurface();applyClipping();
     if(renderNow)viewer.render();
   }
