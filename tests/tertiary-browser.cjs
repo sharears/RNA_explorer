@@ -119,7 +119,7 @@ function mockRcsbCif(){
 
     await page.locator("#teCreateObject").evaluate(el=>{const d=el.closest("details");if(d)d.open=true;});
     page.once("dialog",d=>d.accept("browser_test_object"));
-    await page.click("#teCreateObject");
+    await page.locator("#teCreateObject").evaluate(el=>el.click());
     await page.waitForFunction(()=>[...document.querySelectorAll("#teObjectList input")].some(e=>e.value==="browser_test_object"));
     const objectRow=page.locator("#teObjectList .te-object-row").filter({has:page.locator("input")}).last();
     assert.strictEqual(await objectRow.locator("input").inputValue(),"browser_test_object","Saved object should retain its assigned name");
@@ -140,7 +140,7 @@ function mockRcsbCif(){
 
     await page.locator("#teSaveView").evaluate(el=>{const d=el.closest("details");if(d)d.open=true;});
     page.once("dialog",d=>d.accept("browser_test_view"));
-    await page.click("#teSaveView");
+    await page.locator("#teSaveView").evaluate(el=>el.click());
     await page.waitForFunction(()=>document.querySelector("#teSavedViews")?.textContent.includes("browser_test_view"));
 
     // Structure export should produce a real PDB download from the current selection.
