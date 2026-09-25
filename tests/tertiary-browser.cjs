@@ -101,6 +101,7 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
     assert.strictEqual(await page.locator("#teSequencePanel .chosen").count(),5,"Residue range selection should select five residues");
     await page.click("#teFocusSelection");
 
+    await page.locator("#teCreateObject").evaluate(el=>{const d=el.closest("details");if(d)d.open=true;});
     page.once("dialog",d=>d.accept("browser_test_object"));
     await page.click("#teCreateObject");
     await page.waitForFunction(()=>[...document.querySelectorAll("#teObjectList input")].some(e=>e.value==="browser_test_object"));
@@ -113,12 +114,14 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
     await page.check("#teSurface");
     await wait(500);
     await page.uncheck("#teSurface");
+    await page.locator("#teClipEnabled").evaluate(el=>{const d=el.closest("details");if(d)d.open=true;});
     await page.check("#teClipEnabled");
     await page.locator("#teClipNear").evaluate((el)=>{el.value="-25";el.dispatchEvent(new Event("input",{bubbles:true}));});
     await page.locator("#teClipFar").evaluate((el)=>{el.value="25";el.dispatchEvent(new Event("input",{bubbles:true}));});
     await wait(250);
     await page.uncheck("#teClipEnabled");
 
+    await page.locator("#teSaveView").evaluate(el=>{const d=el.closest("details");if(d)d.open=true;});
     page.once("dialog",d=>d.accept("browser_test_view"));
     await page.click("#teSaveView");
     await page.waitForFunction(()=>document.querySelector("#teSavedViews")?.textContent.includes("browser_test_view"));
