@@ -49,7 +49,13 @@ const TertiaryExplorer = (() => {
   };
 
   let viewer=null,model=null,viewerPromise=null,initialView=null,hoverLabel=null;
-  let pairs=[],partner=[],setupDone=false,surfaceToken=0;
+  let pairs=[],partner=[],setupDone=false,surfaceToken=0,resizeTicket=0;
+  function scheduleViewerResize(preserveView=true){
+    if(!viewer)return;
+    const ticket=++resizeTicket,view=preserveView&&viewer.getView?viewer.getView():null;
+    const run=()=>{if(ticket!==resizeTicket||!viewer)return;try{viewer.resize?.();if(view&&viewer.setView)viewer.setView(view);viewer.render();}catch(error){console.warn("Tertiary viewer resize:",error);}};
+    if(typeof requestAnimationFrame==="function")requestAnimationFrame(()=>requestAnimationFrame(run));else setTimeout(run,0);
+  }
 
   const $=id=>document.getElementById(id);
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -295,19 +301,33 @@ const TertiaryExplorer = (() => {
     state.sourceIsDefault=sourceIsDefault;state.currentFileName=fileName;state.currentFormat=format;state.sameMoleculeConfirmed=false;
     extractChains();chooseBestChain();populateChainSelect();buildResidueLookup();evaluateMapping();
     state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();renderSequencePanel();renderObjectList();renderSavedViews();
-    applyStyles(false);viewer.zoomTo({},0);viewer.render();initialView=viewer.getView?viewer.getView():null;updateSourceCopy();
+    try{applyStyles(false);}catch(error){console.warn("Initial 3D styling:",error);}
+    viewer.zoomTo({},0);viewer.render();scheduleViewerResize(false);initialView=viewer.getView?viewer.getView():null;updateSourceCopy();setStatus("");
   }
   async function loadDefaultStructure(){
     setStatus("Loading all-atom PDB 1EHZ…");const pdb=await fetchDefaultPdb();await setModelFromText(pdb,"pdb",true,"PDB 1EHZ");setStatus("");
   }
   async function createViewer(){
     const container=$("tertiaryMolecularViewer");if(!container)throw new Error("Molecular viewer container missing");
-    const lib=await load3Dmol();viewer=lib.createViewer(container,{backgroundColor:"#08111e",antialias:true});
-    viewer.setViewStyle({style:"outline",color:"#02060b",width:.08});await loadDefaultStructure();return viewer;
+    const lib=await load3Dmol();
+    viewer=lib.createViewer(container,{backgroundColor:state.backgroundColor||"#08111e",antialias:true});
+    try{viewer.setViewStyle?.({style:"outline",color:"#02060b",width:.08});}catch(_){}
+    try{await loadDefaultStructure();}
+    catch(error){
+      console.error("Default 3D structure:",error);
+      setStatus("The 3D viewer loaded, but the default 1EHZ structure could not be loaded: "+error.message,"error");
+    }
+    scheduleViewerResize(false);return viewer;
   }
   function ensureViewer(){
     if(viewer)return Promise.resolve(viewer);
-    if(!viewerPromise) viewerPromise=createViewer().catch(error=>{viewerPromise=null;setStatus("The molecular viewer could not load. Reload the page or check the network connection.","error");console.error("Tertiary viewer:",error);throw error;});
+    if(!viewerPromise) viewerPromise=createViewer().catch(error=>{
+      viewerPromise=null;viewer=null;
+      const message=/3dmol|script|load/i.test(String(error?.message||""))
+        ?"The 3Dmol viewer library could not be loaded. Check the network connection and reload the page."
+        :"The molecular viewer could not initialize: "+(error?.message||"unknown error");
+      setStatus(message,"error");console.error("Tertiary viewer:",error);throw error;
+    });
     return viewerPromise;
   }
 
@@ -487,25 +507,27 @@ const TertiaryExplorer = (() => {
   }
   function applyClipping(){
     if(!viewer||typeof viewer.setSlab!=="function")return;
-    if(state.clipEnabled)viewer.setSlab(state.clipNear,state.clipFar);
-    else viewer.setSlab(-999,999);
+    try{if(state.clipEnabled)viewer.setSlab(state.clipNear,state.clipFar);else viewer.setSlab(-999,999);}catch(error){console.warn("3D clipping:",error);}
   }
   function applyStyles(renderNow=true){
     if(!viewer||!model)return;
-    viewer.removeAllShapes();viewer.removeAllLabels();hoverLabel=null;
-    model.setStyle({},{});
-    if(state.comparison.model)state.comparison.model.setStyle({},{});
+    const safe=(label,fn)=>{try{fn();}catch(error){console.warn("3D "+label+":",error);}};
+    safe("shape cleanup",()=>viewer.removeAllShapes());safe("label cleanup",()=>viewer.removeAllLabels());hoverLabel=null;
+    safe("base style reset",()=>model.setStyle({},{}));
+    if(state.comparison.model)safe("comparison reset",()=>state.comparison.model.setStyle({},{}));
     const residues=activeResidues();
-    if(state.visibility.rna)residues.forEach((r,i)=>{if(isVisibleIndex(i))applyResidueRepresentation(r,i);});
-    applyCategoryStyles();
-    if(state.comparison.model&&state.comparison.visible)state.comparison.model.setStyle({},{line:{linewidth:2,color:"#f0a36f",opacity:.8}});
+    if(state.visibility.rna)residues.forEach((r,i)=>{if(isVisibleIndex(i))safe("residue style "+(i+1),()=>applyResidueRepresentation(r,i));});
+    safe("component styles",applyCategoryStyles);
+    if(state.comparison.model&&state.comparison.visible)safe("comparison style",()=>state.comparison.model.setStyle({},{line:{linewidth:2,color:"#f0a36f",opacity:.8}}));
     if(state.mapping.enabled){
       const mate=partner[state.selected];
-      if(mate>=0&&residues[mate]&&isVisibleIndex(mate))model.addStyle(selectorForResidue(residues[mate]),{stick:{radius:.25,color:"#74d7b6"},sphere:{radius:.28,color:"#74d7b6",opacity:.38}});
+      if(mate>=0&&residues[mate]&&isVisibleIndex(mate))safe("paired highlight",()=>model.addStyle(selectorForResidue(residues[mate]),{stick:{radius:.25,color:"#74d7b6"},sphere:{radius:.28,color:"#74d7b6",opacity:.38}}));
     }
-    if(residues[state.selected]&&isVisibleIndex(state.selected))model.addStyle(selectorForResidue(residues[state.selected]),{stick:{radius:.34,color:"#ffffff"},sphere:{radius:.34,color:"#ffffff",opacity:.42}});
-    addSelectionHighlights();addObjectHighlights();addPairs();addIndices();addSelectedLabel();addProximity();addContacts();addMeasurements();updateSurface();applyClipping();
-    if(renderNow)viewer.render();
+    if(residues[state.selected]&&isVisibleIndex(state.selected))safe("selected highlight",()=>model.addStyle(selectorForResidue(residues[state.selected]),{stick:{radius:.34,color:"#ffffff"},sphere:{radius:.34,color:"#ffffff",opacity:.42}}));
+    safe("selection highlights",addSelectionHighlights);safe("object highlights",addObjectHighlights);safe("pair connectors",addPairs);
+    safe("indices",addIndices);safe("selected label",addSelectedLabel);safe("proximity",addProximity);safe("contacts",addContacts);
+    safe("measurements",addMeasurements);safe("surface",updateSurface);safe("clipping",applyClipping);
+    if(renderNow)safe("render",()=>viewer.render());
   }
 
   function chooseResidue(index){
@@ -542,7 +564,23 @@ const TertiaryExplorer = (() => {
   }
   function miniSecondary(){
     const panel=$("tertiaryMiniPanel"),root=$("tertiaryMiniSvg");if(!panel||!root)return;
-    panel.hidden=!state.split||!state.mapping.enabled;if(panel.hidden)return;root.replaceChildren();
+    panel.hidden=!state.split||!state.mapping.enabled;
+    const shell=$("tertiarySplitShell");if(shell)shell.classList.toggle("linked",!panel.hidden);
+    if(panel.hidden){scheduleViewerResize(true);return;}
+    root.replaceChildren();
+    const source=$("secondarySvg");
+    let context=null;try{context=typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.getContext?SecondaryExplorer.getContext():null;}catch(_){}
+    if(source&&source.children.length&&context?.sequence===state.secondarySequence&&context?.structure===state.structure){
+      const vb=source.dataset.fullViewBox||source.getAttribute("viewBox");if(vb)root.setAttribute("viewBox",vb);
+      [...source.children].forEach(child=>root.append(child.cloneNode(true)));
+      root.querySelectorAll("[data-export-remove]").forEach(el=>el.remove());
+      root.querySelectorAll("[tabindex]").forEach(el=>el.removeAttribute("tabindex"));
+      root.querySelectorAll("[data-residue-index]").forEach(node=>{
+        const i=Number(node.getAttribute("data-residue-index"));node.style.cursor="pointer";
+        node.addEventListener("click",()=>chooseResidue(i));
+      });
+      scheduleViewerResize(true);return;
+    }
     let pos=Array.isArray(state.secondaryLayoutPositions)&&state.secondaryLayoutPositions.length===state.secondarySequence.length
       ?state.secondaryLayoutPositions.map(p=>({x:Number(p.x),y:Number(p.y)})):null;
     try{
@@ -552,18 +590,20 @@ const TertiaryExplorer = (() => {
         if(SecondaryExplorer.orientEndsBottom)pos=SecondaryExplorer.orientEndsBottom(pos);
       }
     }catch(_){}
-    if(!pos?.length)return;
+    if(!pos?.length){scheduleViewerResize(true);return;}
     const NS="http://www.w3.org/2000/svg",make=(name,attrs={})=>{const e=document.createElementNS(NS,name);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));return e;};
     const minX=Math.min(...pos.map(p=>p.x)),maxX=Math.max(...pos.map(p=>p.x)),minY=Math.min(...pos.map(p=>p.y)),maxY=Math.max(...pos.map(p=>p.y));
     const pad=34,scale=Math.min((340-2*pad)/Math.max(1,maxX-minX),(430-2*pad)/Math.max(1,maxY-minY));
-    const map=pos.map(p=>({x:pad+(p.x-minX)*scale,y:pad+(p.y-minY)*scale}));
+    const map=pos.map(p=>({x:pad+(p.x-minX)*scale,y:pad+(p.y-minY)*scale}));root.setAttribute("viewBox","0 0 340 430");
     pairs.forEach(([a,b])=>root.append(make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,class:"te-mini-pair"+(a===state.selected||b===state.selected?" selected":"")})));
     root.append(make("polyline",{points:map.map(p=>p.x+","+p.y).join(" "),class:"te-mini-backbone"}));
     map.forEach((p,i)=>{
-      const g=make("g",{class:"te-mini-node"+(i===state.selected?" selected":"")+(partner[state.selected]===i?" paired-selected":""),transform:"translate("+p.x+" "+p.y+")",tabindex:"0",role:"button","aria-label":state.secondarySequence[i]+(i+1)});
-      g.append(make("circle",{r:i===state.selected?7:4.5,fill:residueColor(i,activeResidues()[i])}));
-      g.addEventListener("click",()=>chooseResidue(i));g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();chooseResidue(i);}});root.append(g);
+      const g=make("g",{class:"te-mini-node"+(i===state.selected?" selected":"")+(partner[state.selected]===i?" paired-selected":""),transform:"translate("+p.x+" "+p.y+")",role:"button","data-residue-index":i,"aria-label":state.secondarySequence[i]+(i+1)});
+      g.append(make("circle",{r:11,fill:residueColor(i,activeResidues()[i]),stroke:"#d5e2e9","stroke-width":1}));
+      const label=make("text",{x:0,y:1,fill:"#07111c","font-size":10,"font-family":"monospace","text-anchor":"middle","dominant-baseline":"central"});label.textContent=state.secondarySequence[i];g.append(label);
+      g.addEventListener("click",()=>chooseResidue(i));root.append(g);
     });
+    scheduleViewerResize(true);
   }
   function buildIndexChoices(){
     const box=$("teIndexChoices");if(!box)return;box.replaceChildren();
@@ -613,7 +653,8 @@ const TertiaryExplorer = (() => {
   function render(selected){
     if(selected!==undefined)state.selected=clamp(selected,0,Math.max(0,(state.mapping.enabled?state.secondarySequence.length:activeResidues().length)-1));
     miniSecondary();heatLegend();regionLegend();updateCopy();updateControls();renderSequencePanel();renderObjectList();renderSavedViews();
-    const scene=$("scene-tertiary");if(!scene||scene.hidden)return;ensureViewer().then(()=>applyStyles()).catch(()=>{});
+    const scene=$("scene-tertiary");if(!scene||scene.hidden)return;
+    ensureViewer().then(()=>{scheduleViewerResize(true);applyStyles();}).catch(error=>console.error("Tertiary render:",error));
   }
 
   function resetView(){if(!viewer)return;if(initialView&&viewer.setView)viewer.setView(initialView);else viewer.zoomTo({},400);viewer.render();}
@@ -753,7 +794,20 @@ const TertiaryExplorer = (() => {
     state.comparison={model:temp,name:file.name,rmsd:fit.rmsd,count:indices.length,visible:true,status:""};updateComparisonStatus();render();
   }
 
-  async function handleStructureUpload(file){
+  async function loadFromRcsbId(rawId){
+    const id=String(rawId||"").trim().toUpperCase();
+    if(!/^[A-Z0-9]{4}$/.test(id))throw new Error("Enter a four-character PDB ID, for example 1EHZ.");
+    const url="https://files.rcsb.org/download/"+encodeURIComponent(id)+".cif";
+    let response;try{response=await fetch(url,{mode:"cors",cache:"no-store"});}catch(_){throw new Error("RCSB PDB could not be reached. Check the network connection and try again.");}
+    if(response.status===404)throw new Error("PDB ID "+id+" was not found at RCSB PDB.");
+    if(!response.ok)throw new Error("RCSB PDB returned HTTP "+response.status+" for "+id+".");
+    const text=await response.text();if(!text.trim())throw new Error("RCSB returned an empty structure file for "+id+".");
+    await ensureViewer();await setModelFromText(text,"cif",id==="1EHZ","RCSB PDB · "+id);
+    if(!state.chains.length)throw new Error("Structure "+id+" loaded, but no RNA-like chain was detected.");
+    scheduleViewerResize(false);return id;
+  }
+
+    async function handleStructureUpload(file){
     if(!file)return;if(file.size>25*1024*1024)throw new Error("3D structure file must be smaller than 25 MB.");
     const name=file.name||"uploaded structure",lower=name.toLowerCase(),format=lower.endsWith(".cif")||lower.endsWith(".mmcif")?"cif":lower.endsWith(".pdb")||lower.endsWith(".ent")?"pdb":null;
     if(!format)throw new Error("Upload a PDB (.pdb/.ent) or mmCIF (.cif/.mmcif) file.");
@@ -779,6 +833,7 @@ const TertiaryExplorer = (() => {
       '<details open><summary>Import structure &amp; 2D/3D mapping</summary>'+
       '<p id="teStructureSource">PDB 1EHZ</p>'+
       '<label>Import PDB / mmCIF<input id="teStructureFile" type="file" accept=".pdb,.ent,.cif,.mmcif,chemical/x-pdb,chemical/x-cif"></label>'+
+      '<div class="te-pdb-id-row"><label>PDB ID<input id="tePdbId" type="text" inputmode="text" maxlength="4" placeholder="1EHZ" autocomplete="off"></label><button type="button" id="teLoadPdbId">Load from RCSB PDB</button></div><p class="te-tool-note" id="tePdbIdStatus">Enter a four-character PDB ID to fetch its mmCIF coordinates directly from RCSB PDB.</p>'+
       '<button type="button" id="teRestoreStructure">Restore example 1EHZ</button>'+
       '<label>RNA chain<select id="teChainSelect"></select></label>'+
       '<label class="te-check"><input id="teSameMolecule" type="checkbox"> I confirm that the Secondary and 3D inputs describe the same RNA molecule</label>'+
@@ -836,10 +891,12 @@ const TertiaryExplorer = (() => {
     $("teMeasureMode").addEventListener("change",e=>{state.measurementMode=e.target.value;state.measurementPicks=[];render();});
     $("teMeasureUndo").addEventListener("click",()=>{state.measurementPicks.pop();render();});
     $("teMeasureClear").addEventListener("click",()=>{state.measurementPicks=[];state.measurements=[];render();});
-    $("teSplit").addEventListener("change",e=>{state.split=e.target.checked&&state.mapping.enabled;render();});
+    $("teSplit").addEventListener("change",e=>{state.split=e.target.checked&&state.mapping.enabled;render();scheduleViewerResize(true);});
     $("teSameMolecule").addEventListener("change",e=>{state.sameMoleculeConfirmed=e.target.checked;evaluateMapping();render();});
     $("teChainSelect").addEventListener("change",e=>{state.activeChain=e.target.value;state.chainNeedsChoice=false;state.sameMoleculeConfirmed=false;buildResidueLookup();evaluateMapping();state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();render();});
     $("teStructureFile").addEventListener("change",async e=>{const file=e.target.files[0];if(!file)return;setStatus("Loading "+file.name+"…");try{await handleStructureUpload(file);setStatus("");}catch(error){setStatus("Upload failed: "+error.message,"error");}});
+    const loadPdbId=async()=>{const status=$("tePdbIdStatus"),button=$("teLoadPdbId");button.disabled=true;status.textContent="Loading from RCSB PDB…";setStatus("Fetching structure from RCSB PDB…");try{const id=await loadFromRcsbId($("tePdbId").value);status.textContent="Loaded RCSB PDB · "+id+" as mmCIF.";setStatus("");render();}catch(error){status.textContent=error.message;setStatus("RCSB import failed: "+error.message,"error");}finally{button.disabled=false;}};
+    $("teLoadPdbId").addEventListener("click",loadPdbId);$("tePdbId").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();loadPdbId();}});
     $("teRestoreStructure").addEventListener("click",async()=>{$("teStructureFile").value="";setStatus("Restoring PDB 1EHZ…");try{await ensureViewer();await loadDefaultStructure();render();}catch(error){setStatus("Restore failed: "+error.message,"error");}});
     $("teIndexDefault").addEventListener("click",()=>{state.indexSelection=defaultIndices();buildIndexChoices();render();});
     $("teIndexAll").addEventListener("click",()=>{const n=state.mapping.enabled?state.secondarySequence.length:activeResidues().length;state.indexSelection=new Set(Array.from({length:n},(_,i)=>i));buildIndexChoices();render();});
@@ -933,9 +990,16 @@ const TertiaryExplorer = (() => {
     window.addEventListener("rna-secondary-context",e=>handleSecondaryContext(e.detail));
     window.addEventListener("rna-secondary-layout",e=>handleSecondaryLayout(e.detail));
     window.addEventListener("rna-secondary-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){state.selected=clamp(e.detail.index,0,state.secondarySequence.length-1);render();}});
+    window.addEventListener("resize",()=>scheduleViewerResize(true));
+    if(typeof ResizeObserver!=="undefined"){const viewport=$("tertiaryViewport");if(viewport)new ResizeObserver(()=>scheduleViewerResize(true)).observe(viewport);}
     try{const p=typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.getCurrentPositions?SecondaryExplorer.getCurrentPositions():null;if(Array.isArray(p)&&p.length===state.secondarySequence.length)state.secondaryLayoutPositions=p.map(x=>({x:Number(x.x),y:Number(x.y)}));}catch(_){}
     render();
   }
 
-  return {setup,render,compareChain,normalizeBase,hornFit,serializePdb,serializeCif};
+  return {setup,render,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,
+    getDiagnostics(){return {viewerReady:!!viewer,modelReady:!!model,atomCount:model?.selectedAtoms?model.selectedAtoms({}).length:0,representation:state.representation,colorMode:state.colorMode,split:state.split,mappingEnabled:state.mapping.enabled,source:state.currentFileName,
+      surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
+      selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
+      comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count};}
+  };
 })();
