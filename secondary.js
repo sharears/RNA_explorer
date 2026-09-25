@@ -539,7 +539,7 @@ const SecondaryExplorer = (() => {
       '<label>Automatic tick count<input id="seHeatLegendTicks" type="number" min="2" max="12" step="1" value="3"></label>'+
       '<label>Custom tick values<input id="seHeatLegendValues" type="text" placeholder="e.g. 0, 0.5, 1, 1.5, 2"></label>'+
       '<label>Bar thickness<input id="seHeatLegendThickness" type="number" min="4" max="60" step="1" value="16"></label>'+
-      '<label>Tick thickness<input id="seHeatTickThickness" type="number" min="0.5" max="6" step="0.5" value="1"></label>'+
+      '<label>Tick thickness<input id="seHeatLegendTickThickness" type="number" min="0.5" max="6" step="0.5" value="1"></label>'+
       '<label>Font family<select id="seHeatLegendFont"><option>monospace</option><option>Arial</option><option>Calibri</option><option>Times New Roman</option></select></label>'+
       '<label>Font size<input id="seHeatLegendFontSize" type="number" min="8" max="36" step="1" value="12"></label>'+
       '<label>Font color<input id="seHeatLegendFontColor" type="color" value="#bacbd7"></label></details>'+
@@ -549,7 +549,7 @@ const SecondaryExplorer = (() => {
       '<label>Automatic tick count<input id="sePairLegendTicks" type="number" min="2" max="12" step="1" value="3"></label>'+
       '<label>Custom tick values<input id="sePairLegendValues" type="text" placeholder="e.g. 0, 0.2, 0.5, 0.8, 1"></label>'+
       '<label>Bar thickness<input id="sePairLegendThickness" type="number" min="4" max="60" step="1" value="16"></label>'+
-      '<label>Tick thickness<input id="sePairTickThickness" type="number" min="0.5" max="6" step="0.5" value="1"></label>'+
+      '<label>Tick thickness<input id="sePairLegendTickThickness" type="number" min="0.5" max="6" step="0.5" value="1"></label>'+
       '<label>Font family<select id="sePairLegendFont"><option>monospace</option><option>Arial</option><option>Calibri</option><option>Times New Roman</option></select></label>'+
       '<label>Font size<input id="sePairLegendFontSize" type="number" min="8" max="36" step="1" value="12"></label>'+
       '<label>Font color<input id="sePairLegendFontColor" type="color" value="#bacbd7"></label></details>');
@@ -906,7 +906,7 @@ const SecondaryExplorer = (() => {
     });
     $("restoreTrnaButton").addEventListener("click",()=>{
       $("secondarySequence").value=defaultSeq;$("secondaryDotBracket").value=defaultDb;
-      overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;pairProbabilities={};pairProbEnabled=false;pairProbTicket++;pairChemistry={};zoom=1;$("seMetadataFile").value="";$("seMetadataStatus").textContent="Upload metadata for the current sequence.";if($("sePairProbFile"))$("sePairProbFile").value="";load(defaultSeq,defaultDb);status("Default tRNA restored; pair overrides, probability data, chemistry drawings, and annotations cleared.");
+      overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;pairProbabilities={};pairProbEnabled=false;pairProbTicket++;pairChemistry={};manualOffsets={};pinnedResidues=new Set();zoom=1;$("seMetadataFile").value="";$("seMetadataStatus").textContent="Upload metadata for the current sequence.";if($("sePairProbFile"))$("sePairProbFile").value="";load(defaultSeq,defaultDb);status("Default tRNA restored; pair overrides, probability data, chemistry drawings, and annotations cleared.");
     });
     document.querySelectorAll("[data-secondary-layout]").forEach(button=>button.addEventListener("click",()=>{
       layout=button.dataset.secondaryLayout;
