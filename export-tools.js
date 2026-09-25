@@ -40,6 +40,15 @@ const ExportTools = (() => {
   }
   function preparedSvg(svg,{background="transparent",viewBox=null}={}){
     const clone=svg.cloneNode(true);
+    if(typeof window!=="undefined"&&window.getComputedStyle){
+      const sourceNodes=[svg,...svg.querySelectorAll("*")],cloneNodes=[clone,...clone.querySelectorAll("*")];
+      sourceNodes.forEach((node,i)=>{
+        const out=cloneNodes[i];if(!out)return;const cs=window.getComputedStyle(node);
+        ["fill","stroke","strokeWidth","strokeDasharray","strokeLinecap","strokeLinejoin","opacity","fontFamily","fontSize","fontStyle","fontWeight","textAnchor","dominantBaseline"].forEach(prop=>{
+          const value=cs[prop];if(value&&value!=="none"&&value!=="normal"&&value!=="0px")out.style[prop]=value;
+        });
+      });
+    }
     clone.removeAttribute("style");clone.setAttribute("xmlns","http://www.w3.org/2000/svg");
     clone.querySelectorAll("[data-export-remove],title").forEach(el=>el.remove());
     clone.querySelectorAll('[stroke="transparent"]').forEach(el=>el.remove());
