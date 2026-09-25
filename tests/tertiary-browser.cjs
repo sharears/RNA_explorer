@@ -83,8 +83,7 @@ function mockRcsbCif(){
     assert(sphereState.representation==="spheres"&&sphereState.atomStyle?.sphere,"Sphere representation should be applied immediately to RNA atoms");
 
     await page.selectOption("#teColorMode","uniform");
-    await page.fill("#teUniformColor","#ff00aa");
-    await page.locator("#teUniformColor").dispatchEvent("input");
+    await page.locator("#teUniformColor").evaluate(el=>{el.value="#ff00aa";el.dispatchEvent(new Event("input",{bubbles:true}));});
     await wait(350);
     const colorState=await page.evaluate(()=>TertiaryExplorer.getDebugState());
     assert.strictEqual(colorState.colorMode,"uniform","Uniform color mode should apply immediately");
