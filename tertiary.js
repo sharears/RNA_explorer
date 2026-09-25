@@ -16,6 +16,7 @@ const TertiaryExplorer = (() => {
     "https://3Dmol.org/build/3Dmol-min.js"
   ];
   const PDB_URL="https://files.rcsb.org/download/1EHZ.pdb";
+  const RCSB_DOWNLOAD="https://files.rcsb.org/download/";
   const MOD_BASES={
     A:"A",ADE:"A",RA:"A","1MA":"A","M1A":"A","6MA":"A","RIA":"A",
     C:"C",CYT:"C",RC:"C","5MC":"C","OMC":"C","M5C":"C",
@@ -49,7 +50,7 @@ const TertiaryExplorer = (() => {
   };
 
   let viewer=null,model=null,viewerPromise=null,initialView=null,hoverLabel=null;
-  let pairs=[],partner=[],setupDone=false,surfaceToken=0;
+  let pairs=[],partner=[],setupDone=false,surfaceToken=0,resizeTicket=0;
 
   const $=id=>document.getElementById(id);
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -156,6 +157,45 @@ const TertiaryExplorer = (() => {
     const r=await fetch(PDB_URL,{mode:"cors",cache:"force-cache"});
     if(!r.ok)throw new Error("PDB download failed: "+r.status);
     return r.text();
+  }
+  function normalizePdbId(value){
+    const id=String(value||"").trim().toUpperCase();
+    if(!/^[A-Z0-9]{4}$/.test(id))throw new Error("Enter a four-character PDB ID, for example 1EHZ.");
+    return id;
+  }
+  async function fetchRcsbCif(value){
+    const id=normalizePdbId(value),url=RCSB_DOWNLOAD+encodeURIComponent(id)+".cif";
+    let response;
+    try{response=await fetch(url,{mode:"cors",cache:"no-store"});}
+    catch(_){throw new Error("Could not reach RCSB PDB. Check the connection and try again.");}
+    if(response.status===404)throw new Error("PDB ID "+id+" was not found on RCSB PDB.");
+    if(!response.ok)throw new Error("RCSB PDB returned HTTP "+response.status+" for "+id+".");
+    const text=await response.text();if(!text.trim())throw new Error("RCSB PDB returned an empty structure for "+id+".");
+    return {id,text};
+  }
+  const nextFrame=()=>new Promise(resolve=>{
+    if(typeof requestAnimationFrame==="function")requestAnimationFrame(()=>resolve());
+    else setTimeout(resolve,0);
+  });
+  function safeViewerResize(){
+    if(!viewer)return;
+    try{if(typeof viewer.resize==="function")viewer.resize();}catch(error){console.warn("3D viewer resize:",error);}
+  }
+  async function settleViewerLayout({fit=false}={}){
+    const ticket=++resizeTicket;await nextFrame();await nextFrame();if(ticket!==resizeTicket||!viewer)return;
+    safeViewerResize();
+    if(fit){try{viewer.zoomTo({},0);}catch(error){console.warn("3D viewer fit:",error);}}
+    if(model)applyStyles(false);
+    try{viewer.render();}catch(error){console.warn("3D viewer render:",error);}
+  }
+  function scheduleViewerLayout(){
+    if(!viewer)return;
+    safeViewerResize();if(model)applyStyles();
+    const ticket=++resizeTicket;
+    nextFrame().then(nextFrame).then(()=>{
+      if(ticket!==resizeTicket||!viewer)return;
+      safeViewerResize();if(model)applyStyles();
+    });
   }
 
   function residuesFromAtoms(atoms){
@@ -295,19 +335,30 @@ const TertiaryExplorer = (() => {
     state.sourceIsDefault=sourceIsDefault;state.currentFileName=fileName;state.currentFormat=format;state.sameMoleculeConfirmed=false;
     extractChains();chooseBestChain();populateChainSelect();buildResidueLookup();evaluateMapping();
     state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();renderSequencePanel();renderObjectList();renderSavedViews();
-    applyStyles(false);viewer.zoomTo({},0);viewer.render();initialView=viewer.getView?viewer.getView():null;updateSourceCopy();
+    applyStyles(false);updateSourceCopy();
+    await settleViewerLayout({fit:true});
+    try{initialView=viewer.getView?viewer.getView():null;}catch(error){initialView=null;console.warn("3D viewer initial view:",error);}
+    setStatus("");
   }
   async function loadDefaultStructure(){
     setStatus("Loading all-atom PDB 1EHZ…");const pdb=await fetchDefaultPdb();await setModelFromText(pdb,"pdb",true,"PDB 1EHZ");setStatus("");
   }
   async function createViewer(){
     const container=$("tertiaryMolecularViewer");if(!container)throw new Error("Molecular viewer container missing");
-    const lib=await load3Dmol();viewer=lib.createViewer(container,{backgroundColor:"#08111e",antialias:true});
-    viewer.setViewStyle({style:"outline",color:"#02060b",width:.08});await loadDefaultStructure();return viewer;
+    await nextFrame();
+    const lib=await load3Dmol();viewer=lib.createViewer(container,{backgroundColor:state.backgroundColor,antialias:true});
+    try{viewer.setViewStyle?.({style:"outline",color:"#02060b",width:.08});}catch(error){console.warn("3D outline style:",error);}
+    if(viewer.setCameraParameters)try{viewer.setCameraParameters({orthographic:state.orthographic});}catch(_){}
+    await loadDefaultStructure();return viewer;
   }
   function ensureViewer(){
-    if(viewer)return Promise.resolve(viewer);
-    if(!viewerPromise) viewerPromise=createViewer().catch(error=>{viewerPromise=null;setStatus("The molecular viewer could not load. Reload the page or check the network connection.","error");console.error("Tertiary viewer:",error);throw error;});
+    if(viewer&&model){setStatus("");return Promise.resolve(viewer);}
+    if(!viewerPromise) viewerPromise=createViewer().catch(error=>{
+      viewerPromise=null;
+      if(!model){viewer=null;setStatus("The 3D viewer could not initialize: "+(error?.message||"unknown error"),"error");}
+      else setStatus("");
+      console.error("Tertiary viewer:",error);throw error;
+    });
     return viewerPromise;
   }
 
@@ -542,7 +593,21 @@ const TertiaryExplorer = (() => {
   }
   function miniSecondary(){
     const panel=$("tertiaryMiniPanel"),root=$("tertiaryMiniSvg");if(!panel||!root)return;
-    panel.hidden=!state.split||!state.mapping.enabled;if(panel.hidden)return;root.replaceChildren();
+    panel.hidden=!state.split||!state.mapping.enabled;if(panel.hidden){root.replaceChildren();return;}
+    const source=$("secondarySvg");
+    if(source&&source.childNodes.length){
+      root.replaceChildren(...[...source.childNodes].map(node=>node.cloneNode(true)));
+      root.querySelectorAll("[id]").forEach(el=>el.removeAttribute("id"));
+      const vb=source.dataset.fullViewBox||source.getAttribute("viewBox")||"0 0 720 520";
+      root.setAttribute("viewBox",vb);root.setAttribute("preserveAspectRatio","xMidYMid meet");
+      root.querySelectorAll("[data-residue-index]").forEach(node=>{
+        const i=Number(node.getAttribute("data-residue-index"));
+        node.style.cursor="pointer";node.addEventListener("click",event=>{event.stopPropagation();if(Number.isInteger(i))chooseResidue(i);});
+        node.addEventListener("keydown",event=>{if((event.key==="Enter"||event.key===" ")&&Number.isInteger(i)){event.preventDefault();chooseResidue(i);}});
+      });
+      return;
+    }
+    // Fallback only if the Secondary SVG has not been rendered yet.
     let pos=Array.isArray(state.secondaryLayoutPositions)&&state.secondaryLayoutPositions.length===state.secondarySequence.length
       ?state.secondaryLayoutPositions.map(p=>({x:Number(p.x),y:Number(p.y)})):null;
     try{
@@ -555,14 +620,14 @@ const TertiaryExplorer = (() => {
     if(!pos?.length)return;
     const NS="http://www.w3.org/2000/svg",make=(name,attrs={})=>{const e=document.createElementNS(NS,name);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));return e;};
     const minX=Math.min(...pos.map(p=>p.x)),maxX=Math.max(...pos.map(p=>p.x)),minY=Math.min(...pos.map(p=>p.y)),maxY=Math.max(...pos.map(p=>p.y));
-    const pad=34,scale=Math.min((340-2*pad)/Math.max(1,maxX-minX),(430-2*pad)/Math.max(1,maxY-minY));
-    const map=pos.map(p=>({x:pad+(p.x-minX)*scale,y:pad+(p.y-minY)*scale}));
-    pairs.forEach(([a,b])=>root.append(make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,class:"te-mini-pair"+(a===state.selected||b===state.selected?" selected":"")})));
-    root.append(make("polyline",{points:map.map(p=>p.x+","+p.y).join(" "),class:"te-mini-backbone"}));
-    map.forEach((p,i)=>{
-      const g=make("g",{class:"te-mini-node"+(i===state.selected?" selected":"")+(partner[state.selected]===i?" paired-selected":""),transform:"translate("+p.x+" "+p.y+")",tabindex:"0",role:"button","aria-label":state.secondarySequence[i]+(i+1)});
-      g.append(make("circle",{r:i===state.selected?7:4.5,fill:residueColor(i,activeResidues()[i])}));
-      g.addEventListener("click",()=>chooseResidue(i));g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();chooseResidue(i);}});root.append(g);
+    root.setAttribute("viewBox",(minX-45)+" "+(minY-45)+" "+Math.max(150,maxX-minX+90)+" "+Math.max(150,maxY-minY+90));
+    pairs.forEach(([a,b])=>root.append(make("line",{x1:pos[a].x,y1:pos[a].y,x2:pos[b].x,y2:pos[b].y,class:"te-mini-pair"})));
+    root.append(make("polyline",{points:pos.map(p=>p.x+","+p.y).join(" "),class:"te-mini-backbone"}));
+    pos.forEach((p,i)=>{
+      const g=make("g",{class:"te-mini-node",transform:"translate("+p.x+" "+p.y+")","data-residue-index":i,tabindex:"0"});
+      g.append(make("circle",{r:16,fill:state.colors[state.secondarySequence[i]]||"#8fa2b3"}));
+      const label=make("text",{y:"1","text-anchor":"middle","dominant-baseline":"central","font-size":"14",fill:"#fff"});label.textContent=state.secondarySequence[i];g.append(label);
+      g.addEventListener("click",()=>chooseResidue(i));root.append(g);
     });
   }
   function buildIndexChoices(){
@@ -613,11 +678,13 @@ const TertiaryExplorer = (() => {
   function render(selected){
     if(selected!==undefined)state.selected=clamp(selected,0,Math.max(0,(state.mapping.enabled?state.secondarySequence.length:activeResidues().length)-1));
     miniSecondary();heatLegend();regionLegend();updateCopy();updateControls();renderSequencePanel();renderObjectList();renderSavedViews();
-    const scene=$("scene-tertiary");if(!scene||scene.hidden)return;ensureViewer().then(()=>applyStyles()).catch(()=>{});
+    const scene=$("scene-tertiary");if(!scene||scene.hidden)return;
+    if(viewer&&model){setStatus("");scheduleViewerLayout();return;}
+    ensureViewer().then(()=>{setStatus("");scheduleViewerLayout();}).catch(()=>{});
   }
 
-  function resetView(){if(!viewer)return;if(initialView&&viewer.setView)viewer.setView(initialView);else viewer.zoomTo({},400);viewer.render();}
-  function centerSelected(){const r=activeResidues()[state.selected];if(viewer&&r){viewer.zoomTo(selectorForResidue(r),450);viewer.render();}}
+  function resetView(){if(!viewer)return;safeViewerResize();if(initialView&&viewer.setView)try{viewer.setView(initialView);}catch(_){viewer.zoomTo({},400);}else viewer.zoomTo({},400);viewer.render();scheduleViewerLayout();}
+  function centerSelected(){const r=activeResidues()[state.selected];if(viewer&&r){safeViewerResize();viewer.zoomTo(selectorForResidue(r),450);viewer.render();scheduleViewerLayout();}}
   function focus(indices){
     if(!viewer||!indices.length)return;const sels=indices.map(i=>activeResidues()[i]).filter(Boolean);if(!sels.length)return;
     const chain=state.activeChain,resi=sels.map(r=>r.resi);viewer.zoomTo(chain?{chain,resi}:{resi},450);viewer.render();
