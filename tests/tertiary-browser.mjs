@@ -87,7 +87,7 @@ try{
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().surfaceEnabled===true);
   await page.locator("#teSurface").uncheck();
 
-  await page.locator("summary").filter({hasText:"Analyze"}).click();
+  await page.locator("#tertiaryControls > .te-controls > details").filter({has:page.locator("summary").filter({hasText:"Analyze"})}).locator(":scope > summary").click();
   await page.locator("#teContacts").check();
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().contactEnabled===true);
   await page.locator("#teContacts").uncheck();
