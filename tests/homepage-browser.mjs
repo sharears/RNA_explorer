@@ -23,7 +23,13 @@ try{
     throw new Error("Thought bubble copy is missing or changed: "+thought);
 
   const cards=await page.locator(".home-path-card").count();
-  if(cards!==2)throw new Error("Homepage should retain exactly two Learn/Analyze path cards; found "+cards);
+  if(cards!==0)throw new Error("Redundant Learn/Analyze cards should be removed from the homepage; found "+cards);
+  const fork=page.locator(".home-analyze-fork");
+  await fork.locator("summary").click();
+  await page.waitForSelector(".home-analysis-branches",{state:"visible",timeout:5000});
+  const branchLabels=(await page.locator(".home-analysis-branches").innerText()).replace(/\s+/g," ");
+  if(!branchLabels.includes("2D")||!branchLabels.includes("Secondary structure")||!branchLabels.includes("3D")||!branchLabels.includes("Tertiary structure"))
+    throw new Error("Analyze fork is missing the 2D/3D branches: "+branchLabels);
 
   const serious=errors.filter(x=>!/favicon|ResizeObserver loop/i.test(x));
   if(serious.length)throw new Error("Homepage browser runtime errors:\n"+serious.join("\n"));
