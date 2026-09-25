@@ -45,7 +45,7 @@ const tertiary = read("tertiary.js");
   "Color by",
   "Chain",
   "Element",
-  "Show mapped secondary-structure pair connections",
+  "Show selected base-pair H-bonds",
   "Highlight 3D proximity",
   "possible H-bond contacts",
   "Distance · 2 atoms",
@@ -54,7 +54,7 @@ const tertiary = read("tertiary.js");
   "2D + 3D linked view",
   "Secondary element",
   "Residue information",
-  "Sequence-linked selection",
+  "Select",
   "Select range",
   "Select around current residue",
   "Create object from selection",
@@ -63,9 +63,9 @@ const tertiary = read("tertiary.js");
   "PDB",
   "mmCIF",
   "Enable clipping slab",
-  "Compare / align structures",
+  "Analyze · Compare / align",
   "RMSD",
-  "Saved camera views",
+  "Display · Saved views",
   "Orthographic projection",
   "Full-screen viewer",
   "Uniform custom color",
@@ -113,6 +113,10 @@ const cif = tertiaryApi.serializeCif([{atom:"P",resn:"G",chain:"A",resi:1,x:1,y:
 assert(cif.includes("_atom_site.Cartn_x") && cif.includes("data_rna_explorer"), "mmCIF exporter should emit an atom_site loop");
 
 assert(tertiary.includes("handleAtomMeasurementClick"), "Atom-click measurement workflow should be available");
+assert(tertiary.includes("pairHydrogenBonds")&&tertiary.includes("HBOND_CHEM"), "Selected base pairs use donor/acceptor atom geometry for H-bond display");
+assert(tertiary.includes("selectedPairs")&&tertiary.includes("rna-secondary-selection"), "Linked 2D/3D selection supports additive residue and pair selections");
+assert(tertiary.includes("tePairHbondPanel")&&tertiary.includes("data-hbi"), "Individual selected H-bonds can be shown/hidden and styled");
+assert(tertiary.includes("teSelectionColor")&&tertiary.includes("teSelectionRadius")&&tertiary.includes("teSelectionOpacity"), "Selected residues expose contextual appearance controls");
 assert(tertiary.includes("teMeasurementList")&&tertiary.includes("teMeasureClear"), "Multiple measurements can be listed and cleared");
 assert(tertiary.includes("getCurrentPositions")&&tertiary.includes("secondaryLayoutPositions"), "Linked 2D/3D view preserves the edited Secondary layout when available");
 assert(tertiary.includes('source=$("secondarySvg")')&&tertiary.includes("cloneNode(true)"), "Linked 2D view reuses the actual Secondary drawing when available");
