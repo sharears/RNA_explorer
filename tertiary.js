@@ -44,7 +44,8 @@ const TertiaryExplorer = (() => {
     savedObjects:[],objectSerial:1,isolateObjectId:null,
     savedViews:[],viewSerial:1,
     comparison:{model:null,name:"",rmsd:null,count:0,visible:true,status:""},
-    clipEnabled:false,clipNear:-40,clipFar:40
+    clipEnabled:false,clipNear:-40,clipFar:40,
+    secondaryLayoutPositions:null
   };
 
   let viewer=null,model=null,viewerPromise=null,initialView=null,hoverLabel=null;
@@ -542,10 +543,14 @@ const TertiaryExplorer = (() => {
   function miniSecondary(){
     const panel=$("tertiaryMiniPanel"),root=$("tertiaryMiniSvg");if(!panel||!root)return;
     panel.hidden=!state.split||!state.mapping.enabled;if(panel.hidden)return;root.replaceChildren();
-    let pos=null;
+    let pos=Array.isArray(state.secondaryLayoutPositions)&&state.secondaryLayoutPositions.length===state.secondarySequence.length
+      ?state.secondaryLayoutPositions.map(p=>({x:Number(p.x),y:Number(p.y)})):null;
     try{
-      if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.getCurrentPositions)pos=SecondaryExplorer.getCurrentPositions();
-      if(!pos?.length&&typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.radial)pos=SecondaryExplorer.radial(state.secondarySequence.length,partner);
+      if(!pos?.length&&typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.getCurrentPositions)pos=SecondaryExplorer.getCurrentPositions();
+      if(!pos?.length&&typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.radial){
+        pos=SecondaryExplorer.radial(state.secondarySequence.length,partner);
+        if(SecondaryExplorer.orientEndsBottom)pos=SecondaryExplorer.orientEndsBottom(pos);
+      }
     }catch(_){}
     if(!pos?.length)return;
     const NS="http://www.w3.org/2000/svg",make=(name,attrs={})=>{const e=document.createElementNS(NS,name);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));return e;};
@@ -860,8 +865,11 @@ const TertiaryExplorer = (() => {
       viewer.render();await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
       const dataUrl=viewer.pngURI(),base="rna-tertiary-"+(state.currentFileName.replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase()||"structure");
       if(format==="pdf")await ExportTools.exportRasterPdf(dataUrl,width,height,base);
-      else {const response=await fetch(dataUrl);ExportTools.downloadBlob(await response.blob(),base+".png");}
-      if(status)status.textContent=(format==="pdf"?"PDF":"PNG")+" exported · "+width+" × "+height+".";
+      else if(format==="svg"){
+        const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'" viewBox="0 0 '+width+' '+height+'"><image href="'+dataUrl+'" width="'+width+'" height="'+height+'"/></svg>';
+        ExportTools.downloadText(svg,base+".svg","image/svg+xml;charset=utf-8");
+      } else {const response=await fetch(dataUrl);ExportTools.downloadBlob(await response.blob(),base+".png");}
+      if(status)status.textContent=(format==="pdf"?"PDF":format==="svg"?"SVG":"PNG")+" exported · "+width+" × "+height+".";
     } finally {
       viewer.setWidth(baseW);viewer.setHeight(baseH);if(view)viewer.setView(view);viewer.setBackgroundColor(oldBg,1);viewer.render();
     }
@@ -875,7 +883,7 @@ const TertiaryExplorer = (() => {
     toolbar.insertAdjacentHTML("beforeend",'<button id="teFitAll" type="button">Fit all</button><button id="teOpenExport" type="button">Export…</button>');
     const status=document.createElement("p");status.id="teExportStatus";status.className="te-export-status";status.setAttribute("role","status");toolbar.insertAdjacentElement("afterend",status);
     const dialog=document.createElement("dialog");dialog.id="teExportDialog";dialog.className="te-export-dialog";
-    dialog.innerHTML='<button type="button" class="dialog-close" id="teExportClose" aria-label="Close">×</button><h3>Export Tertiary Structure</h3><label>Export type<select id="teExportType"><option value="image">Image</option><option value="structure">Structure</option></select></label><div id="teImageExportOptions"><label>Format<select id="teImageFormat"><option value="png">PNG</option><option value="pdf">PDF</option></select></label><label>Resolution / scale<input id="teImageScale" type="range" min="1" max="5" step=".5" value="2"><output id="teImageScaleValue">2×</output></label><label>Background<select id="teImageBackground"><option value="#ffffff">White</option><option value="#07111c">Dark</option><option value="transparent">Transparent</option></select></label></div><div id="teStructureExportOptions" hidden><label>Scope<select id="teExportScope"><option value="full">Entire loaded structure</option><option value="selection">Current RNA selection</option></select></label><label>Format<select id="teExportFormat"><option value="pdb">PDB</option><option value="cif">mmCIF</option></select></label></div><button type="button" id="teExportNow" class="primary-action">Export</button><p id="teExportDialogStatus" role="status"></p>';
+    dialog.innerHTML='<button type="button" class="dialog-close" id="teExportClose" aria-label="Close">×</button><h3>Export Tertiary Structure</h3><label>Export type<select id="teExportType"><option value="image">Image</option><option value="structure">Structure</option></select></label><div id="teImageExportOptions"><label>Format<select id="teImageFormat"><option value="png">PNG</option><option value="pdf">PDF</option><option value="svg">SVG (raster embedded)</option></select></label><label>Resolution / scale<input id="teImageScale" type="range" min="1" max="5" step=".5" value="2"><output id="teImageScaleValue">2×</output></label><label>DPI target<select id="teImageDpi"><option value="96">96</option><option value="150">150</option><option value="300" selected>300</option><option value="600">600</option></select></label><label>Background<select id="teImageBackground"><option value="#ffffff">White</option><option value="#07111c">Dark</option><option value="transparent">Transparent</option></select></label><p class="te-tool-note">The 3D viewer is WebGL. SVG export contains the rendered view as an embedded raster image.</p></div><div id="teStructureExportOptions" hidden><label>Scope<select id="teExportScope"><option value="full">Entire loaded structure</option><option value="selection">Current RNA selection</option></select></label><label>Format<select id="teExportFormat"><option value="pdb">PDB</option><option value="cif">mmCIF</option></select></label></div><button type="button" id="teExportNow" class="primary-action">Export</button><p id="teExportDialogStatus" role="status"></p>';
     document.body.append(dialog);refreshExportObjectOptions();
     $("teOpenExport").addEventListener("click",()=>{refreshExportObjectOptions();dialog.showModal();});$("teExportClose").addEventListener("click",()=>dialog.close());
     $("teExportType").addEventListener("change",e=>{$("teImageExportOptions").hidden=e.target.value!=="image";$("teStructureExportOptions").hidden=e.target.value!=="structure";});
@@ -883,7 +891,7 @@ const TertiaryExplorer = (() => {
     $("teExportNow").addEventListener("click",async()=>{
       const out=$("teExportDialogStatus");out.textContent="Preparing export…";
       try{
-        if($("teExportType").value==="image"){await exportViewerImage($("teImageFormat").value,Number($("teImageScale").value),$("teImageBackground").value);out.textContent="Image exported.";}
+        if($("teExportType").value==="image"){const dpi=Number($("teImageDpi").value)||96,scale=(Number($("teImageScale").value)||1)*(dpi/96);await exportViewerImage($("teImageFormat").value,scale,$("teImageBackground").value);out.textContent="Image exported.";}
         else{
           const scope=$("teExportScope").value,fmt=$("teExportFormat").value;let indices=null,label=state.currentFileName.replace(/\.[^.]+$/,"");
           if(scope==="selection")indices=state.selectionIndices;
@@ -903,9 +911,14 @@ const TertiaryExplorer = (() => {
     state.heatTheme=detail.heatTheme||"viridis";state.heatRange=Array.isArray(detail.heatRange)?detail.heatRange:[0,1];
     if(!state.heatEnabled&&state.colorMode==="metadata")state.colorMode="nucleotide";render();
   }
+  function handleSecondaryLayout(detail){
+    if(!detail||detail.sequence!==state.secondarySequence||detail.structure!==state.structure)return;
+    if(Array.isArray(detail.positions)&&detail.positions.length===state.secondarySequence.length)state.secondaryLayoutPositions=detail.positions.map(p=>({x:Number(p.x),y:Number(p.y)}));
+    if(state.split)miniSecondary();
+  }
   function handleSecondaryContext(detail){
     if(!detail)return;const changed=detail.sequence!==state.secondarySequence||detail.structure!==state.structure;
-    state.secondarySequence=detail.sequence;state.structure=detail.structure;state.secondaryIsDefault=Boolean(detail.isDefault);
+    state.secondarySequence=detail.sequence;state.structure=detail.structure;state.secondaryIsDefault=Boolean(detail.isDefault);if(changed)state.secondaryLayoutPositions=null;
     const parsed=parseStructure(state.structure,state.secondarySequence.length);pairs=parsed.pairs;partner=parsed.partner;
     if(changed&&!isCuratedDefaultPair()){state.sameMoleculeConfirmed=false;state.metadata={};state.heatEnabled=false;}
     evaluateMapping();if(changed){state.indexSelection=defaultIndices();buildIndexChoices();}render();
@@ -918,8 +931,9 @@ const TertiaryExplorer = (() => {
     $("followButton")?.addEventListener("click",()=>{const n=activeResidues().length;if(n<2)return;let next=state.selected;while(next===state.selected)next=Math.floor(Math.random()*n);chooseResidue(next);});
     window.addEventListener("rna-metadata-change",e=>applyMetadata(e.detail));
     window.addEventListener("rna-secondary-context",e=>handleSecondaryContext(e.detail));
-    window.addEventListener("rna-secondary-layout",e=>{if(state.split&&e.detail?.sequence===state.secondarySequence)miniSecondary();});
+    window.addEventListener("rna-secondary-layout",e=>handleSecondaryLayout(e.detail));
     window.addEventListener("rna-secondary-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){state.selected=clamp(e.detail.index,0,state.secondarySequence.length-1);render();}});
+    try{const p=typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.getCurrentPositions?SecondaryExplorer.getCurrentPositions():null;if(Array.isArray(p)&&p.length===state.secondarySequence.length)state.secondaryLayoutPositions=p.map(x=>({x:Number(x.x),y:Number(x.y)}));}catch(_){}
     render();
   }
 
