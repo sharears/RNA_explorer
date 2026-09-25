@@ -34,7 +34,19 @@ const hash=b=>crypto.createHash("sha256").update(b).digest("hex");
 
   try{
     await page.goto(`http://127.0.0.1:${port}/?page=tertiary`,{waitUntil:"domcontentloaded",timeout:30000});
-    await page.waitForSelector("#tertiaryMolecularViewer canvas",{state:"visible",timeout:30000});
+    try{
+      await page.waitForFunction(()=>{
+        const canvas=document.querySelector("#tertiaryMolecularViewer canvas");
+        const box=canvas?.getBoundingClientRect();
+        return !!canvas&&canvas.width>0&&box&&box.width>100&&box.height>100;
+      },{timeout:30000});
+    }catch(error){
+      const metrics=await page.evaluate(()=>["scene-tertiary","tertiaryStage","tertiarySplitShell","tertiaryViewport","tertiaryMolecularViewer"].map(id=>{
+        const e=document.getElementById(id),r=e?.getBoundingClientRect(),cs=e?getComputedStyle(e):null;
+        return {id,hidden:e?.hidden,display:cs?.display,width:r?.width,height:r?.height,clientWidth:e?.clientWidth,clientHeight:e?.clientHeight};
+      }).concat([{id:"canvas",...(()=>{const e=document.querySelector("#tertiaryMolecularViewer canvas"),r=e?.getBoundingClientRect();return {width:r?.width,height:r?.height,canvasWidth:e?.width,canvasHeight:e?.height};})()}]));
+      console.error("3D layout metrics:",JSON.stringify(metrics));throw error;
+    }
     await page.waitForFunction(()=>document.querySelectorAll("#teSequencePanel button").length>10,{timeout:30000});
     await wait(500);
 
