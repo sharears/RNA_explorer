@@ -38,8 +38,8 @@ const TertiaryExplorer = (() => {
     split:false,exportScale:2,currentFileName:"PDB 1EHZ",currentFormat:"pdb",
     chains:[],activeChain:null,chainNeedsChoice:false,residueIndexByKey:new Map(),
     mapping:{enabled:false,level:"pending",message:""},
-    surfaceEnabled:false,surfaceOpacity:0.35,
-    visibility:{rna:true,protein:true,solvent:false,ions:true,other:true},
+    surfaceEnabled:false,surfaceOpacity:0.35,uniformColor:"#74d7b6",backgroundColor:"#07111c",orthographic:false,
+    visibility:{rna:true,protein:true,solvent:false,ions:true,other:true,hydrogen:false},
     selectionIndices:new Set(),selectionLabels:false,
     savedObjects:[],objectSerial:1,isolateObjectId:null,
     savedViews:[],viewSerial:1,
@@ -120,6 +120,7 @@ const TertiaryExplorer = (() => {
     return CHAIN_COLORS[idx%CHAIN_COLORS.length];
   }
   function residueColor(i,r){
+    if(state.colorMode==="uniform")return state.uniformColor;
     if(state.colorMode==="region"&&state.mapping.enabled)return REGION_COLORS[regionFor(i)]||"#8fa2b3";
     if(state.colorMode==="metadata"&&state.mapping.enabled&&state.heatEnabled&&state.metadata[i]?.value!=null)return heatColor(state.metadata[i].value);
     if(state.colorMode==="chain")return chainColor(r?.chain||state.activeChain);
@@ -288,7 +289,7 @@ const TertiaryExplorer = (() => {
   async function setModelFromText(text,format,sourceIsDefault,fileName){
     if(!viewer)throw new Error("3D viewer is not ready.");
     resetModelState();viewer.removeAllModels();viewer.removeAllShapes();viewer.removeAllLabels();if(viewer.removeAllSurfaces)viewer.removeAllSurfaces();
-    model=viewer.addModel(text,format,{keepH:false});
+    model=viewer.addModel(text,format,{keepH:true});
     if(!model||!model.selectedAtoms({}).length)throw new Error("No atoms could be parsed from this structure file.");
     state.sourceIsDefault=sourceIsDefault;state.currentFileName=fileName;state.currentFormat=format;state.sameMoleculeConfirmed=false;
     extractChains();chooseBestChain();populateChainSelect();buildResidueLookup();evaluateMapping();
@@ -345,6 +346,7 @@ const TertiaryExplorer = (() => {
     if(state.visibility.solvent&&water.length)model.setStyle({serial:water},{sphere:{radius:.16,color:"#8fc7e8",opacity:.5}});
     if(state.visibility.ions&&ions.length)model.setStyle({serial:ions},{sphere:{radius:.42,colorscheme:"Jmol"}});
     if(state.visibility.other&&other.length)model.setStyle({serial:other},{stick:{radius:.1,colorscheme:"Jmol",opacity:.75}});
+    if(!state.visibility.hydrogen)model.setStyle({elem:"H"},{});
   }
   function addPairs(){
     if(!viewer||!state.showPairs||!state.mapping.enabled)return;
@@ -401,6 +403,7 @@ const TertiaryExplorer = (() => {
     unique.slice(0,40).forEach(c=>viewer.addCylinder({start:c.a,end:c.b,radius:c.hbond?.055:.035,color:c.hbond?"#74d7b6":"#f2c66d",opacity:c.hbond?.9:.48,fromCap:1,toCap:1,dashed:true}));
     const hb=unique.filter(c=>c.hbond).length;
     status.textContent=unique.length+" atom contacts within "+state.contactCutoff+" Å; "+hb+" N/O pairs meet the simple ≤3.5 Å possible H-bond screen.";
+    const list=$("teContactList");if(list){list.replaceChildren();unique.slice(0,20).forEach(c=>{const row=document.createElement("div");row.textContent=atomLabel(c.a)+" ↔ "+atomLabel(c.b)+" · "+c.d.toFixed(2)+" Å"+(c.hbond?" · possible H-bond":"");list.append(row);});if(unique.length>20){const more=document.createElement("div");more.textContent="… "+(unique.length-20)+" more contacts";list.append(more);}}
   }
 
   function atomSnapshot(atom){return {x:Number(atom.x),y:Number(atom.y),z:Number(atom.z),atom:String(atom.atom||"atom"),resn:String(atom.resn||""),resi:atom.resi,chain:String(atom.chain||""),icode:String(atom.icode||"")};}
@@ -633,6 +636,9 @@ const TertiaryExplorer = (() => {
     state.selectionIndices=new Set(activeResidues().map((_,i)=>i).filter(i=>i===center||distance3D(center,i)<=cutoff));render();
   }
   function addCurrentToSelection(){state.selectionIndices.add(state.selected);render();}
+  function subtractCurrentFromSelection(){state.selectionIndices.delete(state.selected);render();}
+  function invertSelection(){const all=new Set(activeResidues().map((_,i)=>i));state.selectionIndices=new Set([...all].filter(i=>!state.selectionIndices.has(i)));render();}
+  function selectActiveChain(){state.selectionIndices=new Set(activeResidues().map((_,i)=>i));render();}
   function createObject(){
     const indices=state.selectionIndices.size?new Set(state.selectionIndices):new Set([state.selected]);
     const name=prompt("Object name","object_"+state.objectSerial);if(name===null)return;
@@ -729,7 +735,7 @@ const TertiaryExplorer = (() => {
     if(!file)return;await ensureViewer();clearComparison(false);
     const lower=file.name.toLowerCase(),format=lower.endsWith(".cif")||lower.endsWith(".mmcif")?"cif":lower.endsWith(".pdb")||lower.endsWith(".ent")?"pdb":null;
     if(!format)throw new Error("Comparison structure must be PDB or mmCIF.");const text=await file.text();
-    let temp=viewer.addModel(text,format,{keepH:false});if(!temp?.selectedAtoms({}).length)throw new Error("No atoms could be parsed from the comparison file.");
+    let temp=viewer.addModel(text,format,{keepH:true});if(!temp?.selectedAtoms({}).length)throw new Error("No atoms could be parsed from the comparison file.");
     const chains=rnaChainsFromAtoms(temp.selectedAtoms({})),ref=activeResidues();
     if(!chains.length||ref.length<3){viewer.removeModel(temp);throw new Error("Could not find comparable RNA residues.");}
     const cmp=chains.slice().sort((a,b)=>Math.abs(a.residues.length-ref.length)-Math.abs(b.residues.length-ref.length))[0],n=Math.min(ref.length,cmp.residues.length);
@@ -772,16 +778,20 @@ const TertiaryExplorer = (() => {
       '<p id="teMappingStatus" class="te-mapping-status" role="status"></p></details>'+
       '<details open><summary>Display</summary>'+
       '<label>Representation<select id="teRepresentation"><option value="sticks">PyMOL-style sticks</option><option value="ballstick">Ball &amp; stick</option><option value="wire">Wire</option><option value="spheres">Spheres</option><option value="backbone">RNA backbone</option><option value="cartoon">Cartoon</option></select></label>'+
-      '<label>Color by<select id="teColorMode"><option value="nucleotide">Nucleotide / residue type</option><option value="chain">Chain</option><option value="element">Element</option><option value="region">Secondary element</option><option value="metadata" disabled>Residue information</option></select></label>'+
+      '<label>Color by<select id="teColorMode"><option value="nucleotide">Nucleotide / residue type</option><option value="chain">Chain</option><option value="element">Element</option><option value="uniform">Uniform custom color</option><option value="region">Secondary element</option><option value="metadata" disabled>Residue information</option></select></label>'+
+      '<label>Uniform color<input id="teUniformColor" type="color" value="#74d7b6"></label>'+
+      '<label>Background color<input id="teBackgroundColor" type="color" value="#07111c"></label>'+
+      '<label class="te-check"><input id="teOrthographic" type="checkbox"> Orthographic projection</label>'+
+      '<button type="button" id="teFullscreen">Full-screen viewer</button>'+
       '<label class="te-check"><input id="teShowPairs" type="checkbox" checked> Show mapped secondary-structure pair connections</label>'+
       '<label class="te-check"><input id="teShowIndices" type="checkbox" checked> Show residue indices</label>'+
       '<label class="te-check"><input id="teShowSelectedLabel" type="checkbox" checked> Label selected residue</label>'+
-      '<div class="te-visibility-grid"><label class="te-check"><input id="teShowRNA" type="checkbox" checked> RNA</label><label class="te-check"><input id="teShowProtein" type="checkbox" checked> Protein</label><label class="te-check"><input id="teShowSolvent" type="checkbox"> Solvent</label><label class="te-check"><input id="teShowIons" type="checkbox" checked> Ions</label><label class="te-check"><input id="teShowOther" type="checkbox" checked> Other ligands</label></div>'+
+      '<div class="te-visibility-grid"><label class="te-check"><input id="teShowRNA" type="checkbox" checked> RNA</label><label class="te-check"><input id="teShowProtein" type="checkbox" checked> Protein</label><label class="te-check"><input id="teShowSolvent" type="checkbox"> Solvent</label><label class="te-check"><input id="teShowIons" type="checkbox" checked> Ions</label><label class="te-check"><input id="teShowOther" type="checkbox" checked> Other ligands</label><label class="te-check"><input id="teShowHydrogen" type="checkbox"> Hydrogens</label></div>'+
       '<label class="te-check"><input id="teSurface" type="checkbox"> Molecular surface</label>'+
       '<label>Surface transparency<input id="teSurfaceOpacity" type="range" min="0.05" max="0.9" step="0.05" value="0.35"></label></details>'+
       '<details open><summary>Sequence-linked selection</summary><p class="te-tool-note">Click a residue here or in 3D; selection is shared with the Secondary view when mapping is active.</p><div id="teSequencePanel" class="te-sequence-panel"></div>'+
       '<div class="te-inline-grid"><label>From residue<input id="teSelectStart" type="number" min="1" value="1"></label><label>To residue<input id="teSelectEnd" type="number" min="1" value="10"></label></div>'+
-      '<div class="te-button-row"><button type="button" id="teSelectRange">Select range</button><button type="button" id="teSelectCurrent">Add current</button><button type="button" id="teSelectClear">Clear selection</button></div>'+
+      '<div class="te-button-row"><button type="button" id="teSelectRange">Select range</button><button type="button" id="teSelectCurrent">Add current</button><button type="button" id="teSelectSubtract">Subtract current</button><button type="button" id="teSelectChain">Select RNA chain</button><button type="button" id="teSelectInvert">Invert</button><button type="button" id="teSelectClear">Clear selection</button></div>'+
       '<label>Nucleotide type<select id="teSelectBase"><option>A</option><option>C</option><option>G</option><option>U</option></select></label><button type="button" id="teSelectBaseButton">Select nucleotide type</button>'+
       '<label>Within distance (Å)<input id="teSelectNearCutoff" type="number" min="1" max="30" step="0.5" value="5"></label><button type="button" id="teSelectNearButton">Select around current residue</button>'+
       '<div class="te-button-row"><button type="button" id="teFocusSelection">Center / zoom selection</button><label class="te-check"><input id="teSelectionLabels" type="checkbox"> Label selection</label></div></details>'+
@@ -789,7 +799,7 @@ const TertiaryExplorer = (() => {
       '<details><summary>Residue index</summary><p>Default labels: 1, every 5 residues, and the final residue.</p><details class="te-index-dropdown"><summary>Choose indices</summary><div id="teIndexChoices"></div></details><div class="te-button-row"><button type="button" id="teIndexDefault">Default</button><button type="button" id="teIndexAll">All</button><button type="button" id="teIndexNone">None</button></div></details>'+
       '<details open><summary>Analyze</summary>'+
       '<label class="te-check"><input id="teProximity" type="checkbox"> Highlight 3D proximity</label><label>Proximity cutoff (Å)<input id="teProximityCutoff" type="number" min="6" max="30" step="0.5" value="12"></label><p id="teProximityStatus">Highlights C4′ spatial neighbors that are not immediate sequence neighbors.</p>'+
-      '<label class="te-check"><input id="teContacts" type="checkbox"> Show close atom contacts / possible H-bond contacts</label><label>Contact cutoff (Å)<input id="teContactCutoff" type="number" min="2.5" max="8" step="0.1" value="4.0"></label><p id="teContactStatus">Shows close atom contacts; N/O pairs ≤3.5 Å are flagged as possible hydrogen-bond contacts.</p>'+
+      '<label class="te-check"><input id="teContacts" type="checkbox"> Show close atom contacts / possible H-bond contacts</label><label>Contact cutoff (Å)<input id="teContactCutoff" type="number" min="2.5" max="8" step="0.1" value="4.0"></label><p id="teContactStatus">Shows close atom contacts; N/O pairs ≤3.5 Å are flagged as possible hydrogen-bond contacts.</p><div id="teContactList" class="te-contact-list"></div>'+
       '<fieldset class="te-measure-tools"><legend>Atom measurements</legend><label>Measurement<select id="teMeasureMode"><option value="off">Off</option><option value="distance">Distance · 2 atoms</option><option value="angle">Angle · 3 atoms</option><option value="dihedral">Dihedral · 4 atoms</option></select></label><div class="te-button-row"><button type="button" id="teMeasureUndo">Undo pick</button><button type="button" id="teMeasureClear">Clear all</button></div><p id="teMeasureStatus">Choose distance, angle, or dihedral, then click atoms in the 3D structure.</p><div id="teMeasurementList" class="te-measurement-list">No saved measurements.</div></fieldset>'+
       '<label class="te-check"><input id="teSplit" type="checkbox"> 2D + 3D linked view</label></details>'+
       '<details><summary>Clipping</summary><label class="te-check"><input id="teClipEnabled" type="checkbox"> Enable clipping slab</label><div class="te-inline-grid"><label>Near<input id="teClipNear" type="range" min="-100" max="0" step="1" value="-40"></label><label>Far<input id="teClipFar" type="range" min="0" max="100" step="1" value="40"></label></div><p class="te-tool-note">Clipping changes only what is visible; it does not delete atoms.</p></details>'+
@@ -802,10 +812,14 @@ const TertiaryExplorer = (() => {
     $("teRepresentation").value=state.representation;$("teColorMode").value=state.colorMode;$("teShowPairs").checked=state.showPairs;$("teShowIndices").checked=state.showIndices;
     $("teRepresentation").addEventListener("change",e=>{state.representation=e.target.value;render();});
     $("teColorMode").addEventListener("change",e=>{state.colorMode=e.target.value;render();});
+    $("teUniformColor").addEventListener("input",e=>{state.uniformColor=e.target.value;if(state.colorMode==="uniform")render();});
+    $("teBackgroundColor").addEventListener("input",e=>{state.backgroundColor=e.target.value;if(viewer){viewer.setBackgroundColor(state.backgroundColor,1);viewer.render();}});
+    $("teOrthographic").addEventListener("change",e=>{state.orthographic=e.target.checked;if(viewer?.setCameraParameters){viewer.setCameraParameters({orthographic:state.orthographic});viewer.render();}});
+    $("teFullscreen").addEventListener("click",()=>{$("tertiaryStage")?.requestFullscreen?.();});
     $("teShowPairs").addEventListener("change",e=>{state.showPairs=e.target.checked;render();});
     $("teShowIndices").addEventListener("change",e=>{state.showIndices=e.target.checked;render();});
     $("teShowSelectedLabel").addEventListener("change",e=>{state.showSelectedLabel=e.target.checked;render();});
-    ["RNA","Protein","Solvent","Ions","Other"].forEach(k=>$("teShow"+k).addEventListener("change",e=>{state.visibility[k.toLowerCase()]=e.target.checked;render();}));
+    ["RNA","Protein","Solvent","Ions","Other","Hydrogen"].forEach(k=>$("teShow"+k).addEventListener("change",e=>{state.visibility[k.toLowerCase()]=e.target.checked;render();}));
     $("teSurface").addEventListener("change",e=>{state.surfaceEnabled=e.target.checked;render();});
     $("teSurfaceOpacity").addEventListener("input",e=>{state.surfaceOpacity=Number(e.target.value);render();});
     $("teProximity").addEventListener("change",e=>{state.proximityEnabled=e.target.checked;render();});
@@ -823,7 +837,7 @@ const TertiaryExplorer = (() => {
     $("teIndexDefault").addEventListener("click",()=>{state.indexSelection=defaultIndices();buildIndexChoices();render();});
     $("teIndexAll").addEventListener("click",()=>{const n=state.mapping.enabled?state.secondarySequence.length:activeResidues().length;state.indexSelection=new Set(Array.from({length:n},(_,i)=>i));buildIndexChoices();render();});
     $("teIndexNone").addEventListener("click",()=>{state.indexSelection.clear();buildIndexChoices();render();});
-    $("teSelectRange").addEventListener("click",selectRange);$("teSelectCurrent").addEventListener("click",addCurrentToSelection);$("teSelectClear").addEventListener("click",()=>{state.selectionIndices.clear();render();});
+    $("teSelectRange").addEventListener("click",selectRange);$("teSelectCurrent").addEventListener("click",addCurrentToSelection);$("teSelectSubtract").addEventListener("click",subtractCurrentFromSelection);$("teSelectChain").addEventListener("click",selectActiveChain);$("teSelectInvert").addEventListener("click",invertSelection);$("teSelectClear").addEventListener("click",()=>{state.selectionIndices.clear();render();});
     $("teSelectBaseButton").addEventListener("click",selectBase);$("teSelectNearButton").addEventListener("click",selectNearby);$("teFocusSelection").addEventListener("click",focusSelection);
     $("teSelectionLabels").addEventListener("change",e=>{state.selectionLabels=e.target.checked;render();});$("teCreateObject").addEventListener("click",createObject);
     $("teClipEnabled").addEventListener("change",e=>{state.clipEnabled=e.target.checked;render();});$("teClipNear").addEventListener("input",e=>{state.clipNear=Number(e.target.value);render();});$("teClipFar").addEventListener("input",e=>{state.clipFar=Number(e.target.value);render();});
