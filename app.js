@@ -143,8 +143,9 @@ function setupHomePaths() {
 }
 
 function applyPageMode() {
-  const params=new URLSearchParams(window.location.search);
-  const mode=params.get("page")||"home";
+  const search=String(window.location&&window.location.search||"");
+  const match=search.match(/[?&]page=([^&]+)/);
+  const mode=match?decodeURIComponent(match[1]):"home";
   const valid=["home","journey","example","secondary","tertiary"];
   const page=valid.includes(mode)?mode:"home";
   document.body.dataset.pageMode=page;
