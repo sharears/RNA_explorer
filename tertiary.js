@@ -734,16 +734,24 @@ const TertiaryExplorer = (() => {
   function renderObjectList(){
     const box=$("teObjectList");if(!box)return;box.replaceChildren();
     if(!state.savedObjects.length){box.textContent="No saved objects.";return;}
-    state.savedObjects.forEach(o=>{
-      const row=document.createElement("div");row.className="te-object-row";
-      const name=document.createElement("input");name.value=o.name;name.setAttribute("aria-label","Object name");
-      name.addEventListener("change",()=>{o.name=name.value.trim()||o.name;});
+    state.savedObjects.forEach((o,oi)=>{
+      o.style??={color:CHAIN_COLORS[(oi+2)%CHAIN_COLORS.length],thickness:.20,opacity:.75};
+      const row=document.createElement("details");row.className="te-object-row";
+      const summary=document.createElement("summary"),name=document.createElement("span");name.textContent=o.name+" · "+o.indices.size+" residue"+(o.indices.size===1?"":"s");summary.append(name);row.append(summary);
+      const body=document.createElement("div");body.className="te-object-body";
+      const rename=document.createElement("input");rename.value=o.name;rename.setAttribute("aria-label","Object name");rename.addEventListener("change",()=>{o.name=rename.value.trim()||o.name;renderObjectList();});
       const show=document.createElement("button");show.type="button";show.textContent=o.visible?"Hide":"Show";show.addEventListener("click",()=>{o.visible=!o.visible;renderObjectList();refreshExportObjectOptions();render();});
       const isolate=document.createElement("button");isolate.type="button";isolate.textContent=state.isolateObjectId===o.id?"Show all":"Isolate";isolate.addEventListener("click",()=>{state.isolateObjectId=state.isolateObjectId===o.id?null:o.id;renderObjectList();refreshExportObjectOptions();render();});
+      const color=document.createElement("input");color.type="color";color.value=o.style.color;color.setAttribute("aria-label","Object color");color.addEventListener("input",()=>{o.style.color=color.value;render();});
+      const thick=document.createElement("input");thick.type="range";thick.min=".05";thick.max=".45";thick.step=".01";thick.value=o.style.thickness;thick.setAttribute("aria-label","Object thickness");thick.addEventListener("input",()=>{o.style.thickness=Number(thick.value);render();});
+      const opacity=document.createElement("input");opacity.type="range";opacity.min="0";opacity.max="1";opacity.step=".05";opacity.value=o.style.opacity;opacity.setAttribute("aria-label","Object transparency");opacity.addEventListener("input",()=>{o.style.opacity=Number(opacity.value);render();});
       const pdb=document.createElement("button");pdb.type="button";pdb.textContent="PDB";pdb.addEventListener("click",()=>downloadStructure("pdb",o.indices,o.name));
       const cif=document.createElement("button");cif.type="button";cif.textContent="mmCIF";cif.addEventListener("click",()=>downloadStructure("cif",o.indices,o.name));
       const del=document.createElement("button");del.type="button";del.textContent="Delete";del.addEventListener("click",()=>{state.savedObjects=state.savedObjects.filter(x=>x.id!==o.id);if(state.isolateObjectId===o.id)state.isolateObjectId=null;renderObjectList();refreshExportObjectOptions();render();});
-      row.append(name,show,isolate,pdb,cif,del);box.append(row);
+      const field=(label,control)=>{const l=document.createElement("label");l.append(document.createTextNode(label),control);return l;};
+      const actions=document.createElement("div");actions.className="te-button-row";actions.append(show,isolate,pdb,cif,del);
+      const style=document.createElement("div");style.className="te-object-style-editor";style.append(field("Name",rename),field("Color",color),field("Thickness",thick),field("Transparency",opacity));
+      body.append(style,actions);row.append(body);box.append(row);
     });
   }
   function renderSavedViews(){
