@@ -26,11 +26,17 @@ const TertiaryExplorer = (() => {
   const IONS=new Set(["NA","K","MG","CA","ZN","CL","MN","FE","CO","CU","NI","SR","CS","BA","CD","HG","PB","BR","IOD","F"]);
   const AMINO=new Set(["ALA","ARG","ASN","ASP","CYS","GLN","GLU","GLY","HIS","ILE","LEU","LYS","MET","PHE","PRO","SER","THR","TRP","TYR","VAL","SEC","PYL"]);
   const BACKBONE_ATOMS=["P","OP1","OP2","O1P","O2P","O5'","O5*","C5'","C5*","C4'","C4*","C3'","C3*","O3'","O3*"];
+  const HBOND_SITES={
+    A:{donors:new Set(["N6"]),acceptors:new Set(["N1","N3","N7"])},
+    G:{donors:new Set(["N1","N2"]),acceptors:new Set(["O6","N3","N7"])},
+    C:{donors:new Set(["N4"]),acceptors:new Set(["N3","O2"])},
+    U:{donors:new Set(["N3"]),acceptors:new Set(["O2","O4"])}
+  };
 
   const state={
     defaultSequence:"",defaultStructure:"",secondarySequence:"",structure:"",
     colors:{},names:{},onSelect:()=>{},selected:0,
-    representation:"sticks",colorMode:"nucleotide",showPairs:true,showIndices:true,showSelectedLabel:true,
+    representation:"sticks",colorMode:"nucleotide",showPairs:false,showIndices:true,showSelectedLabel:true,
     indexSelection:new Set(),metadata:{},heatEnabled:false,heatTheme:"viridis",heatRange:[0,1],
     secondaryIsDefault:true,sourceIsDefault:true,sameMoleculeConfirmed:false,
     proximityEnabled:false,proximityCutoff:12,contactEnabled:false,contactCutoff:4.0,
@@ -41,6 +47,8 @@ const TertiaryExplorer = (() => {
     surfaceEnabled:false,surfaceOpacity:0.35,uniformColor:"#74d7b6",backgroundColor:"#07111c",orthographic:false,
     visibility:{rna:true,protein:true,solvent:false,ions:true,other:true,hydrogen:false},
     selectionIndices:new Set(),selectionLabels:false,
+    selectionStyle:{color:"#f2c66d",thickness:0.24,opacity:0.72},
+    selectedPairs:new Set(),hbondThreshold:3.5,hbondStyles:{},hbondDefaults:{lineStyle:"dashed",color:"#74d7b6",thickness:0.065,opacity:0.92,label:false},
     savedObjects:[],objectSerial:1,isolateObjectId:null,
     savedViews:[],viewSerial:1,
     comparison:{model:null,name:"",rmsd:null,count:0,visible:true,status:""},
@@ -78,6 +86,61 @@ const TertiaryExplorer = (() => {
     if(e)return e;
     const name=String(atom?.atom||"").replace(/[^A-Za-z]/g,"").toUpperCase();
     return name.slice(0,name.startsWith("CL")||name.startsWith("BR")?2:1);
+  }
+
+  function normalizedAtomName(atom){return String(atom?.atom||"").trim().toUpperCase().replace(/\*/g,"'");}
+  function pairKey(a,b){return Math.min(a,b)+":"+Math.max(a,b);}
+  function pairIndices(key){return String(key).split(":").map(Number);}
+  function rawAtomDistance(a,b){return Math.hypot(Number(a.x)-Number(b.x),Number(a.y)-Number(b.y),Number(a.z)-Number(b.z));}
+  function pairHydrogenBonds(a,b){
+    const residues=activeResidues(),ra=residues[a],rb=residues[b],sa=HBOND_SITES[baseAt(a)],sb=HBOND_SITES[baseAt(b)];
+    if(!ra||!rb||!sa||!sb)return [];
+    const found=[];
+    for(const aa of ra.atoms||[])for(const bb of rb.atoms||[]){
+      const na=normalizedAtomName(aa),nb=normalizedAtomName(bb);
+      const compatible=(sa.donors.has(na)&&sb.acceptors.has(nb))||(sa.acceptors.has(na)&&sb.donors.has(nb));
+      if(!compatible)continue;
+      const d=rawAtomDistance(aa,bb);
+      if(d>=2.2&&d<=state.hbondThreshold){
+        const key=pairKey(a,b)+"|"+String(aa.serial??na)+"-"+String(bb.serial??nb);
+        found.push({key,pairKey:pairKey(a,b),aIndex:a,bIndex:b,a:aa,b:bb,d,na,nb});
+      }
+    }
+    return found.sort((x,y)=>x.d-y.d);
+  }
+  function hbondStyleFor(key){
+    if(!state.hbondStyles[key])state.hbondStyles[key]={...state.hbondDefaults,visible:true};
+    return state.hbondStyles[key];
+  }
+  function lerpPoint(a,b,t){return {x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,z:a.z+(b.z-a.z)*t};}
+  function addStyledSegment(start,end,style){
+    if(!viewer||style.visible===false)return;
+    const color=style.color||"#ffffff",opacity=clamp(Number(style.opacity??1),0,1),radius=clamp(Number(style.thickness??.06),.01,.5),kind=style.lineStyle||"solid";
+    if(kind==="solid"){viewer.addCylinder({start,end,radius,color,opacity,fromCap:1,toCap:1});return;}
+    if(kind==="dotted"){
+      const n=11;for(let i=0;i<n;i++)viewer.addSphere({center:lerpPoint(start,end,i/(n-1)),radius:radius*1.18,color,opacity});
+      return;
+    }
+    const n=8;for(let i=0;i<n;i++){const t0=i/n,t1=Math.min(1,t0+.56/n);viewer.addCylinder({start:lerpPoint(start,end,t0),end:lerpPoint(start,end,t1),radius,color,opacity,fromCap:1,toCap:1});}
+  }
+  function togglePairSelection(a,b){
+    if(!Number.isInteger(a)||!Number.isInteger(b))return;
+    const key=pairKey(a,b);
+    if(state.selectedPairs.has(key))state.selectedPairs.delete(key);
+    else{state.selectedPairs.add(key);state.selectionIndices.add(a);state.selectionIndices.add(b);}
+    state.selected=a;render();
+  }
+  function clearSelection(){
+    state.selectionIndices.clear();state.selectedPairs.clear();render();
+  }
+  function toggleResidueSelection(index,sync=true){
+    const i=clamp(index,0,Math.max(0,activeResidues().length-1));state.selected=i;
+    if(state.selectionIndices.has(i))state.selectionIndices.delete(i);else state.selectionIndices.add(i);
+    if(sync&&state.mapping.enabled){
+      if(isCuratedDefaultPair())state.onSelect(i);
+      else if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.followExternal)SecondaryExplorer.followExternal(i);
+    }
+    render();
   }
   function parseStructure(structure,n){
     const stack=[],ps=[],pt=Array(n).fill(-1);
