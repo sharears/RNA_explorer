@@ -62,6 +62,8 @@ assert(source.includes('"Arial"')&&source.includes('"Calibri"')&&source.includes
 assert(source.includes('"Font color"')&&source.includes('"Font size"'),"Residue typography labels use font terminology");
 assert(source.includes('se-color-code'),"Color picker has editable color-code companion");
 assert(source.includes('"rna-secondary-select"'),"Custom Secondary selection can synchronize with Tertiary");
+assert(source.includes('"rna-secondary-selection"')&&source.includes("selectedPairs")&&source.includes("selectedResidues"),"Secondary supports additive linked residue and base-pair selections");
+assert(source.includes("seClearSelection"),"Secondary exposes a clear multi-selection action");
 let sparse=api.parsePairProbabilities("Residue_i,Residue_j,Probability\n1,4,0.8\n2,3,0.25",4);
 assert(Math.abs(sparse["0:3"]-.8)<1e-9&&Math.abs(sparse["1:2"]-.25)<1e-9,"Sparse pair probabilities parse");
 let matrix=api.parsePairProbabilities("0 0.1 0.2\n0.1 0 0.7\n0.2 0.7 0",3);

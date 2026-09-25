@@ -9,6 +9,7 @@ const SecondaryExplorer = (() => {
     circleWidth:1, letterColor:"#ffffff", letterSize:16, font:"monospace",
     fontStyle:"normal", mode:"uniform", legend:true};
   let seq="", db="", defaultSeq="", defaultDb="", pairs=[], partner=[], selected=0;
+  let selectedResidues=new Set(),selectedPairs=new Set();
   let layout="radial", overrides={}, annotations={}, onDefaultSelect=()=>{};
   let residueOverrides={}, backboneOverrides={}, selectedBackbone=0, zoom=1;
   let panX=0,panY=0,indexMode="default",indexSelection=new Set(),indexOverrides={};
@@ -371,7 +372,8 @@ const SecondaryExplorer = (() => {
     const s=effective(key), p=pos[a],q=pos[b];
     const probability=pairProbabilities[key];
     const pairColor=pairProbEnabled&&probability!=null&&!overrides[key]?.pairColor?probabilityColor(probability):s.pairColor;
-    const g=svg("g",{"data-pair":key,class:"se-pair",opacity:s.pairOpacity});
+    const pairSelected=selectedPairs.has(key);
+    const g=svg("g",{"data-pair":key,"data-pair-key":key,"data-pair-a":a,"data-pair-b":b,class:"se-pair"+(pairSelected?" selected":""),opacity:s.pairOpacity});
     const code=annotations[key];
     const identity=seq[a]+seq[b];
     const count=s.mode==="typed"?(/GC|CG/.test(identity)?3:/AU|UA/.test(identity)?2:1):1;
@@ -393,6 +395,7 @@ const SecondaryExplorer = (() => {
       g.append(svg("path",{d:path,fill:"none",stroke:pairColor,"stroke-width":s.pairWidth,
         "stroke-dasharray":dashed?"5 5":"none","stroke-linecap":"round"}));
     }
+    if(pairSelected&&!preview)g.insertBefore(svg("path",{d:path,fill:"none",stroke:"#ffffff","stroke-width":Math.max(6,Number(s.pairWidth||2)+4),opacity:.5,"stroke-linecap":"round","pointer-events":"none","data-export-remove":""}),g.firstChild);
     if(s.mode==="lw"&&code) {
       const midpoint={x:(p.x+q.x)/2,y:(arch||square)?(p.y-Math.max(42,Math.abs(dx)*.42)):(p.y+q.y)/2};
       if(code[1]===code[2]) symbol(g,code[1],midpoint.x,midpoint.y,code[0],pairColor);
@@ -406,19 +409,37 @@ const SecondaryExplorer = (() => {
       g.append(hit);
       g.setAttribute("tabindex","0");g.setAttribute("role","button");
       g.setAttribute("aria-label",`Base pair ${a+1}–${b+1}${probability!=null?", probability "+probability.toFixed(3):""}${code?", "+code:""}`);
-      const choose=()=>select(a);
-      g.addEventListener("click",choose);
+      const choose=()=>togglePairSelection(a,b,true);
+      g.addEventListener("click",e=>{e.stopPropagation();choose();});
       g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();choose();}});
     }
     parent.append(g);
   }
-  function select(index,notify=true) {
-    selected=Math.max(0,Math.min(seq.length-1,index));selectedBackbone=Math.min(selected,Math.max(0,seq.length-2));panel();render();
+  function emitSelection(kind,extra={}){
+    if(typeof window==="undefined"||typeof CustomEvent==="undefined")return;
+    window.dispatchEvent(new CustomEvent("rna-secondary-selection",{detail:{
+      kind,sequence:seq,structure:db,selectedResidues:[...selectedResidues],
+      selectedPairs:[...selectedPairs].map(k=>k.split(":").map(Number)),...extra
+    }}));
+  }
+  function select(index,notify=true,additive=true) {
+    selected=Math.max(0,Math.min(seq.length-1,index));selectedBackbone=Math.min(selected,Math.max(0,seq.length-2));
+    if(additive){if(selectedResidues.has(selected))selectedResidues.delete(selected);else selectedResidues.add(selected);}
+    else{selectedResidues=new Set([selected]);selectedPairs.clear();}
+    panel();render();
     if(notify){
-      window.dispatchEvent(new CustomEvent("rna-secondary-select",{detail:{index:selected,sequence:seq,isDefault:seq===defaultSeq&&db===defaultDb}}));
+      if(typeof window!=="undefined"&&typeof CustomEvent!=="undefined")window.dispatchEvent(new CustomEvent("rna-secondary-select",{detail:{index:selected,sequence:seq,isDefault:seq===defaultSeq&&db===defaultDb}}));
+      emitSelection("residue",{index:selected});
       if(seq===defaultSeq&&db===defaultDb) onDefaultSelect(selected);
     }
   }
+  function togglePairSelection(a,b,notify=true){
+    const key=keyOf(a,b),on=!selectedPairs.has(key);
+    if(on){selectedPairs.add(key);selectedResidues.add(a);selectedResidues.add(b);}else selectedPairs.delete(key);
+    selected=a;selectedBackbone=Math.min(a,Math.max(0,seq.length-2));panel();render();
+    if(notify)emitSelection("pair",{pair:[a,b],selected:on});
+  }
+  function clearLinkedSelection(notify=true){selectedResidues.clear();selectedPairs.clear();render();if(notify)emitSelection("clear");}
   function panel() {
     extendedPanel();
     const other=partner[selected],key=activeKey();
@@ -431,7 +452,7 @@ const SecondaryExplorer = (() => {
     ["pairColor","pairWidth","pairOpacity"].forEach(k=>$("seLocal-"+k).value=s[k]);
     $("seLocal-mode").value=overrides[key]?.mode||"inherit";
     if($("sePairChemStatus"))$("sePairChemStatus").textContent=key&&pairChemistry[key]?"Custom chemical drawing saved for this pair.":key?"Open the chemistry editor to inspect or modify this base pair.":"Select a base pair to open its chemistry.";
-    document.querySelectorAll("[data-residue-index]").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.residueIndex===selected)));
+    document.querySelectorAll("[data-residue-index]").forEach(b=>b.setAttribute("aria-pressed",String(selectedResidues.has(+b.dataset.residueIndex))));
   }
   function renderLegend() {
     const box=$("seLegend");box.hidden=!settings.legend;box.replaceChildren();
@@ -489,7 +510,8 @@ const SecondaryExplorer = (() => {
     pos.forEach((p,i)=>{
       const s=residueStyle(i);
       const g=svg("g",{transform:`translate(${p.x} ${p.y})`,class:"se-node"+(pinnedResidues.has(i)?" pinned":""),tabindex:0,role:"button","data-residue-index":i,"aria-label":`${seq[i]}${i+1}, ${partner[i]<0?"unpaired":"paired with "+(partner[i]+1)}`});
-      if(i===selected || i===partner[selected]) g.append(svg("circle",{"data-export-remove":"",r:20,fill:"none",stroke:"#ffffff","stroke-width":1.5,"stroke-dasharray":i===selected?"none":"3 3"}));
+      if(selectedResidues.has(i))g.append(svg("circle",{"data-export-remove":"",r:21,fill:"none",stroke:"#f2c66d","stroke-width":2.5}));
+      if(i===selected)g.append(svg("circle",{"data-export-remove":"",r:25,fill:"none",stroke:"#ffffff","stroke-width":1.2,"stroke-dasharray":"3 3"}));
       g.append(svg("circle",{r:16,fill:s.fillColor,stroke:s.circleColor,"stroke-width":s.circleWidth}));
       text(g,seq[i],{y:0,fill:s.letterColor,"font-family":s.font,"font-size":s.letterSize,"font-style":s.fontStyle==="italic"?"italic":"normal","font-weight":s.fontStyle==="bold"?"700":"400","text-anchor":"middle","dominant-baseline":"central"});
       const prev=pos[Math.max(0,i-1)],next=pos[Math.min(pos.length-1,i+1)];
@@ -502,7 +524,7 @@ const SecondaryExplorer = (() => {
         number.setAttribute("class","se-index");
       }
       const title=svg("title");title.textContent=`${seq[i]}${i+1}`+(metadata[i]?` · ${metadata[i].id} · ${metadata[i].value??"No value"}`:"");g.append(title);
-      g.addEventListener("click",()=>{if(!suppressNodeClick)select(i);});
+      g.addEventListener("click",e=>{if(!suppressNodeClick){e.stopPropagation();select(i,true,true);}});
       g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select(i);}});
       root.append(g);
     });
@@ -581,14 +603,14 @@ const SecondaryExplorer = (() => {
   function reorganizeControls(controls){
     const old=[...controls.children].filter(el=>el.tagName==="DETAILS");
     function group(name){
-      const el=document.createElement("details");el.open=name==="Residue ID";
-      el.innerHTML='<summary>'+name+'</summary><details open><summary>Selected</summary></details><details><summary>All</summary></details>';
+      const el=document.createElement("details");el.open=false;
+      el.innerHTML='<summary>Display · '+name+'</summary><details open><summary>Selected</summary></details><details><summary>All</summary></details>';
       controls.insertBefore(el,old[0]);return [el.children[1],el.children[2]];
     }
     const [bs,ba]=group("Backbone"),[rs,ra]=group("Residue ID"),[ps,pa]=group("Base pairs"),[ixs,ixa]=group("Residue index");
-    const layerBox=document.createElement("fieldset");
+    const layerBox=document.createElement("details");
     layerBox.className="se-data-layers";
-    layerBox.innerHTML='<legend>Data layers</legend><p>Load reactivity/residue information, base-pair probabilities, or both. Loaded data stay available while you turn each visual layer on or off independently.</p><label><input id="seLayerReactivity" type="checkbox" disabled> Show reactivity colors</label><label><input id="seLayerPairProb" type="checkbox" disabled> Show base-pair probability colors</label><p id="seLayerStatus" role="status">Reactivity: not loaded · Pair probability: not loaded</p>';
+    layerBox.innerHTML='<summary>Analyze · Data layers</summary><p>Load reactivity/residue information, base-pair probabilities, or both. Loaded data stay available while you turn each visual layer on or off independently.</p><label><input id="seLayerReactivity" type="checkbox" disabled> Show reactivity colors</label><label><input id="seLayerPairProb" type="checkbox" disabled> Show base-pair probability colors</label><p id="seLayerStatus" role="status">Reactivity: not loaded · Pair probability: not loaded</p>';
     controls.insertBefore(layerBox,controls.firstElementChild);
     setupIndexControls(ixs,ixa);
     backFields.forEach(([k])=>ba.append($("se-"+k).closest("label")));
@@ -881,7 +903,7 @@ const SecondaryExplorer = (() => {
   }
   function setupToolbar(viewport,stage){
     const toolbar=document.createElement("div");toolbar.className="se-toolbar";
-    toolbar.innerHTML='<button id="seZoomOut" type="button" aria-label="Zoom out">−</button><output id="seZoomValue" aria-live="polite">100%</output><button id="seZoomIn" type="button" aria-label="Zoom in">+</button><button id="seZoomReset" type="button">Fit structure</button><button id="seUndoLayout" type="button">Undo move</button><button id="seRedoLayout" type="button">Redo move</button><label>Move<select id="seDragMode"><option value="residue">Nucleotide</option><option value="branch">Stem / branch</option><option value="whole">Whole structure</option></select></label><label class="se-inline-check"><input id="seFlexDrag" type="checkbox" checked> Flexible neighbors</label><button id="sePinSelected" type="button">Pin selected</button><button id="seResetManualLayout" type="button">Reset layout edits</button><label>Go to residue<input id="seGoToResidue" type="number" min="1" value="1"></label><button id="seGoToButton" type="button">Go</button><button id="seExportDialogButton" type="button">Export…</button>';
+    toolbar.innerHTML='<button id="seZoomOut" type="button" aria-label="Zoom out">−</button><output id="seZoomValue" aria-live="polite">100%</output><button id="seZoomIn" type="button" aria-label="Zoom in">+</button><button id="seZoomReset" type="button">Fit structure</button><button id="seUndoLayout" type="button">Undo move</button><button id="seRedoLayout" type="button">Redo move</button><label>Move<select id="seDragMode"><option value="residue">Nucleotide</option><option value="branch">Stem / branch</option><option value="whole">Whole structure</option></select></label><label class="se-inline-check"><input id="seFlexDrag" type="checkbox" checked> Flexible neighbors</label><button id="sePinSelected" type="button">Pin selected</button><button id="seClearSelection" type="button">Clear selection</button><button id="seResetManualLayout" type="button">Reset layout edits</button><label>Go to residue<input id="seGoToResidue" type="number" min="1" value="1"></label><button id="seGoToButton" type="button">Go</button><button id="seExportDialogButton" type="button">Export…</button>';
     viewport.before(toolbar);
     const message=document.createElement("p");message.id="seExportStatus";message.setAttribute("role","status");message.className="se-export-status";viewport.after(message);
     const legend=document.createElement("div");legend.id="seHeatLegend";legend.hidden=true;stage.append(legend);
@@ -897,6 +919,7 @@ const SecondaryExplorer = (() => {
     $("seZoomOut").addEventListener("click",()=>changeZoom(.8));
     $("seZoomReset").addEventListener("click",fitStructure);
     $("seUndoLayout").addEventListener("click",undoLayout);$("seRedoLayout").addEventListener("click",redoLayout);
+    $("seClearSelection").addEventListener("click",()=>clearLinkedSelection(true));
     viewport.addEventListener("wheel",e=>{e.preventDefault();const delta=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?560:1);changeZoom(Math.exp(-Math.max(-200,Math.min(200,delta))*.003),e.clientX,e.clientY);},{passive:false});
     let drag=null,suppressMenu=false;
     viewport.addEventListener("pointerdown",e=>{if(e.button!==2)return;e.preventDefault();drag={id:e.pointerId,x:e.clientX,y:e.clientY};viewport.setPointerCapture(e.pointerId);viewport.classList.add("se-panning");});
@@ -1063,15 +1086,17 @@ const SecondaryExplorer = (() => {
       panel();render();
     });
     $("seResetPair").addEventListener("click",()=>{delete overrides[activeKey()];panel();render();});
-    load(sequence,structure);
+    load(sequence,structure);selectedResidues=new Set([selected]);selectedPairs.clear();
     if(restoreWorkspaceLocal()){panel();render();broadcastContext();}
   }
   return {setup,render,parse,parseMetadata,parsePairProbabilities,radial,orientEndsBottom,parseDbnText,parseCtText,serializeDbn,serializeCt,
     getCurrentPositions(){return coordinates().map(p=>({x:p.x,y:p.y}));},
     getWorkspaceSnapshot(){return workspaceSnapshot();},
-
-    followDefault(index){if(seq===defaultSeq&&db===defaultDb&&selected!==index)select(index,false);},
-    followExternal(index){if(index>=0&&index<seq.length&&selected!==index)select(index,false);},
-    getContext(){return {sequence:seq,structure:db,isDefault:seq===defaultSeq&&db===defaultDb,selected};}
+    clearLinkedSelection,
+    toggleExternalResidue(index){if(index>=0&&index<seq.length)select(index,false,true);},
+    toggleExternalPair(a,b){if(a>=0&&b>=0&&a<seq.length&&b<seq.length)togglePairSelection(a,b,false);},
+    followDefault(index){if(seq===defaultSeq&&db===defaultDb&&selected!==index){selected=index;panel();render();}},
+    followExternal(index){if(index>=0&&index<seq.length&&selected!==index){selected=index;panel();render();}},
+    getContext(){return {sequence:seq,structure:db,isDefault:seq===defaultSeq&&db===defaultDb,selected,selectedResidues:[...selectedResidues],selectedPairs:[...selectedPairs].map(k=>k.split(":").map(Number))};}
   };
 })();

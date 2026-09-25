@@ -30,11 +30,27 @@ try{
   d=await page.evaluate(()=>TertiaryExplorer.getDiagnostics());
   if(d.colorMode!=="uniform")throw new Error("Color control did not update 3D state.");
 
+  const analyzePanel=page.locator(".te-controls > details").filter({has:page.locator("summary").filter({hasText:/^Analyze$/})});
+  await page.locator(".te-controls > details > summary").filter({hasText:/^Analyze$/}).click();
   const split=page.locator("#teSplit");
   await split.check();
   await page.waitForSelector("#tertiaryMiniPanel:not([hidden])",{timeout:10000});
   const letters=await page.locator("#tertiaryMiniSvg text").count();
   if(letters<20)throw new Error("Linked 2D panel is not rendering residue letters; text count="+letters);
+
+  const firstPair=page.locator('#tertiaryMiniSvg [data-pair-key="0:71"]');
+  if(await firstPair.count()){
+    await firstPair.click();
+    await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectedPairCount===1,{timeout:10000});
+    d=await page.evaluate(()=>TertiaryExplorer.getDiagnostics());
+    if(d.selectionCount<2)throw new Error("Selecting a base pair did not retain both residues in additive selection.");
+    if(d.hbondCount<1)throw new Error("Selected canonical pair did not produce geometry-based H-bond candidates.");
+    const hbRows=await page.locator(".te-hbond-row").count();
+    if(hbRows<1)throw new Error("Selected base-pair H-bonds were not listed for styling.");
+    const firstToggle=page.locator(".te-hbond-row input[type=checkbox]").first();
+    await firstToggle.uncheck();
+    await firstToggle.check();
+  }
 
   await split.uncheck();
   await page.waitForSelector("#tertiaryMiniPanel",{state:"hidden",timeout:10000});
@@ -67,9 +83,10 @@ try{
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().measurementMode==="distance");
   await page.selectOption("#teMeasureMode","off");
 
+  await page.locator(".te-controls > details > summary").filter({hasText:/^Select$/}).click();
   await page.click("#teSelectCurrent");
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectionCount>0);
-  await page.locator("summary").filter({hasText:"Saved objects"}).click();
+  await page.locator("summary").filter({hasText:"Objects"}).click();
   page.once("dialog",dialog=>dialog.accept("browser_test_object"));
   await page.click("#teCreateObject");
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().savedObjectCount===1);
@@ -77,12 +94,12 @@ try{
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().isolateObjectId!==null);
   await page.getByRole("button",{name:"Show all",exact:true}).click();
 
-  await page.locator("summary").filter({hasText:"Saved camera views"}).click();
+  await page.locator("summary").filter({hasText:"Saved views"}).click();
   page.once("dialog",dialog=>dialog.accept("browser_test_view"));
   await page.click("#teSaveView");
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().savedViewCount===1);
 
-  await page.locator("summary").filter({hasText:"Compare / align structures"}).click();
+  await page.locator("summary").filter({hasText:"Compare / align"}).click();
   const pdbResponse=await fetch("https://files.rcsb.org/download/1EHZ.pdb");
   if(!pdbResponse.ok)throw new Error("Could not fetch 1EHZ PDB for alignment smoke test.");
   const pdbPath="/tmp/rna-explorer-1ehz.pdb";writeFileSync(pdbPath,await pdbResponse.text());
