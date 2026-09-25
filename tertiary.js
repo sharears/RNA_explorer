@@ -692,8 +692,13 @@ const TertiaryExplorer = (() => {
       root.querySelectorAll("[data-export-remove]").forEach(el=>el.remove());
       root.querySelectorAll("[tabindex]").forEach(el=>el.removeAttribute("tabindex"));
       root.querySelectorAll("[data-residue-index]").forEach(node=>{
-        const i=Number(node.getAttribute("data-residue-index"));node.style.cursor="pointer";
-        node.addEventListener("click",()=>chooseResidue(i));
+        const i=Number(node.getAttribute("data-residue-index"));node.style.cursor="pointer";node.classList.toggle("linked-selected",state.selectionIndices.has(i));
+        node.addEventListener("click",e=>{e.stopPropagation();chooseResidue(i);});
+      });
+      root.querySelectorAll("[data-pair-key]").forEach(node=>{
+        const a=Number(node.getAttribute("data-pair-a")),b=Number(node.getAttribute("data-pair-b")),key=pairKey(a,b);
+        node.style.cursor="pointer";node.classList.toggle("linked-selected",state.selectedPairs.has(key));
+        node.addEventListener("click",e=>{e.stopPropagation();togglePairSelection3D(a,b);});
       });
       scheduleViewerResize(true);return;
     }
@@ -711,10 +716,13 @@ const TertiaryExplorer = (() => {
     const minX=Math.min(...pos.map(p=>p.x)),maxX=Math.max(...pos.map(p=>p.x)),minY=Math.min(...pos.map(p=>p.y)),maxY=Math.max(...pos.map(p=>p.y));
     const pad=34,scale=Math.min((340-2*pad)/Math.max(1,maxX-minX),(430-2*pad)/Math.max(1,maxY-minY));
     const map=pos.map(p=>({x:pad+(p.x-minX)*scale,y:pad+(p.y-minY)*scale}));root.setAttribute("viewBox","0 0 340 430");
-    pairs.forEach(([a,b])=>root.append(make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,class:"te-mini-pair"+(a===state.selected||b===state.selected?" selected":"")})));
+    pairs.forEach(([a,b])=>{
+      const line=make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,class:"te-mini-pair"+(state.selectedPairs.has(pairKey(a,b))?" selected":""),"data-pair-a":a,"data-pair-b":b});
+      line.style.cursor="pointer";line.style.pointerEvents="stroke";line.addEventListener("click",e=>{e.stopPropagation();togglePairSelection3D(a,b);});root.append(line);
+    });
     root.append(make("polyline",{points:map.map(p=>p.x+","+p.y).join(" "),class:"te-mini-backbone"}));
     map.forEach((p,i)=>{
-      const g=make("g",{class:"te-mini-node"+(i===state.selected?" selected":"")+(partner[state.selected]===i?" paired-selected":""),transform:"translate("+p.x+" "+p.y+")",role:"button","data-residue-index":i,"aria-label":state.secondarySequence[i]+(i+1)});
+      const g=make("g",{class:"te-mini-node"+(i===state.selected?" active":"")+(state.selectionIndices.has(i)?" selected":""),transform:"translate("+p.x+" "+p.y+")",role:"button","data-residue-index":i,"aria-label":state.secondarySequence[i]+(i+1)});
       g.append(make("circle",{r:11,fill:residueColor(i,activeResidues()[i]),stroke:"#d5e2e9","stroke-width":1}));
       const label=make("text",{x:0,y:1,fill:"#07111c","font-size":10,"font-family":"monospace","text-anchor":"middle","dominant-baseline":"central"});label.textContent=state.secondarySequence[i];g.append(label);
       g.addEventListener("click",()=>chooseResidue(i));root.append(g);
@@ -740,16 +748,24 @@ const TertiaryExplorer = (() => {
   function renderObjectList(){
     const box=$("teObjectList");if(!box)return;box.replaceChildren();
     if(!state.savedObjects.length){box.textContent="No saved objects.";return;}
-    state.savedObjects.forEach(o=>{
+    state.savedObjects.forEach((o,oi)=>{
+      o.style??={color:CHAIN_COLORS[(oi+2)%CHAIN_COLORS.length],radius:.2,opacity:.22};
       const row=document.createElement("div");row.className="te-object-row";
+      const top=document.createElement("div");top.className="te-object-head";
       const name=document.createElement("input");name.value=o.name;name.setAttribute("aria-label","Object name");
       name.addEventListener("change",()=>{o.name=name.value.trim()||o.name;});
       const show=document.createElement("button");show.type="button";show.textContent=o.visible?"Hide":"Show";show.addEventListener("click",()=>{o.visible=!o.visible;renderObjectList();refreshExportObjectOptions();render();});
       const isolate=document.createElement("button");isolate.type="button";isolate.textContent=state.isolateObjectId===o.id?"Show all":"Isolate";isolate.addEventListener("click",()=>{state.isolateObjectId=state.isolateObjectId===o.id?null:o.id;renderObjectList();refreshExportObjectOptions();render();});
+      top.append(name,show,isolate);
+      const style=document.createElement("div");style.className="te-object-style";
+      style.innerHTML='<label>Color<input data-os="color" type="color"></label><label>Thickness<input data-os="radius" type="range" min="0.05" max="0.6" step="0.01"></label><label>Opacity<input data-os="opacity" type="range" min="0.05" max="1" step="0.05"></label>';
+      style.querySelector('[data-os="color"]').value=o.style.color;style.querySelector('[data-os="radius"]').value=o.style.radius;style.querySelector('[data-os="opacity"]').value=o.style.opacity;
+      style.querySelectorAll("[data-os]").forEach(input=>input.addEventListener("input",()=>{const k=input.dataset.os;o.style[k]=input.type==="range"?Number(input.value):input.value;render();}));
+      const actions=document.createElement("div");actions.className="te-button-row";
       const pdb=document.createElement("button");pdb.type="button";pdb.textContent="PDB";pdb.addEventListener("click",()=>downloadStructure("pdb",o.indices,o.name));
       const cif=document.createElement("button");cif.type="button";cif.textContent="mmCIF";cif.addEventListener("click",()=>downloadStructure("cif",o.indices,o.name));
       const del=document.createElement("button");del.type="button";del.textContent="Delete";del.addEventListener("click",()=>{state.savedObjects=state.savedObjects.filter(x=>x.id!==o.id);if(state.isolateObjectId===o.id)state.isolateObjectId=null;renderObjectList();refreshExportObjectOptions();render();});
-      row.append(name,show,isolate,pdb,cif,del);box.append(row);
+      actions.append(pdb,cif,del);row.append(top,style,actions);box.append(row);
     });
   }
   function renderSavedViews(){
