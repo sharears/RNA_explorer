@@ -158,7 +158,13 @@ function mockRcsbCif(){
     // Direct RCSB import by PDB ID.
     await page.fill("#tePdbId","1EHZ");
     await page.click("#teLoadPdbId");
-    await page.waitForFunction(()=>/RCSB PDB · 1EHZ/i.test(document.querySelector("#teStructureSource")?.textContent||""),{timeout:30000});
+    await page.waitForFunction(()=>{
+      const source=document.querySelector("#teStructureSource")?.textContent||"";
+      const status=document.querySelector("#teMolecularStatus");
+      return /RCSB PDB · 1EHZ/i.test(source)||(status&&!status.hidden&&/RCSB import failed/i.test(status.textContent||""));
+    },{timeout:30000});
+    const rcsbState=await page.evaluate(()=>({source:document.querySelector("#teStructureSource")?.textContent||"",status:document.querySelector("#teMolecularStatus")?.textContent||"",statusHidden:document.querySelector("#teMolecularStatus")?.hidden}));
+    assert(/RCSB PDB · 1EHZ/i.test(rcsbState.source),"RCSB import should update the structure source. State: "+JSON.stringify(rcsbState));
     await page.waitForFunction(()=>document.querySelectorAll("#teSequencePanel button").length>10,{timeout:30000});
     assert(!(await status.isVisible()),"RCSB-loaded structure should not leave an error overlay");
 
