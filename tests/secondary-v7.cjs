@@ -57,7 +57,7 @@ assert(oriented[0].x<oriented.at(-1).x&&Math.abs(oriented[0].y-oriented.at(-1).y
 assert(meanInterior<=baseline+1e-6,"Secondary structure extends above the bottom end baseline");
 assert(source.includes('orientEndsBottom'),"Secondary layouts enforce bottom-left 5-prime and bottom-right 3-prime orientation");
 assert(source.includes('data-arc-style="square"'),"Arc figure includes square pair connector option");
-assert(source.includes('seExportScale')&&source.includes('exportScale'),"2D export resolution is user-adjustable");
+assert(source.includes('seImageScale')&&source.includes('seImageDpi'),"2D image export resolution and DPI are user-adjustable");
 assert(source.includes('"Arial"')&&source.includes('"Calibri"')&&source.includes('"Times New Roman"'),"Expanded font families are available");
 assert(source.includes('"Font color"')&&source.includes('"Font size"'),"Residue typography labels use font terminology");
 assert(source.includes('se-color-code'),"Color picker has editable color-code companion");
@@ -71,5 +71,11 @@ assert(source.includes("sePairProbFile")&&source.includes("pairProbEnabled"),"Pa
 assert(source.includes("seLayerReactivity")&&source.includes("seLayerPairProb"),"Loaded reactivity and pair-probability layers have independent top-level toggles");
 assert(source.includes("base-pair probability data and pair styling were left unchanged"),"Loading reactivity preserves the pair-probability layer");
 assert(source.includes("MoleculeEditor.openPair"),"Secondary base pairs open the shared chemistry editor");
+assert(source.includes("rna_base_pair_probability_example.csv")&&source.includes("sePairProbExample"),"A synthetic example base-pair probability dataset is available");
+assert(source.includes("parseDbnText")&&source.includes("parseCtText")&&source.includes("serializeDbn")&&source.includes("serializeCt"),"Secondary structure supports DBN/CT import and export");
+assert(source.includes("seExportType")&&source.includes("seImageFormat")&&source.includes("seStructureFormat"),"Secondary uses a unified image/structure export dialog");
+assert(source.includes("seImageDpi"),"Secondary image export exposes a DPI target");
+assert(source.includes("WORKSPACE_KEY")&&source.includes("saveWorkspaceLocal"),"Secondary workspace can autosave locally without an account");
+assert(source.includes("rna-secondary-layout")&&source.includes("getCurrentPositions"),"Secondary broadcasts its edited layout for linked 2D/3D display");
 
 console.log("PASS: secondary Sept-24 logic and rendering-unit checks (not a browser integration test).");

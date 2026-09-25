@@ -20,4 +20,8 @@ assert(source.includes("selectedAtoms=new Set()"),"Editor tracks multi-atom sele
 assert(source.includes("covalentComponent"),"Double-click can select an entire covalent structure");
 assert(source.includes("selectionBox"),"Editor supports box selection");
 assert(source.includes("drag={ids:[...selectedAtoms]"),"Dragging a selected atom moves the whole selected group");
+for(const phrase of ["Export image…","chemExportFormat","chemExportScale","chemExportDpi","SVG","PNG","PDF"]){
+  assert(source.includes(phrase),"Chemistry editor export exposes "+phrase);
+}
+assert(source.includes("ExportTools.exportSvgElement"),"Chemistry editor uses the shared image exporter");
 console.log("PASS: molecular editor templates, editing tools, and rigid multi-atom selection.");

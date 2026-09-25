@@ -17,6 +17,8 @@ const SecondaryExplorer = (() => {
   let pairProbabilities={}, pairProbEnabled=false, pairProbTheme="viridis", pairProbTicket=0, pairChemistry={};
   let arcPairStyle="arc", exportScale=2;
   let manualOffsets={}, pinnedResidues=new Set(), dragMode="residue", flexDrag=true, nodeDrag=null, suppressNodeClick=false;
+  let layoutHistory=[],layoutFuture=[],restoringWorkspace=false;
+  const WORKSPACE_KEY="rna-explorer-secondary-workspace-v1";
   const legendSettings={
     heat:{visible:true,orientation:"horizontal",thickness:16,tickThickness:1,tickCount:3,tickValues:"",font:"monospace",fontSize:12,fontColor:"#bacbd7",x:18,y:88},
     pair:{visible:true,orientation:"horizontal",thickness:16,tickThickness:1,tickCount:3,tickValues:"",font:"monospace",fontSize:12,fontColor:"#bacbd7",x:18,y:188}
@@ -126,7 +128,78 @@ const SecondaryExplorer = (() => {
     if(stack.length) throw Error(`Unmatched opening parenthesis at position ${stack[0]+1}.`);
     return {pairs:result.sort((a,b)=>a[0]-b[0]),partner:p};
   }
-  function radial(n, p) {
+  function parseDbnText(text){
+    const lines=String(text||"").replace(/^\uFEFF/,"").split(/\r?\n/).map(v=>v.trim()).filter(Boolean);
+    if(!lines.length)throw Error("DBN file is empty.");
+    const body=lines.filter(line=>!line.startsWith(">"));
+    let sequence="",structure="";
+    body.forEach(line=>{
+      const compact=line.replace(/\s/g,"");
+      if(!structure&&/^[ACGUTacgut]+$/.test(compact))sequence+=compact.toUpperCase().replace(/T/g,"U");
+      else if(/^[().]+$/.test(compact))structure+=compact;
+    });
+    if(!sequence||!structure)throw Error("DBN must contain an RNA sequence and dot-bracket line.");
+    parse(sequence,structure);return {sequence,structure};
+  }
+  function parseCtText(text){
+    const lines=String(text||"").replace(/^\uFEFF/,"").split(/\r?\n/).map(v=>v.trim()).filter(Boolean);
+    if(lines.length<2)throw Error("CT file does not contain residue rows.");
+    const first=lines[0].split(/\s+/),n=Number(first[0]);
+    if(!Number.isInteger(n)||n<1)throw Error("CT header must begin with the residue count.");
+    const rows=lines.slice(1,1+n).map((line,row)=>{
+      const f=line.split(/\s+/);if(f.length<5)throw Error("CT row "+(row+1)+" is incomplete.");
+      const i=Number(f[0]),base=String(f[1]||"").toUpperCase().replace(/T/g,"U"),pair=Number(f[4]);
+      if(i!==row+1||!/^[ACGU]$/.test(base)||!Number.isInteger(pair)||pair<0||pair>n)throw Error("Invalid CT row "+(row+1)+".");
+      return {i,base,pair};
+    });
+    const sequence=rows.map(r=>r.base).join(""),chars=Array(n).fill(".");
+    rows.forEach(r=>{
+      if(r.pair>r.i){chars[r.i-1]="(";chars[r.pair-1]=")";}
+      if(r.pair&&rows[r.pair-1]?.pair!==r.i)throw Error("CT pairing is not reciprocal at residue "+r.i+".");
+    });
+    const structure=chars.join("");parse(sequence,structure);return {sequence,structure};
+  }
+  function serializeDbn(){return ">RNA_Structure_Explorer\n"+seq+"\n"+db+"\n";}
+  function serializeCt(){
+    const lines=[seq.length+" ENERGY = 0 RNA Structure Explorer"];
+    for(let i=0;i<seq.length;i++)lines.push([i+1,seq[i],i===0?0:i,i===seq.length-1?0:i+2,partner[i]>=0?partner[i]+1:0,i+1].join("\t"));
+    return lines.join("\n")+"\n";
+  }
+  function workspaceSnapshot(){
+    return {sequence:seq,structure:db,layout,arcPairStyle,manualOffsets,zoom,panX,panY,metadata,heatEnabled,heatTheme,heatRange,pairProbabilities,pairProbEnabled,pairProbTheme,
+      legendSettings,residueOverrides,backboneOverrides,indexMode,indexSelection:[...indexSelection],indexOverrides,pinnedResidues:[...pinnedResidues]};
+  }
+  function saveWorkspaceLocal(){
+    if(restoringWorkspace||typeof localStorage==="undefined"||!seq)return;
+    try{localStorage.setItem(WORKSPACE_KEY,JSON.stringify(workspaceSnapshot()));}catch(_){}
+  }
+  function restoreWorkspaceLocal(){
+    if(typeof localStorage==="undefined")return false;
+    if(typeof window==="undefined")return false;const search=String(window.location?.search||"");if(!/[?&]page=(secondary|tertiary)(?:&|$)/.test(search))return false;
+    try{
+      const raw=localStorage.getItem(WORKSPACE_KEY);if(!raw)return false;const w=JSON.parse(raw);
+      if(!w?.sequence||!w?.structure)return false;parse(w.sequence,w.structure);
+      restoringWorkspace=true;load(w.sequence,w.structure);
+      layout=["radial","circular","arc"].includes(w.layout)?w.layout:"radial";arcPairStyle=w.arcPairStyle==="square"?"square":"arc";
+      manualOffsets=w.manualOffsets||{};zoom=Number(w.zoom)||1;panX=Number(w.panX)||0;panY=Number(w.panY)||0;
+      metadata=w.metadata||{};heatEnabled=!!w.heatEnabled;heatTheme=w.heatTheme||"viridis";heatRange=Array.isArray(w.heatRange)?w.heatRange:[0,1];
+      pairProbabilities=w.pairProbabilities||{};pairProbEnabled=!!w.pairProbEnabled;pairProbTheme=w.pairProbTheme||"viridis";
+      residueOverrides=w.residueOverrides||{};backboneOverrides=w.backboneOverrides||{};indexMode=w.indexMode||"default";indexSelection=new Set(w.indexSelection||[]);indexOverrides=w.indexOverrides||{};pinnedResidues=new Set(w.pinnedResidues||[]);
+      if(w.legendSettings)Object.keys(legendSettings).forEach(k=>Object.assign(legendSettings[k],w.legendSettings[k]||{}));
+      restoringWorkspace=false;
+      $("secondarySequence").value=seq;$("secondaryDotBracket").value=db;
+      document.querySelectorAll("[data-secondary-layout]").forEach(b=>{const active=b.dataset.secondaryLayout===layout;b.classList.toggle("active",active);b.setAttribute("aria-pressed",String(active));});
+      if($("seArcPairStyle"))$("seArcPairStyle").hidden=layout!=="arc";
+      return true;
+    }catch(_){restoringWorkspace=false;return false;}
+  }
+  function pushLayoutHistory(){
+    layoutHistory.push(JSON.stringify(manualOffsets));if(layoutHistory.length>60)layoutHistory.shift();layoutFuture=[];
+  }
+  function undoLayout(){if(!layoutHistory.length)return;layoutFuture.push(JSON.stringify(manualOffsets));manualOffsets=JSON.parse(layoutHistory.pop());render();}
+  function redoLayout(){if(!layoutFuture.length)return;layoutHistory.push(JSON.stringify(manualOffsets));manualOffsets=JSON.parse(layoutFuture.pop());render();}
+  function fitStructure(){zoom=1;panX=panY=0;applyZoom();}
+    function radial(n, p) {
     const out=Array(n), step=44, width=90;
     function branch(a,b,origin,d) {
       const right={x:d.y,y:-d.x};
@@ -260,6 +333,7 @@ const SecondaryExplorer = (() => {
       select(index);
       const weights=dragWeightsFor(index);
       if(!weights.size){$("seDragStatus").textContent="That selection is pinned. Unpin it before moving.";return;}
+      pushLayoutHistory();
       const start=pointerInSecondary(event),base={};
       weights.forEach((w,i)=>base[i]={x:manualOffsets[i]?.x||0,y:manualOffsets[i]?.y||0,w});
       nodeDrag={pointer:event.pointerId,start,base,moved:false};
@@ -435,14 +509,16 @@ const SecondaryExplorer = (() => {
     text(root,"5′",{x:pos[0].x-30,y:pos[0].y,fill:"#74d7b6","font-size":16,"text-anchor":"end"});
     text(root,"3′",{x:pos.at(-1).x+30,y:pos.at(-1).y,fill:"#74d7b6","font-size":16});
     $("secondaryStageNote").textContent=`${layout[0].toUpperCase()+layout.slice(1)} · ${seq.length} residues · ${pairs.length} pairs · Select a residue index or pair`;
-    renderLegend();renderHeatLegend();renderPairProbabilityLegend();updateLayerSummary();
+    renderLegend();renderHeatLegend();renderPairProbabilityLegend();updateLayerSummary();saveWorkspaceLocal();
+    if(typeof window!=="undefined"&&typeof CustomEvent!=="undefined")window.dispatchEvent(new CustomEvent("rna-secondary-layout",{detail:{sequence:seq,structure:db,layout,positions:pos.map(p=>({x:p.x,y:p.y}))}}));
   }
   function broadcastContext() {
     const isDefault=seq===defaultSeq&&db===defaultDb;
+    if(typeof window==="undefined"||typeof CustomEvent==="undefined"){saveWorkspaceLocal();return;}
     window.dispatchEvent(new CustomEvent("rna-secondary-context",{detail:{isDefault,sequence:seq,structure:db}}));
     window.dispatchEvent(new CustomEvent("rna-metadata-change",{detail:{
       isDefault,sequence:seq,metadata:{...metadata},heatEnabled,heatTheme,heatRange:[...heatRange]
-    }}));
+    }}));saveWorkspaceLocal();
   }
   function load(sequence,structure) {
     const parsed=parse(sequence,structure);
@@ -555,6 +631,7 @@ const SecondaryExplorer = (() => {
       '<label>Font color<input id="sePairLegendFontColor" type="color" value="#bacbd7"></label></details>');
     old.forEach(el=>el.remove());
     $("seMetadataFile").closest("fieldset").insertAdjacentHTML("afterbegin",'<button type="button" id="seExample">Load example reactivity CSV</button><p><a href="data/rna_residue_reactivity.csv" download>Download example CSV</a> · Values supplied for the default tRNA.</p>');
+    $("sePairProbFile").closest("fieldset").insertAdjacentHTML("afterbegin",'<button type="button" id="sePairProbExample">Load example base-pair probabilities</button><p><a href="data/rna_base_pair_probability_example.csv" download>Download example probability CSV</a> · Synthetic demonstration data for the default tRNA.</p>');
     $("seBackList").addEventListener("change",e=>{selectedBackbone=Number(e.target.value);panel();});
     const bindLocal=(fields,prefix,target,index)=>fields.forEach(([k])=>$(prefix+k).addEventListener("input",e=>{
       if(!e.target.checkValidity())return;
@@ -626,7 +703,17 @@ const SecondaryExplorer = (() => {
         render();
       }catch(error){if(ticket===pairProbTicket)$("sePairProbStatus").textContent="Upload failed: "+error.message;}
     });
-    function bindLegendControls(kind,prefix){
+    $("sePairProbExample").addEventListener("click",async()=>{
+      const ticket=++pairProbTicket;$("sePairProbStatus").textContent="Loading example…";
+      try{
+        const response=await fetch("data/rna_base_pair_probability_example.csv");if(!response.ok)throw Error("Could not load example probability CSV.");
+        if(seq!==defaultSeq||db!==defaultDb){$("secondarySequence").value=defaultSeq;$("secondaryDotBracket").value=defaultDb;load(defaultSeq,defaultDb);}
+        const data=parsePairProbabilities(await response.text(),seq.length);if(ticket!==pairProbTicket)return;
+        pairProbabilities=data;pairProbEnabled=true;$("sePairProbEnabled").checked=true;
+        $("sePairProbStatus").textContent=Object.keys(data).length+" synthetic pair probabilities loaded for demonstration.";render();
+      }catch(error){$("sePairProbStatus").textContent=error.message;}
+    });
+        function bindLegendControls(kind,prefix){
       const cfg=legendSettings[kind],pairs=[
         ["Visible","visible",el=>el.checked],["Orientation","orientation",el=>el.value],
         ["Ticks","tickCount",el=>Number(el.value)],["Values","tickValues",el=>el.value],
@@ -794,7 +881,7 @@ const SecondaryExplorer = (() => {
   }
   function setupToolbar(viewport,stage){
     const toolbar=document.createElement("div");toolbar.className="se-toolbar";
-    toolbar.innerHTML='<button id="seZoomOut" type="button" aria-label="Zoom out">−</button><output id="seZoomValue" aria-live="polite">100%</output><button id="seZoomIn" type="button" aria-label="Zoom in">+</button><button id="seZoomReset" type="button">Reset view</button><label>Move<select id="seDragMode"><option value="residue">Nucleotide</option><option value="branch">Stem / branch</option><option value="whole">Whole structure</option></select></label><label class="se-inline-check"><input id="seFlexDrag" type="checkbox" checked> Flexible neighbors</label><button id="sePinSelected" type="button">Pin selected</button><button id="seResetManualLayout" type="button">Reset layout edits</button><label class="se-resolution-control">Export resolution <input id="seExportScale" type="range" min="1" max="4" step=".5" value="2"><output id="seExportScaleValue">2×</output></label><button id="seDownload" type="button">Download PNG</button>';
+    toolbar.innerHTML='<button id="seZoomOut" type="button" aria-label="Zoom out">−</button><output id="seZoomValue" aria-live="polite">100%</output><button id="seZoomIn" type="button" aria-label="Zoom in">+</button><button id="seZoomReset" type="button">Fit structure</button><button id="seUndoLayout" type="button">Undo move</button><button id="seRedoLayout" type="button">Redo move</button><label>Move<select id="seDragMode"><option value="residue">Nucleotide</option><option value="branch">Stem / branch</option><option value="whole">Whole structure</option></select></label><label class="se-inline-check"><input id="seFlexDrag" type="checkbox" checked> Flexible neighbors</label><button id="sePinSelected" type="button">Pin selected</button><button id="seResetManualLayout" type="button">Reset layout edits</button><label>Go to residue<input id="seGoToResidue" type="number" min="1" value="1"></label><button id="seGoToButton" type="button">Go</button><button id="seExportDialogButton" type="button">Export…</button>';
     viewport.before(toolbar);
     const message=document.createElement("p");message.id="seExportStatus";message.setAttribute("role","status");message.className="se-export-status";viewport.after(message);
     const legend=document.createElement("div");legend.id="seHeatLegend";legend.hidden=true;stage.append(legend);
@@ -808,7 +895,8 @@ const SecondaryExplorer = (() => {
     }
     $("seZoomIn").addEventListener("click",()=>changeZoom(1.25));
     $("seZoomOut").addEventListener("click",()=>changeZoom(.8));
-    $("seZoomReset").addEventListener("click",()=>{zoom=1;panX=panY=0;applyZoom();});
+    $("seZoomReset").addEventListener("click",fitStructure);
+    $("seUndoLayout").addEventListener("click",undoLayout);$("seRedoLayout").addEventListener("click",redoLayout);
     viewport.addEventListener("wheel",e=>{e.preventDefault();const delta=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?560:1);changeZoom(Math.exp(-Math.max(-200,Math.min(200,delta))*.003),e.clientX,e.clientY);},{passive:false});
     let drag=null,suppressMenu=false;
     viewport.addEventListener("pointerdown",e=>{if(e.button!==2)return;e.preventDefault();drag={id:e.pointerId,x:e.clientX,y:e.clientY};viewport.setPointerCapture(e.pointerId);viewport.classList.add("se-panning");});
@@ -830,9 +918,9 @@ const SecondaryExplorer = (() => {
       else {pinnedResidues.add(selected);$("seDragStatus").textContent="Residue "+(selected+1)+" pinned. Neighbor relaxation will leave it fixed.";}
       render();
     });
-    $("seResetManualLayout").addEventListener("click",()=>{manualOffsets={};pinnedResidues.clear();$("seDragStatus").textContent="Manual layout edits cleared.";render();});
-    $("seExportScale").addEventListener("input",e=>{exportScale=Number(e.target.value);$("seExportScaleValue").textContent=exportScale+"×";});
-    $("seDownload").addEventListener("click",exportPng);
+    $("seResetManualLayout").addEventListener("click",()=>{pushLayoutHistory();manualOffsets={};pinnedResidues.clear();$("seDragStatus").textContent="Manual layout edits cleared.";render();});
+    $("seGoToButton").addEventListener("click",()=>{const i=Number($("seGoToResidue").value)-1;if(i>=0&&i<seq.length){select(i);$("seDragStatus").textContent="Selected residue "+(i+1)+"."; }else $("seDragStatus").textContent="Residue number must be between 1 and "+seq.length+".";});
+    $("seExportDialogButton").addEventListener("click",()=>$("seExportDialog")?.showModal());
     if(typeof ResizeObserver!=="undefined")new ResizeObserver(()=>{if(seq)applyZoom();}).observe(viewport);
   }
 
@@ -898,6 +986,38 @@ const SecondaryExplorer = (() => {
     const legend=document.createElement("div");legend.id="seLegend";legend.setAttribute("aria-label","Base-pair legend");stage.append(legend);
     setupToolbar(viewport,stage);
     installNodeDragging(root);
+    const fileTools=document.createElement("div");fileTools.className="secondary-file-tools";
+    fileTools.innerHTML='<label class="secondary-action">Import DBN / CT<input id="seStructureImport" type="file" accept=".dbn,.ct,.txt,text/plain" hidden></label><button class="secondary-action" id="seClearAutosave" type="button">Clear local autosave</button>';
+    document.querySelector(".secondary-workspace-actions")?.insertAdjacentElement("afterend",fileTools);
+    const exportDialog=document.createElement("dialog");exportDialog.id="seExportDialog";exportDialog.className="se-export-dialog";
+    exportDialog.innerHTML='<button type="button" class="dialog-close" id="seExportClose" aria-label="Close">×</button><h3>Export Secondary Structure</h3><label>Export type<select id="seExportType"><option value="image">Image</option><option value="structure">Structure</option></select></label><div id="seImageExportOptions"><label>Format<select id="seImageFormat"><option value="png">PNG</option><option value="svg">SVG</option><option value="pdf">PDF</option></select></label><label>Resolution / scale<input id="seImageScale" type="range" min="1" max="6" step=".5" value="2"><output id="seImageScaleValue">2×</output></label><label>DPI target<select id="seImageDpi"><option value="96">96</option><option value="150">150</option><option value="300" selected>300</option><option value="600">600</option></select></label><label>Background<select id="seImageBackground"><option value="transparent">Transparent</option><option value="#ffffff">White</option><option value="#0b1220">Dark</option></select></label></div><div id="seStructureExportOptions" hidden><label>Format<select id="seStructureFormat"><option value="dbn">DBN</option><option value="ct">CT</option></select></label></div><button type="button" class="primary-action" id="seExportNow">Export</button><p id="seExportDialogStatus" role="status"></p>';
+    document.body.append(exportDialog);
+    $("seExportClose").addEventListener("click",()=>exportDialog.close());
+    $("seExportType").addEventListener("change",e=>{$("seImageExportOptions").hidden=e.target.value!=="image";$("seStructureExportOptions").hidden=e.target.value!=="structure";});
+    $("seImageScale").addEventListener("input",e=>$("seImageScaleValue").textContent=e.target.value+"×");
+    $("seExportNow").addEventListener("click",async()=>{
+      const out=$("seExportDialogStatus");out.textContent="Preparing export…";
+      try{
+        if($("seExportType").value==="structure"){
+          const fmt=$("seStructureFormat").value;
+          ExportTools.downloadText(fmt==="ct"?serializeCt():serializeDbn(),"rna-secondary."+(fmt==="ct"?"ct":"dbn"),"text/plain;charset=utf-8");
+          out.textContent=(fmt==="ct"?"CT":"DBN")+" structure exported.";
+        }else{
+          const fmt=$("seImageFormat").value,dpi=Number($("seImageDpi").value)||96,scale=(Number($("seImageScale").value)||1)*(dpi/96),bg=$("seImageBackground").value;
+          const result=await ExportTools.exportSvgElement(root,{format:fmt,filename:"rna-secondary-"+layout,scale,background:bg,viewBox:root.dataset.fullViewBox});
+          out.textContent=fmt.toUpperCase()+" image exported"+(result?.width?" · "+result.width+" × "+result.height:"")+".";
+        }
+      }catch(error){out.textContent="Export failed: "+error.message;}
+    });
+    $("seStructureImport").addEventListener("change",async e=>{
+      const file=e.target.files[0];if(!file)return;
+      try{
+        const text=await file.text(),parsed=file.name.toLowerCase().endsWith(".ct")?parseCtText(text):parseDbnText(text);
+        $("secondarySequence").value=parsed.sequence;$("secondaryDotBracket").value=parsed.structure;load(parsed.sequence,parsed.structure);status("Imported "+file.name+" · "+parsed.sequence.length+" residues.");
+      }catch(error){status("Import failed: "+error.message,true);}
+      e.target.value="";
+    });
+    $("seClearAutosave").addEventListener("click",()=>{try{localStorage.removeItem(WORKSPACE_KEY);}catch(_){}status("Local workspace autosave cleared.");});
     const status=(message,error=false)=>{$("secondaryInputStatus").textContent=message;$("secondaryInputStatus").classList.toggle("error",error);};
     $("renderSecondaryButton").addEventListener("click",()=>{
       try {
@@ -944,8 +1064,12 @@ const SecondaryExplorer = (() => {
     });
     $("seResetPair").addEventListener("click",()=>{delete overrides[activeKey()];panel();render();});
     load(sequence,structure);
+    if(restoreWorkspaceLocal()){panel();render();broadcastContext();}
   }
-  return {setup,render,parse,parseMetadata,parsePairProbabilities,radial,orientEndsBottom,
+  return {setup,render,parse,parseMetadata,parsePairProbabilities,radial,orientEndsBottom,parseDbnText,parseCtText,serializeDbn,serializeCt,
+    getCurrentPositions(){return coordinates().map(p=>({x:p.x,y:p.y}));},
+    getWorkspaceSnapshot(){return workspaceSnapshot();},
+
     followDefault(index){if(seq===defaultSeq&&db===defaultDb&&selected!==index)select(index,false);},
     followExternal(index){if(index>=0&&index<seq.length&&selected!==index)select(index,false);},
     getContext(){return {sequence:seq,structure:db,isDefault:seq===defaultSeq&&db===defaultDb,selected};}

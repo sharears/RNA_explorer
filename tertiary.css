@@ -240,3 +240,17 @@
 .te-measurement-row { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:start; border-top:1px solid var(--line); padding-top:7px; }
 .te-measurement-row button { border:1px solid var(--line); background:transparent; color:var(--text); border-radius:6px; padding:5px 8px; cursor:pointer; }
 .te-measurement-row button:hover { border-color:var(--mint); color:var(--mint); }
+
+
+/* Extended tertiary workspace */
+.te-contact-list{max-height:180px;overflow:auto;display:grid;gap:4px;margin:7px 0 12px;color:var(--muted);font-size:.72rem;line-height:1.35}
+.te-contact-list>div{border-top:1px solid rgba(255,255,255,.06);padding-top:4px}
+.te-export-dialog{width:min(520px,calc(100% - 28px));background:#0d1726;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:26px;box-shadow:0 28px 90px rgba(0,0,0,.55)}
+.te-export-dialog::backdrop{background:rgba(4,8,15,.72);backdrop-filter:blur(4px)}
+.te-export-dialog h3{margin:0 0 18px;font-size:1.35rem}
+.te-export-dialog label{display:grid;gap:6px;margin:12px 0;color:var(--cream);font-size:.78rem}
+.te-export-dialog select,.te-export-dialog input{border:1px solid var(--line);border-radius:7px;background:#091321;color:var(--text);padding:8px}
+.te-export-dialog output{color:var(--mint);font-family:"DM Mono",monospace}
+.te-export-dialog #teExportDialogStatus{min-height:1.3em;color:var(--muted);font-size:.78rem}
+#tertiaryStage:fullscreen{background:#07111c;padding:18px}
+#tertiaryStage:fullscreen .tertiary-molecular-viewer{min-height:calc(100vh - 100px)}
