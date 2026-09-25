@@ -58,11 +58,18 @@ const hash=b=>crypto.createHash("sha256").update(b).digest("hex");
 
     const viewport=page.locator("#tertiaryViewport");
     const initial=hash(await viewport.screenshot());
+    await page.click("#teResetView");
+    await wait(350);
+    const resetHash=hash(await viewport.screenshot());
+    console.log("3D hashes initial/reset:",initial,resetHash,"state",JSON.stringify(await page.evaluate(()=>TertiaryExplorer.getDebugState())));
 
     await page.selectOption("#teRepresentation","spheres");
     await wait(350);
     const spheres=hash(await viewport.screenshot());
-    assert.notStrictEqual(spheres,initial,"Representation change should immediately update the 3D drawing");
+    const sphereState=await page.evaluate(()=>TertiaryExplorer.getDebugState());
+    console.log("3D spheres hash/state:",spheres,JSON.stringify(sphereState));
+    assert(sphereState.representation==="spheres"&&sphereState.atomStyle&&sphereState.atomStyle.sphere,"Sphere representation should be applied to RNA atoms");
+    assert.notStrictEqual(spheres,resetHash,"Representation change should immediately update the 3D drawing");
 
     await page.selectOption("#teColorMode","uniform");
     await page.fill("#teUniformColor","#ff00aa");
