@@ -30,7 +30,7 @@ const TertiaryExplorer = (() => {
   const state={
     defaultSequence:"",defaultStructure:"",secondarySequence:"",structure:"",
     colors:{},names:{},onSelect:()=>{},selected:0,
-    representation:"sticks",colorMode:"nucleotide",showPairs:true,showIndices:true,showSelectedLabel:true,
+    representation:"sticks",colorMode:"nucleotide",showPairs:false,showIndices:true,showSelectedLabel:true,
     indexSelection:new Set(),metadata:{},heatEnabled:false,heatTheme:"viridis",heatRange:[0,1],
     secondaryIsDefault:true,sourceIsDefault:true,sameMoleculeConfirmed:false,
     proximityEnabled:false,proximityCutoff:12,contactEnabled:false,contactCutoff:4.0,
@@ -40,7 +40,8 @@ const TertiaryExplorer = (() => {
     mapping:{enabled:false,level:"pending",message:""},
     surfaceEnabled:false,surfaceOpacity:0.35,uniformColor:"#74d7b6",backgroundColor:"#07111c",orthographic:false,
     visibility:{rna:true,protein:true,solvent:false,ions:true,other:true,hydrogen:false},
-    selectionIndices:new Set(),selectionLabels:false,
+    directSelectionIndices:new Set(),selectionIndices:new Set(),selectionLabels:false,
+    selectedPairs:new Set(),pairHBondCutoff:3.5,pairHBondStyles:{},residueStyles:{},
     savedObjects:[],objectSerial:1,isolateObjectId:null,
     savedViews:[],viewSerial:1,
     comparison:{model:null,name:"",rmsd:null,count:0,visible:true,status:""},
@@ -79,6 +80,81 @@ const TertiaryExplorer = (() => {
     const name=String(atom?.atom||"").replace(/[^A-Za-z]/g,"").toUpperCase();
     return name.slice(0,name.startsWith("CL")||name.startsWith("BR")?2:1);
   }
+  const HBOND_CHEMISTRY={
+    A:{donor:new Set(["N6"]),acceptor:new Set(["N1","N3","N7"])},
+    C:{donor:new Set(["N4"]),acceptor:new Set(["N3","O2"])},
+    G:{donor:new Set(["N1","N2"]),acceptor:new Set(["O6","N3","N7"])},
+    U:{donor:new Set(["N3"]),acceptor:new Set(["O2","O4"])}
+  };
+  const pairKey=(a,b)=>Math.min(a,b)+":"+Math.max(a,b);
+  const parsePairKey=key=>String(key).split(":").map(Number);
+  function refreshCombinedSelection(){
+    const next=new Set(state.directSelectionIndices);
+    state.selectedPairs.forEach(key=>{const [a,b]=parsePairKey(key);if(Number.isInteger(a))next.add(a);if(Number.isInteger(b))next.add(b);});
+    state.selectionIndices=next;
+  }
+  function toggleResidueSelection(index){
+    state.selected=clamp(index,0,Math.max(0,activeResidues().length-1));
+    state.directSelectionIndices.has(state.selected)?state.directSelectionIndices.delete(state.selected):state.directSelectionIndices.add(state.selected);
+    refreshCombinedSelection();render();
+  }
+  function togglePairSelection(a,b){
+    const key=pairKey(a,b);
+    state.selectedPairs.has(key)?state.selectedPairs.delete(key):state.selectedPairs.add(key);
+    state.selected=clamp(a,0,Math.max(0,activeResidues().length-1));
+    refreshCombinedSelection();render();
+  }
+  function styleDefaults(kind="measurement"){
+    return kind==="hbond"
+      ?{visible:true,lineStyle:"dashed",color:"#74d7b6",thickness:1,opacity:.92,label:false}
+      :{visible:true,lineStyle:"solid",color:"#ffffff",thickness:1,opacity:.82,label:true};
+  }
+  function atomName(a){return String(a?.atom||"").trim().toUpperCase();}
+  function pairHydrogenBonds(key){
+    const [a,b]=parsePairKey(key),ra=activeResidues()[a],rb=activeResidues()[b];if(!ra||!rb)return [];
+    const ca=HBOND_CHEMISTRY[baseAt(a)],cb=HBOND_CHEMISTRY[baseAt(b)];if(!ca||!cb)return [];
+    const polarA=(ra.atoms||[]).filter(x=>["N","O"].includes(normalizeElement(x)));
+    const polarB=(rb.atoms||[]).filter(x=>["N","O"].includes(normalizeElement(x)));
+    const hits=[];
+    polarA.forEach(x=>polarB.forEach(y=>{
+      const xa=atomName(x),ya=atomName(y);
+      const directional=(ca.donor.has(xa)&&cb.acceptor.has(ya))||(ca.acceptor.has(xa)&&cb.donor.has(ya));
+      if(!directional)return;
+      const d=Math.hypot(x.x-y.x,x.y-y.y,x.z-y.z);
+      if(d<=state.pairHBondCutoff&&d>1.5){
+        const id=key+"|"+xa+"-"+ya;
+        hits.push({id,key,a,b,atomA:x,atomB:y,distance:d});
+      }
+    }));
+    return hits.sort((x,y)=>x.distance-y.distance);
+  }
+  function linePoint(a,b,t){return {x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,z:a.z+(b.z-a.z)*t};}
+  function drawStyledLine(start,end,style,baseRadius=.055){
+    if(!viewer||style?.visible===false)return;
+    const cfg={...styleDefaults(),...(style||{})},radius=baseRadius*Math.max(.35,Number(cfg.thickness)||1),opacity=clamp(Number(cfg.opacity)||.82,.05,1);
+    if(cfg.lineStyle==="solid"){
+      viewer.addCylinder({start,end,radius,color:cfg.color,opacity,fromCap:1,toCap:1});return;
+    }
+    const d=Math.hypot(start.x-end.x,start.y-end.y,start.z-end.z),count=Math.max(4,Math.min(28,Math.ceil(d/(cfg.lineStyle==="dotted"?.45:.8))));
+    if(cfg.lineStyle==="dotted"){
+      for(let i=0;i<=count;i++)viewer.addSphere({center:linePoint(start,end,i/count),radius:radius*1.35,color:cfg.color,opacity});
+      return;
+    }
+    for(let i=0;i<count;i+=2){
+      const t0=i/count,t1=Math.min(1,(i+1)/count);
+      viewer.addCylinder({start:linePoint(start,end,t0),end:linePoint(start,end,t1),radius,color:cfg.color,opacity,fromCap:1,toCap:1});
+    }
+  }
+  function resolvedHBondStyle(pair,hbond){
+    const group=state.pairHBondStyles[pair]||{},individual=group.individual?.[hbond.id]||{};
+    return {...styleDefaults("hbond"),...group,...individual,individual:undefined};
+  }
+  function ensurePairStyle(key){
+    if(!state.pairHBondStyles[key])state.pairHBondStyles[key]={...styleDefaults("hbond"),individual:{}};
+    if(!state.pairHBondStyles[key].individual)state.pairHBondStyles[key].individual={};
+    return state.pairHBondStyles[key];
+  }
+
   function parseStructure(structure,n){
     const stack=[],ps=[],pt=Array(n).fill(-1);
     [...structure].forEach((c,i)=>{
@@ -291,7 +367,8 @@ const TertiaryExplorer = (() => {
   }
   function resetModelState(){
     hoverLabel=null;initialView=null;state.selected=0;state.measurementPicks=[];state.measurements=[];state.measurementMode="off";
-    state.selectionIndices.clear();state.savedObjects=[];state.isolateObjectId=null;state.savedViews=[];clearComparison(false);
+    state.directSelectionIndices.clear();state.selectionIndices.clear();state.selectedPairs.clear();state.pairHBondStyles={};state.residueStyles={};
+    state.savedObjects=[];state.isolateObjectId=null;state.savedViews=[];clearComparison(false);
   }
   async function setModelFromText(text,format,sourceIsDefault,fileName){
     if(!viewer)throw new Error("3D viewer is not ready.");
@@ -331,20 +408,21 @@ const TertiaryExplorer = (() => {
     return viewerPromise;
   }
 
-  function styleFor(color,elementMode=false){
-    const colorSpec=elementMode?{colorscheme:"Jmol"}:{color};
-    if(state.representation==="ballstick")return {stick:{radius:.12,...colorSpec},sphere:{radius:.24,...colorSpec}};
-    if(state.representation==="wire")return {line:{linewidth:2,...colorSpec}};
-    if(state.representation==="spheres")return {sphere:{scale:.34,...colorSpec}};
-    if(state.representation==="cartoon")return {cartoon:{...colorSpec,thickness:.4}};
-    return {stick:{radius:.14,...colorSpec}};
+  function styleFor(color,elementMode=false,override=null){
+    const factor=Math.max(.25,Number(override?.thickness)||1),opacity=clamp(Number(override?.opacity??1),.05,1);
+    const colorSpec=override?.color?{color:override.color}:elementMode?{colorscheme:"Jmol"}:{color};
+    if(state.representation==="ballstick")return {stick:{radius:.12*factor,opacity,...colorSpec},sphere:{radius:.24*factor,opacity,...colorSpec}};
+    if(state.representation==="wire")return {line:{linewidth:Math.max(1,2*factor),opacity,...colorSpec}};
+    if(state.representation==="spheres")return {sphere:{scale:.34*factor,opacity,...colorSpec}};
+    if(state.representation==="cartoon")return {cartoon:{...colorSpec,opacity,thickness:.4*factor}};
+    return {stick:{radius:.14*factor,opacity,...colorSpec}};
   }
   function applyResidueRepresentation(r,i){
-    const elementMode=state.colorMode==="element",color=residueColor(i,r),sel=selectorForResidue(r);
+    const elementMode=state.colorMode==="element",color=residueColor(i,r),sel=selectorForResidue(r),override=state.residueStyles[i]||null;
     if(state.representation==="backbone"){
-      const b={...sel,atom:BACKBONE_ATOMS};
-      model.setStyle(b,{stick:{radius:.14,...(elementMode?{colorscheme:"Jmol"}:{color})}});
-    }else model.setStyle(sel,styleFor(color,elementMode));
+      const b={...sel,atom:BACKBONE_ATOMS},factor=Math.max(.25,Number(override?.thickness)||1),opacity=clamp(Number(override?.opacity??1),.05,1);
+      model.setStyle(b,{stick:{radius:.14*factor,opacity,...(override?.color?{color:override.color}:elementMode?{colorscheme:"Jmol"}:{color})}});
+    }else model.setStyle(sel,styleFor(color,elementMode,override));
   }
   function isVisibleIndex(i){
     if(state.isolateObjectId==null)return true;
