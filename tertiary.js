@@ -602,7 +602,7 @@ const TertiaryExplorer = (() => {
         const styleLabel=document.createElement("label");styleLabel.textContent="All bond lines";styleLabel.append(styleSelect);
         const colorLabel=document.createElement("label"),color=document.createElement("input");colorLabel.textContent="Color";color.type="color";color.value=style.color;color.addEventListener("input",()=>{style.color=color.value;render();});colorLabel.append(color);
         const thickLabel=document.createElement("label"),thick=document.createElement("input");thickLabel.textContent="Thickness";thick.type="range";thick.min=".5";thick.max="4";thick.step=".25";thick.value=style.thickness;thick.addEventListener("input",()=>{style.thickness=Number(thick.value);render();});thickLabel.append(thick);
-        const opLabel=document.createElement("label"),opacity=document.createElement("input");opLabel.textContent="Transparency";opacity.type="range";opacity.min=".1";opacity.max="1";opacity.step=".05";opacity.value=style.opacity;opacity.addEventListener("input",()=>{style.opacity=Number(opacity.value);render();});opLabel.append(opacity);
+        const opLabel=document.createElement("label"),opacity=document.createElement("input");opLabel.textContent="Opacity (lower = more transparent)";opacity.type="range";opacity.min=".1";opacity.max="1";opacity.step=".05";opacity.value=style.opacity;opacity.addEventListener("input",()=>{style.opacity=Number(opacity.value);render();});opLabel.append(opacity);
         const labLabel=document.createElement("label"),lab=document.createElement("input");lab.type="checkbox";lab.checked=!!style.label;labLabel.append(lab,document.createTextNode(" Show distance labels"));lab.addEventListener("change",()=>{style.label=lab.checked;render();});
         group.append(styleLabel,colorLabel,thickLabel,opLabel,labLabel);card.append(group);
         const list=document.createElement("div");list.className="te-hbond-list";
@@ -613,11 +613,11 @@ const TertiaryExplorer = (() => {
           const check=document.createElement("input");check.type="checkbox";check.checked=own.visible!==false;check.addEventListener("click",e=>e.stopPropagation());check.addEventListener("change",()=>{own.visible=check.checked;render();});
           const text=document.createElement("span");text.textContent=(n+1)+". "+atomName(h.atomA)+" ↔ "+atomName(h.atomB)+" · "+h.distance.toFixed(2)+" Å";sum.append(check,text);row.append(sum);
           const individual=document.createElement("div");individual.className="te-style-grid";
-          const lsel=document.createElement("select");[["","Use pair style"],["solid","Solid"],["dashed","Dashed"],["dotted","Dotted"]].forEach(([v,t])=>lsel.append(new Option(t,v)));lsel.value=own.lineStyle||"";lsel.addEventListener("change",()=>{own.lineStyle=lsel.value||undefined;render();});
+          const lsel=document.createElement("select");[["","Use pair style"],["solid","Solid"],["dashed","Dashed"],["dotted","Dotted"]].forEach(([v,t])=>lsel.append(new Option(t,v)));lsel.value=own.lineStyle||"";lsel.addEventListener("change",()=>{if(lsel.value)own.lineStyle=lsel.value;else delete own.lineStyle;render();});
           const ll=document.createElement("label");ll.textContent="Line";ll.append(lsel);
           const ci=document.createElement("input");ci.type="color";ci.value=own.color||style.color;ci.addEventListener("input",()=>{own.color=ci.value;render();});const cl=document.createElement("label");cl.textContent="Color";cl.append(ci);
           const ti=document.createElement("input");ti.type="range";ti.min=".5";ti.max="4";ti.step=".25";ti.value=own.thickness||style.thickness;ti.addEventListener("input",()=>{own.thickness=Number(ti.value);render();});const tl=document.createElement("label");tl.textContent="Thickness";tl.append(ti);
-          const oi=document.createElement("input");oi.type="range";oi.min=".1";oi.max="1";oi.step=".05";oi.value=own.opacity??style.opacity;oi.addEventListener("input",()=>{own.opacity=Number(oi.value);render();});const ol=document.createElement("label");ol.textContent="Transparency";ol.append(oi);
+          const oi=document.createElement("input");oi.type="range";oi.min=".1";oi.max="1";oi.step=".05";oi.value=own.opacity??style.opacity;oi.addEventListener("input",()=>{own.opacity=Number(oi.value);render();});const ol=document.createElement("label");ol.textContent="Opacity";ol.append(oi);
           individual.append(ll,cl,tl,ol);row.append(individual);list.append(row);
         });card.append(list);
       }
@@ -1110,7 +1110,7 @@ const TertiaryExplorer = (() => {
       '<details open><summary>Style selected residues</summary><div class="te-style-grid">'+
       '<label>Color<input id="teSelectionStyleColor" type="color" value="#f2c66d"></label>'+
       '<label>Thickness<input id="teSelectionStyleThickness" type="range" min=".5" max="4" step=".25" value="1.5"></label>'+
-      '<label>Transparency<input id="teSelectionStyleOpacity" type="range" min=".1" max="1" step=".05" value="1"></label></div>'+
+      '<label>Opacity <small>(lower = more transparent)</small><input id="teSelectionStyleOpacity" type="range" min=".1" max="1" step=".05" value="1"></label></div>'+
       '<div class="te-button-row"><button type="button" id="teApplySelectionStyle">Apply to selection</button><button type="button" id="teResetSelectionStyle">Reset selected style</button><button type="button" id="teContextClear">Clear selection</button></div></details>'+
       '<details><summary>Base-pair hydrogen bonds</summary><label>H-bond distance cutoff (Å)<input id="tePairHBondCutoff" type="number" min="2.5" max="4.5" step=".1" value="3.5"></label><p class="te-tool-note">For selected 2D base pairs, the 3D view tests standard A/C/G/U donor–acceptor heavy atoms. Only contacts within this cutoff are drawn.</p><div id="tePairSelectionPanel" hidden></div></details>';
     status.insertAdjacentElement("afterend",context);
@@ -1180,6 +1180,7 @@ const TertiaryExplorer = (() => {
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
       selectionCount:state.selectionIndices.size,directSelectionCount:state.directSelectionIndices.size,selectedPairCount:state.selectedPairs.size,
       selectedPairHBondCount:[...state.selectedPairs].reduce((n,key)=>n+pairHydrogenBonds(key).length,0),
+      visiblePairHBondCount:[...state.selectedPairs].reduce((n,key)=>n+pairHydrogenBonds(key).filter(h=>resolvedHBondStyle(key,h).visible!==false).length,0),
       savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
       comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count};}
   };
