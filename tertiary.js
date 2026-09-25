@@ -1024,5 +1024,5 @@ const TertiaryExplorer = (() => {
     render();
   }
 
-  return {setup,render,compareChain,normalizeBase,hornFit,serializePdb,serializeCif};
+  return {setup,render,compareChain,normalizeBase,normalizePdbId,hornFit,serializePdb,serializeCif,atomDistance,atomAngle,atomDihedral};
 })();
