@@ -827,7 +827,15 @@ const TertiaryExplorer = (() => {
     const text=await file.text();if(!text.trim())throw new Error("The uploaded structure file is empty.");
     await ensureViewer();await setModelFromText(text,format,false,name);viewer.zoomTo({},250);viewer.render();initialView=viewer.getView?viewer.getView():null;
   }
-  function ensureEnhancementStyles(){
+  async function loadFromPdbId(value){
+    const {id,text}=await fetchRcsbCif(value);
+    await ensureViewer();
+    await setModelFromText(text,"cif",id==="1EHZ","RCSB PDB · "+id);
+    if($("tePdbId"))$("tePdbId").value=id;
+    render();return id;
+  }
+
+    function ensureEnhancementStyles(){
     if(document.getElementById("teEnhancementStyles"))return;
     const style=document.createElement("style");style.id="teEnhancementStyles";style.textContent=`
       .te-sequence-panel{display:flex;flex-wrap:wrap;gap:.28rem;max-height:9rem;overflow:auto;padding:.45rem 0}
@@ -836,6 +844,7 @@ const TertiaryExplorer = (() => {
       .te-object-row,.te-view-row{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin:.4rem 0}
       .te-object-row input{min-width:8rem;flex:1}.te-visibility-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.3rem}
       .te-inline-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem}
+      .te-pdb-id-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.45rem;align-items:end}.te-pdb-id-row label{margin:0}.te-pdb-id-row button{margin:0 0 .1rem}
       .te-tool-note{font-size:.78rem;opacity:.8}.te-object-row button,.te-view-row button{padding:.35rem .5rem}
     `;document.head.append(style);
   }
@@ -845,6 +854,8 @@ const TertiaryExplorer = (() => {
       '<div class="te-controls">'+
       '<details open><summary>Import structure &amp; 2D/3D mapping</summary>'+
       '<p id="teStructureSource">PDB 1EHZ</p>'+
+      '<div class="te-pdb-id-row"><label>PDB ID<input id="tePdbId" type="text" inputmode="text" maxlength="4" autocomplete="off" placeholder="e.g. 1EHZ"></label><button type="button" id="teLoadPdbId">Load from RCSB PDB</button></div>'+
+      '<p class="te-tool-note">Enter a four-character PDB ID to download the current mmCIF coordinates directly from RCSB PDB.</p>'+
       '<label>Import PDB / mmCIF<input id="teStructureFile" type="file" accept=".pdb,.ent,.cif,.mmcif,chemical/x-pdb,chemical/x-cif"></label>'+
       '<button type="button" id="teRestoreStructure">Restore example 1EHZ</button>'+
       '<label>RNA chain<select id="teChainSelect"></select></label>'+
@@ -906,8 +917,15 @@ const TertiaryExplorer = (() => {
     $("teSplit").addEventListener("change",e=>{state.split=e.target.checked&&state.mapping.enabled;render();});
     $("teSameMolecule").addEventListener("change",e=>{state.sameMoleculeConfirmed=e.target.checked;evaluateMapping();render();});
     $("teChainSelect").addEventListener("change",e=>{state.activeChain=e.target.value;state.chainNeedsChoice=false;state.sameMoleculeConfirmed=false;buildResidueLookup();evaluateMapping();state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();render();});
+    const loadPdbId=async()=>{
+      const raw=$("tePdbId").value;setStatus("Loading "+String(raw||"").trim().toUpperCase()+" from RCSB PDB…");
+      try{const id=await loadFromPdbId(raw);setStatus("");$("tePdbId").value=id;}
+      catch(error){setStatus("RCSB import failed: "+error.message,"error");}
+    };
+    $("teLoadPdbId").addEventListener("click",loadPdbId);
+    $("tePdbId").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();loadPdbId();}});
     $("teStructureFile").addEventListener("change",async e=>{const file=e.target.files[0];if(!file)return;setStatus("Loading "+file.name+"…");try{await handleStructureUpload(file);setStatus("");}catch(error){setStatus("Upload failed: "+error.message,"error");}});
-    $("teRestoreStructure").addEventListener("click",async()=>{$("teStructureFile").value="";setStatus("Restoring PDB 1EHZ…");try{await ensureViewer();await loadDefaultStructure();render();}catch(error){setStatus("Restore failed: "+error.message,"error");}});
+    $("teRestoreStructure").addEventListener("click",async()=>{$("teStructureFile").value="";if($("tePdbId"))$("tePdbId").value="";setStatus("Restoring PDB 1EHZ…");try{await ensureViewer();await loadDefaultStructure();render();}catch(error){setStatus("Restore failed: "+error.message,"error");}});
     $("teIndexDefault").addEventListener("click",()=>{state.indexSelection=defaultIndices();buildIndexChoices();render();});
     $("teIndexAll").addEventListener("click",()=>{const n=state.mapping.enabled?state.secondarySequence.length:activeResidues().length;state.indexSelection=new Set(Array.from({length:n},(_,i)=>i));buildIndexChoices();render();});
     $("teIndexNone").addEventListener("click",()=>{state.indexSelection.clear();buildIndexChoices();render();});
