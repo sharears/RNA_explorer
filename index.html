@@ -9,9 +9,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=home-cover-1" />
-  <link rel="stylesheet" href="secondary.css?v=secondary-15" />
-  <link rel="stylesheet" href="tertiary.css?v=tertiary-8" />
+  <link rel="stylesheet" href="styles.css?v=interaction-redesign-1" />
+  <link rel="stylesheet" href="secondary.css?v=secondary-16" />
+  <link rel="stylesheet" href="tertiary.css?v=tertiary-9" />
   <link rel="stylesheet" href="chemistry-editor.css?v=chem-editor-4" />
 </head>
 <body>
@@ -59,7 +59,11 @@
           <p class="home-cover-lede">Learn the chemistry, edit 2D structure, inspect 3D coordinates, measure what matters, and export what you need — all in your browser.</p>
           <div class="home-cover-actions">
             <a class="home-solid-action" href="?page=journey">Learn RNA structure</a>
-            <a class="home-cover-secondary" href="?page=secondary">Analyze an RNA</a>
+            <button class="home-cover-secondary home-analyze-toggle" id="homeAnalyzeToggle" type="button" aria-expanded="false" aria-controls="homeAnalyzeBranches">Analyze an RNA</button>
+          </div>
+          <div class="home-analyze-branches" id="homeAnalyzeBranches" hidden>
+            <a href="?page=secondary"><span>2D</span><strong>Secondary structure</strong><small>Edit, style, map data, and export.</small></a>
+            <a href="?page=tertiary"><span>3D</span><strong>Tertiary structure</strong><small>Inspect, select, measure, compare, and export.</small></a>
           </div>
           <p class="home-cover-note">No account required · Bring a sequence, a structure file, or just a PDB ID.</p>
         </div>
@@ -68,27 +72,6 @@
           <blockquote class="home-thought-bubble">A little editing here…<br>a better base pair there…<br><strong>RNA makes sense!</strong></blockquote>
           <figcaption>From building blocks to editable 2D and interactive 3D structure.</figcaption>
         </figure>
-      </section>
-
-      <section class="home-paths" aria-label="Choose how to start">
-        <article class="home-path-card">
-          <span class="home-path-kicker">LEARN</span>
-          <h2>Learn RNA structure</h2>
-          <p>Follow the guided six-scale journey from chemical building blocks through primary, secondary, and tertiary structure.</p>
-          <div class="home-path-actions">
-            <a class="home-solid-action" id="homeLearnButton" href="?page=journey">Start guided journey</a>
-            <a class="home-solid-action" id="homeExampleButton" href="?page=example">Open example tRNA</a>
-          </div>
-        </article>
-        <article class="home-path-card">
-          <span class="home-path-kicker">ANALYZE</span>
-          <h2>Analyze your own RNA</h2>
-          <p>Enter a sequence and secondary structure, load reactivity and/or base-pair probability data, then link a matching 3D structure.</p>
-          <div class="home-path-actions">
-            <a class="home-solid-action" id="homeAnalyzeButton" href="?page=secondary">Open Secondary Structure Workspace</a>
-            <a class="home-solid-action" id="homeUpload3DButton" href="?page=tertiary">Open Tertiary Structure Workspace</a>
-          </div>
-        </article>
       </section>
 
       <nav class="scale-nav" aria-label="RNA structural scale">
@@ -262,7 +245,7 @@
               <div class="te-region-legend" id="teRegionLegendStage" hidden></div>
             </div>
             <p class="te-interaction-help">Left drag: rotate · Mouse wheel: zoom · Ctrl/⌘ + drag or middle drag: pan · Click an atom to select its nucleotide</p>
-            <p class="stage-note">All-atom molecular coordinates · PDB 1EHZ · 3Dmol.js renderer · Pair connectors are mapped secondary-structure relationships, not hydrogen-bond geometry.</p>
+            <p class="stage-note">All-atom molecular coordinates · PDB 1EHZ · 3Dmol.js renderer · Select residues or base pairs in the linked 2D view. Selected base pairs show only geometry-supported donor–acceptor contacts in 3D.</p>
           </div>
         </section>
       </div>
@@ -290,8 +273,8 @@
   <script src="chemistry-editor.js?v=chem-editor-4"></script>
   <script src="journey.js"></script>
   <script src="primary-animation.js"></script>
-  <script src="secondary.js?v=secondary-15"></script>
-  <script src="tertiary.js?v=tertiary-8"></script>
-  <script src="app.js?v=workspace-ux-1"></script>
+  <script src="secondary.js?v=secondary-16"></script>
+  <script src="tertiary.js?v=tertiary-9"></script>
+  <script src="app.js?v=interaction-redesign-1"></script>
 </body>
 </html>
