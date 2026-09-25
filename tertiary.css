@@ -254,3 +254,14 @@
 .te-export-dialog #teExportDialogStatus{min-height:1.3em;color:var(--muted);font-size:.78rem}
 #tertiaryStage:fullscreen{background:#07111c;padding:18px}
 #tertiaryStage:fullscreen .tertiary-molecular-viewer{min-height:calc(100vh - 100px)}
+
+
+/* Tertiary stability + RCSB import */
+.te-pdb-id-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end;margin:8px 0}
+.te-pdb-id-row label{margin:0!important}
+.te-pdb-id-row input{text-transform:uppercase;font-family:"DM Mono",monospace;letter-spacing:.08em}
+.te-pdb-id-row button{white-space:nowrap}
+.te-split-shell:not(.linked){grid-template-columns:minmax(0,1fr)}
+#tertiaryMiniSvg .se-node text{pointer-events:none}
+#tertiaryMiniSvg .se-node{cursor:pointer}
+@media(max-width:560px){.te-pdb-id-row{grid-template-columns:1fr}.te-pdb-id-row button{width:100%}}
