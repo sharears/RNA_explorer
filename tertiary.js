@@ -190,8 +190,13 @@ const TertiaryExplorer = (() => {
     try{
       if(fit)viewer.zoomTo({},0);
       else if(view&&viewer.setView)viewer.setView(view);
-      viewer.render();
-    }catch(error){console.warn("3D viewer refresh:",error);}
+      // Explicit regeneration avoids stale WebGL geometry after a representation/color style swap.
+      // 3Dmol normally invalidates model geometry on setStyle; regen makes that contract explicit here.
+      viewer.render(null,{regen:true});
+    }catch(error){
+      try{viewer.render();}catch(_){}
+      console.warn("3D viewer refresh:",error);
+    }
   }
   async function settleViewerLayout({fit=false}={}){
     const ticket=++resizeTicket;await nextFrame();await nextFrame();if(ticket!==resizeTicket||!viewer)return;
