@@ -365,3 +365,129 @@ body[data-page-mode="journey"] .home-paths { display:none !important; }
   .home-paths { min-height:auto; padding:30px 0 80px; }
   .home-feedback-button { right:12px; bottom:12px; }
 }
+
+
+/* Homepage cover */
+.home-cover{
+  display:grid;
+  grid-template-columns:minmax(0,.88fr) minmax(420px,1.12fr);
+  gap:clamp(22px,4vw,56px);
+  align-items:center;
+  min-height:min(690px,calc(100vh - 92px));
+  margin:22px 0 18px;
+  padding:clamp(22px,4vw,54px);
+  border:1px solid var(--line);
+  border-radius:18px;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 17% 20%,rgba(116,215,182,.10),transparent 32%),
+    linear-gradient(145deg,rgba(15,29,45,.96),rgba(7,15,26,.93));
+}
+.home-cover-copy{position:relative;z-index:2;max-width:650px}
+.home-cover-kicker{
+  margin:0 0 16px;
+  color:var(--mint);
+  font:500 11px/1.3 "DM Mono",monospace;
+  letter-spacing:.16em;
+}
+.home-cover h1{
+  margin:0;
+  max-width:720px;
+  color:var(--cream);
+  font-size:clamp(2.6rem,5.2vw,5.5rem);
+  line-height:.96;
+  letter-spacing:-.045em;
+}
+.home-cover h1 span{color:var(--mint)}
+.home-cover-lede{
+  margin:24px 0 0;
+  max-width:620px;
+  color:var(--text);
+  font-size:clamp(1rem,1.45vw,1.16rem);
+  line-height:1.7;
+}
+.home-cover-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px}
+.home-cover-secondary{
+  display:inline-flex;align-items:center;justify-content:center;min-height:44px;
+  padding:11px 15px;border:1px solid var(--line);border-radius:8px;
+  color:var(--text);text-decoration:none;font-weight:750;background:rgba(255,255,255,.035);
+}
+.home-cover-secondary:hover{border-color:rgba(116,215,182,.58);color:var(--mint);transform:translateY(-1px)}
+.home-cover-note{
+  margin:16px 0 0;color:var(--muted);
+  font:11px/1.55 "DM Mono",monospace;
+}
+.home-cover-art{
+  position:relative;
+  align-self:stretch;
+  min-height:560px;
+  margin:0;
+  border-radius:14px;
+  overflow:hidden;
+  background:#12100d;
+  box-shadow:0 24px 70px rgba(0,0,0,.34);
+}
+.home-cover-art::after{
+  content:"";
+  position:absolute;inset:0;
+  background:linear-gradient(90deg,rgba(5,12,20,.14),transparent 34%,rgba(4,9,16,.05));
+  pointer-events:none;
+}
+.home-cover-art img{
+  display:block;width:100%;height:100%;min-height:560px;object-fit:cover;object-position:center 46%;
+}
+.home-thought-bubble{
+  position:absolute;
+  z-index:3;
+  top:7%;
+  right:6%;
+  width:min(235px,40%);
+  margin:0;
+  padding:16px 18px 18px;
+  border:1px solid rgba(255,255,255,.45);
+  border-radius:48% 52% 46% 54% / 55% 49% 51% 45%;
+  background:rgba(244,236,216,.94);
+  color:#29231d;
+  text-align:center;
+  font:italic 600 clamp(.76rem,1.1vw,.98rem)/1.45 Georgia,serif;
+  box-shadow:0 10px 28px rgba(0,0,0,.25);
+  transform:rotate(-2deg);
+}
+.home-thought-bubble::before,.home-thought-bubble::after{
+  content:"";position:absolute;border-radius:50%;background:rgba(244,236,216,.94);
+  box-shadow:0 0 0 1px rgba(255,255,255,.35);
+}
+.home-thought-bubble::before{width:20px;height:20px;left:-22px;bottom:12px}
+.home-thought-bubble::after{width:10px;height:10px;left:-34px;bottom:2px}
+.home-thought-bubble strong{color:#792f31;font-weight:800}
+.home-cover-art figcaption{
+  position:absolute;z-index:3;left:16px;bottom:14px;
+  max-width:72%;padding:7px 9px;border-radius:7px;
+  background:rgba(7,14,23,.72);color:#dbe7ed;
+  font:10px/1.45 "DM Mono",monospace;
+  backdrop-filter:blur(7px);
+}
+body:not([data-page-mode="home"]) .home-cover{display:none!important}
+body[data-page-mode="home"] .home-paths{
+  min-height:auto;
+  align-items:stretch;
+  margin:0 0 86px;
+}
+body[data-page-mode="home"] .home-path-card{
+  min-height:220px;
+  padding:clamp(22px,3vw,36px);
+}
+@media(max-width:980px){
+  .home-cover{grid-template-columns:1fr;min-height:auto}
+  .home-cover-copy{max-width:none}
+  .home-cover-art{min-height:520px}
+  .home-cover-art img{min-height:520px;object-position:center 42%}
+}
+@media(max-width:620px){
+  .home-cover{margin:12px 0 16px;padding:16px;border-radius:14px}
+  .home-cover h1{font-size:clamp(2.35rem,12vw,3.55rem)}
+  .home-cover-art{min-height:440px}
+  .home-cover-art img{min-height:440px}
+  .home-thought-bubble{top:5%;right:4%;width:46%;padding:12px 13px;font-size:.72rem}
+  .home-cover-art figcaption{display:none}
+}
