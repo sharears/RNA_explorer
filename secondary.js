@@ -406,7 +406,12 @@ const SecondaryExplorer = (() => {
       g.append(hit);
       g.setAttribute("tabindex","0");g.setAttribute("role","button");
       g.setAttribute("aria-label",`Base pair ${a+1}–${b+1}${probability!=null?", probability "+probability.toFixed(3):""}${code?", "+code:""}`);
-      const choose=()=>select(a);
+      const choose=()=>{
+        select(a);
+        if(typeof window!=="undefined"&&typeof CustomEvent!=="undefined"){
+          window.dispatchEvent(new CustomEvent("rna-secondary-pair-select",{detail:{a,b,key,sequence:seq,structure:db,isDefault:seq===defaultSeq&&db===defaultDb}}));
+        }
+      };
       g.addEventListener("click",choose);
       g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();choose();}});
     }
@@ -581,14 +586,16 @@ const SecondaryExplorer = (() => {
   function reorganizeControls(controls){
     const old=[...controls.children].filter(el=>el.tagName==="DETAILS");
     function group(name){
-      const el=document.createElement("details");el.open=name==="Residue ID";
+      const el=document.createElement("details");el.open=false;
       el.innerHTML='<summary>'+name+'</summary><details open><summary>Selected</summary></details><details><summary>All</summary></details>';
       controls.insertBefore(el,old[0]);return [el.children[1],el.children[2]];
     }
-    const [bs,ba]=group("Backbone"),[rs,ra]=group("Residue ID"),[ps,pa]=group("Base pairs"),[ixs,ixa]=group("Residue index");
-    const layerBox=document.createElement("fieldset");
+    const [bs,ba]=group("Display · Backbone"),[rs,ra]=group("Display · Residues"),[ps,pa]=group("Display · Base pairs"),[ixs,ixa]=group("Display · Residue index");
+    const layerBox=document.createElement("details");
     layerBox.className="se-data-layers";
-    layerBox.innerHTML='<legend>Data layers</legend><p>Load reactivity/residue information, base-pair probabilities, or both. Loaded data stay available while you turn each visual layer on or off independently.</p><label><input id="seLayerReactivity" type="checkbox" disabled> Show reactivity colors</label><label><input id="seLayerPairProb" type="checkbox" disabled> Show base-pair probability colors</label><p id="seLayerStatus" role="status">Reactivity: not loaded · Pair probability: not loaded</p>';
+    layerBox.innerHTML='<summary>Analyze · data layers</summary><p>Load reactivity/residue information, base-pair probabilities, or both. Loaded data stay available while you turn each visual layer on or off independently.</p><label><input id="seLayerReactivity" type="checkbox" disabled> Show reactivity colors</label><label><input id="seLayerPairProb" type="checkbox" disabled> Show base-pair probability colors</label><p id="seLayerStatus" role="status">Reactivity: not loaded · Pair probability: not loaded</p>';
+    const guide=document.createElement("div");guide.className="se-workspace-guide";guide.innerHTML='<strong>2D workspace</strong><span>Start with sequence/structure and layout. Open Display or Analyze only when you need them.</span>';
+    controls.insertBefore(guide,controls.firstElementChild);
     controls.insertBefore(layerBox,controls.firstElementChild);
     setupIndexControls(ixs,ixa);
     backFields.forEach(([k])=>ba.append($("se-"+k).closest("label")));
