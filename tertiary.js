@@ -190,9 +190,9 @@ const TertiaryExplorer = (() => {
     try{
       if(fit)viewer.zoomTo({},0);
       else if(view&&viewer.setView)viewer.setView(view);
-      // Explicit regeneration avoids stale WebGL geometry after a representation/color style swap.
-      // 3Dmol normally invalidates model geometry on setStyle; regen makes that contract explicit here.
-      viewer.render(null,{regen:true});
+      // GLModel.setStyle invalidates the affected geometry; a normal render is enough and
+      // avoids rebuilding the entire molecular scene on every UI interaction.
+      viewer.render();
     }catch(error){
       try{viewer.render();}catch(_){}
       console.warn("3D viewer refresh:",error);
