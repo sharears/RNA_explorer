@@ -58,6 +58,7 @@ try{
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().proximityEnabled===true);
   await page.locator("#teProximity").uncheck();
 
+  await page.locator("summary").filter({hasText:"Clipping"}).click();
   await page.locator("#teClipEnabled").check();
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().clipEnabled===true);
   await page.locator("#teClipEnabled").uncheck();
@@ -68,6 +69,7 @@ try{
 
   await page.click("#teSelectCurrent");
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectionCount>0);
+  await page.locator("summary").filter({hasText:"Saved objects"}).click();
   page.once("dialog",dialog=>dialog.accept("browser_test_object"));
   await page.click("#teCreateObject");
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().savedObjectCount===1);
@@ -75,10 +77,12 @@ try{
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().isolateObjectId!==null);
   await page.getByRole("button",{name:"Show all",exact:true}).click();
 
+  await page.locator("summary").filter({hasText:"Saved camera views"}).click();
   page.once("dialog",dialog=>dialog.accept("browser_test_view"));
   await page.click("#teSaveView");
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().savedViewCount===1);
 
+  await page.locator("summary").filter({hasText:"Compare / align structures"}).click();
   const pdbResponse=await fetch("https://files.rcsb.org/download/1EHZ.pdb");
   if(!pdbResponse.ok)throw new Error("Could not fetch 1EHZ PDB for alignment smoke test.");
   const pdbPath="/tmp/rna-explorer-1ehz.pdb";writeFileSync(pdbPath,await pdbResponse.text());
