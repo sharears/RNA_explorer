@@ -41,7 +41,9 @@ const tertiary = read("tertiary.js");
   "PyMOL-style sticks",
   "Show mapped secondary-structure pair connections",
   "Highlight 3D proximity",
-  "Measure C4′ distance",
+  "Distance · 2 atoms",
+  "Angle · 3 atoms",
+  "Dihedral · 4 atoms",
   "2D + 3D linked view",
   "Secondary element",
   "Residue information",
@@ -66,6 +68,8 @@ assert.strictEqual(tertiaryApi.compareChain(fakeChain,"ACGU").exact,true,"Exact 
 assert.strictEqual(tertiaryApi.compareChain(fakeChain,"ACGA").mismatches.length,1,"Sequence mismatch is detected");
 assert.strictEqual(tertiaryApi.compareChain(fakeChain,"ACG").lengthMatch,false,"Length mismatch is detected");
 
+assert(tertiary.includes("handleAtomMeasurementClick"), "Atom-click measurement workflow should be available");
+assert(tertiary.includes("teMeasurementList")&&tertiary.includes("teMeasureClear"), "Multiple measurements can be listed and cleared");
 assert(!html.includes('id="tertiarySvg"'), "Legacy SVG tertiary canvas should be removed");
 assert(html.includes("All-atom molecular coordinates"), "Tertiary description should identify the all-atom model");
 console.log("tertiary molecular/static checks passed");
