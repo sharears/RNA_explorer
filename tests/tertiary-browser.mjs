@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import { writeFileSync } from "node:fs";
 
 const base=process.env.RNA_EXPLORER_URL||"http://127.0.0.1:4173/?page=tertiary";
 const browser=await chromium.launch({headless:true});
@@ -46,11 +47,63 @@ try{
   if(!d.modelReady||d.atomCount<100)throw new Error("RCSB PDB-ID import did not load a usable model.");
 
   await page.locator("#teSurface").check();
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().surfaceEnabled===true);
   await page.locator("#teSurface").uncheck();
+
   await page.locator("#teContacts").check();
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().contactEnabled===true);
   await page.locator("#teContacts").uncheck();
+
   await page.locator("#teProximity").check();
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().proximityEnabled===true);
   await page.locator("#teProximity").uncheck();
+
+  await page.locator("#teClipEnabled").check();
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().clipEnabled===true);
+  await page.locator("#teClipEnabled").uncheck();
+
+  await page.selectOption("#teMeasureMode","distance");
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().measurementMode==="distance");
+  await page.selectOption("#teMeasureMode","off");
+
+  await page.click("#teSelectCurrent");
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectionCount>0);
+  page.once("dialog",dialog=>dialog.accept("browser_test_object"));
+  await page.click("#teCreateObject");
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().savedObjectCount===1);
+  await page.getByRole("button",{name:"Isolate",exact:true}).click();
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().isolateObjectId!==null);
+  await page.getByRole("button",{name:"Show all",exact:true}).click();
+
+  page.once("dialog",dialog=>dialog.accept("browser_test_view"));
+  await page.click("#teSaveView");
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().savedViewCount===1);
+
+  const pdbResponse=await fetch("https://files.rcsb.org/download/1EHZ.pdb");
+  if(!pdbResponse.ok)throw new Error("Could not fetch 1EHZ PDB for alignment smoke test.");
+  const pdbPath="/tmp/rna-explorer-1ehz.pdb";writeFileSync(pdbPath,await pdbResponse.text());
+  await page.setInputFiles("#teAlignFile",pdbPath);
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().comparisonCount>=3,{timeout:30000});
+  d=await page.evaluate(()=>TertiaryExplorer.getDiagnostics());
+  if(!Number.isFinite(d.comparisonRmsd))throw new Error("Alignment did not produce an RMSD.");
+
+  await page.click("#teOpenExport");
+  await page.selectOption("#teExportType","structure");
+  const structureDownload=page.waitForEvent("download",{timeout:15000});
+  await page.click("#teExportNow");
+  const structureFile=await structureDownload;
+  if(!structureFile.suggestedFilename().endsWith(".pdb"))throw new Error("Structure export did not produce a PDB download.");
+  await page.click("#teExportClose");
+
+  await page.click("#teOpenExport");
+  await page.selectOption("#teExportType","image");
+  await page.selectOption("#teImageFormat","png");
+  await page.selectOption("#teImageDpi","96");
+  await page.locator("#teImageScale").evaluate(el=>{el.value="1";el.dispatchEvent(new Event("input",{bubbles:true}));});
+  const imageDownload=page.waitForEvent("download",{timeout:20000});
+  await page.click("#teExportNow");
+  const imageFile=await imageDownload;
+  if(!imageFile.suggestedFilename().endsWith(".png"))throw new Error("Image export did not produce a PNG download.");
 
   const serious=pageErrors.filter(x=>!/favicon|ResizeObserver loop/i.test(x));
   if(serious.length)throw new Error("Browser runtime errors:\n"+serious.join("\n"));
