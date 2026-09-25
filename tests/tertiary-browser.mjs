@@ -30,6 +30,8 @@ try{
   d=await page.evaluate(()=>TertiaryExplorer.getDiagnostics());
   if(d.colorMode!=="uniform")throw new Error("Color control did not update 3D state.");
 
+  const analyzePanel=page.locator(".te-controls > details").filter({has:page.locator("summary").filter({hasText:/^Analyze$/})});
+  await page.locator(".te-controls > details > summary").filter({hasText:/^Analyze$/}).click();
   const split=page.locator("#teSplit");
   await split.check();
   await page.waitForSelector("#tertiaryMiniPanel:not([hidden])",{timeout:10000});
@@ -43,7 +45,6 @@ try{
     d=await page.evaluate(()=>TertiaryExplorer.getDiagnostics());
     if(d.selectionCount<2)throw new Error("Selecting a base pair did not retain both residues in additive selection.");
     if(d.hbondCount<1)throw new Error("Selected canonical pair did not produce geometry-based H-bond candidates.");
-    await page.locator("summary").filter({hasText:"Analyze"}).first().click().catch(()=>{});
     const hbRows=await page.locator(".te-hbond-row").count();
     if(hbRows<1)throw new Error("Selected base-pair H-bonds were not listed for styling.");
     const firstToggle=page.locator(".te-hbond-row input[type=checkbox]").first();
