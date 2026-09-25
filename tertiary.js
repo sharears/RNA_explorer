@@ -29,6 +29,7 @@ const TertiaryExplorer = (() => {
     indexSelection:new Set(),metadata:{},heatEnabled:false,heatTheme:"viridis",heatRange:[0,1],
     secondaryIsDefault:true,sourceIsDefault:true,sameMoleculeConfirmed:false,
     proximityEnabled:false,proximityCutoff:12,measureEnabled:false,measureA:null,measureB:null,
+    measurementMode:"off",measurementPicks:[],measurements:[],measurementSerial:1,
     split:false,exportScale:2,currentFileName:"PDB 1EHZ",currentFormat:"pdb",
     chains:[],activeChain:null,chainNeedsChoice:false,residueIndexByKey:new Map(),
     mapping:{enabled:false,level:"pending",message:""}
@@ -303,6 +304,8 @@ const TertiaryExplorer = (() => {
     const chainSel=chain.id?{chain:chain.id}:{};
     viewer.setClickable(chainSel,true,atom=>{
       const i=state.residueIndexByKey.get(residueKey(atom.chain,atom.resi,atom.icode));
+      if(Number.isInteger(i))state.selected=i;
+      if(state.measurementMode!=="off"){handleAtomMeasurementClick(atom);return;}
       if(Number.isInteger(i))chooseResidue(i);
     });
     viewer.setHoverDuration(80);
@@ -325,6 +328,7 @@ const TertiaryExplorer = (() => {
 
   function resetModelState(){
     hoverLabel=null;initialView=null;state.measureA=null;state.measureB=null;state.selected=0;
+    state.measurementPicks=[];state.measurements=[];state.measurementMode="off";
   }
 
   async function setModelFromText(text,format,sourceIsDefault,fileName){
@@ -412,17 +416,74 @@ const TertiaryExplorer = (() => {
       : "No non-neighboring residues within "+state.proximityCutoff+" Å of "+baseAt(state.selected)+(state.selected+1)+".";
   }
 
-  function addMeasurement(){
-    const s=$("teMeasureStatus");
-    if(!state.measureEnabled){if(s)s.textContent="Select two residues to measure a C4′–C4′ distance.";return;}
-    if(state.measureA==null){if(s)s.textContent="Measurement mode: choose the first residue.";return;}
-    if(state.measureB==null){if(s)s.textContent="First residue: "+baseAt(state.measureA)+(state.measureA+1)+". Choose the second residue.";return;}
-    const a=state.measureA,b=state.measureB,x=coordFor(a),y=coordFor(b),d=distance3D(a,b);
-    if(!x||!y||!Number.isFinite(d))return;
-    viewer.addCylinder({start:x,end:y,radius:.09,color:"#ffffff",opacity:.9,fromCap:1,toCap:1});
-    viewer.addLabel(d.toFixed(1)+" Å",{position:{x:(x.x+y.x)/2,y:(x.y+y.y)/2,z:(x.z+y.z)/2},
-      fontSize:13,fontColor:"#fff",backgroundColor:"#08111e",backgroundOpacity:.85,inFront:true});
-    if(s)s.textContent=baseAt(a)+(a+1)+" ↔ "+baseAt(b)+(b+1)+": "+d.toFixed(2)+" Å between C4′ atoms.";
+  function atomSnapshot(atom){
+    return {x:Number(atom.x),y:Number(atom.y),z:Number(atom.z),atom:String(atom.atom||"atom"),resn:String(atom.resn||""),resi:atom.resi,chain:String(atom.chain||""),icode:String(atom.icode||"")};
+  }
+  function atomLabel(a){
+    return a.atom+" · "+(a.resn||"res")+" "+String(a.resi??"")+(a.chain?" · chain "+a.chain:"");
+  }
+  const vsub=(a,b)=>({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z});
+  const vdot=(a,b)=>a.x*b.x+a.y*b.y+a.z*b.z;
+  const vcross=(a,b)=>({x:a.y*b.z-a.z*b.y,y:a.z*b.x-a.x*b.z,z:a.x*b.y-a.y*b.x});
+  const vnorm=a=>Math.hypot(a.x,a.y,a.z);
+  function atomDistance(a,b){return Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);}
+  function atomAngle(a,b,c){
+    const u=vsub(a,b),v=vsub(c,b),den=vnorm(u)*vnorm(v);if(!den)return NaN;
+    return Math.acos(clamp(vdot(u,v)/den,-1,1))*180/Math.PI;
+  }
+  function atomDihedral(a,b,c,d){
+    const b0=vsub(b,a),b1=vsub(c,b),b2=vsub(d,c),n1=vcross(b0,b1),n2=vcross(b1,b2),b1n=vnorm(b1);
+    if(!vnorm(n1)||!vnorm(n2)||!b1n)return NaN;
+    const ub1={x:b1.x/b1n,y:b1.y/b1n,z:b1.z/b1n},m1=vcross(n1,ub1);
+    return Math.atan2(vdot(m1,n2),vdot(n1,n2))*180/Math.PI;
+  }
+  function measurementValue(type,p){
+    if(type==="distance")return atomDistance(p[0],p[1]);
+    if(type==="angle")return atomAngle(p[0],p[1],p[2]);
+    if(type==="dihedral")return atomDihedral(p[0],p[1],p[2],p[3]);
+    return NaN;
+  }
+  function measurementUnit(type){return type==="distance"?"Å":"°";}
+  function requiredPicks(type){return type==="distance"?2:type==="angle"?3:type==="dihedral"?4:0;}
+  function handleAtomMeasurementClick(atom){
+    const type=state.measurementMode,required=requiredPicks(type);if(!required)return;
+    state.measurementPicks.push(atomSnapshot(atom));
+    if(state.measurementPicks.length>=required){
+      const points=state.measurementPicks.slice(0,required),value=measurementValue(type,points);
+      if(Number.isFinite(value))state.measurements.push({id:state.measurementSerial++,type,points,value});
+      state.measurementPicks=[];
+    }
+    render();
+  }
+  function measurementCentroid(points){
+    return points.reduce((o,p)=>({x:o.x+p.x/points.length,y:o.y+p.y/points.length,z:o.z+p.z/points.length}),{x:0,y:0,z:0});
+  }
+  function renderMeasurementList(){
+    const box=$("teMeasurementList");if(!box)return;box.replaceChildren();
+    if(!state.measurements.length){box.textContent="No saved measurements.";return;}
+    state.measurements.forEach(m=>{
+      const row=document.createElement("div");row.className="te-measurement-row";
+      const text=document.createElement("span");text.textContent=m.type[0].toUpperCase()+m.type.slice(1)+" "+m.value.toFixed(2)+" "+measurementUnit(m.type)+" · "+m.points.map(atomLabel).join(" → ");
+      const del=document.createElement("button");del.type="button";del.textContent="Delete";del.addEventListener("click",()=>{state.measurements=state.measurements.filter(x=>x.id!==m.id);render();});
+      row.append(text,del);box.append(row);
+    });
+  }
+  function addMeasurements(){
+    const status=$("teMeasureStatus"),type=state.measurementMode,required=requiredPicks(type);
+    state.measurements.forEach(m=>{
+      m.points.forEach(p=>viewer.addSphere({center:p,radius:.22,color:"#ffffff",opacity:.9}));
+      for(let i=0;i<m.points.length-1;i++)viewer.addCylinder({start:m.points[i],end:m.points[i+1],radius:.07,color:"#ffffff",opacity:.82,fromCap:1,toCap:1});
+      const c=measurementCentroid(m.points);
+      viewer.addLabel(m.value.toFixed(2)+" "+measurementUnit(m.type),{position:c,fontSize:13,fontColor:"#fff",backgroundColor:"#08111e",backgroundOpacity:.88,borderColor:"#6f8798",borderThickness:1,inFront:true});
+    });
+    state.measurementPicks.forEach(p=>viewer.addSphere({center:p,radius:.3,color:"#f2c66d",opacity:.75}));
+    renderMeasurementList();
+    if(!status)return;
+    if(type==="off"){status.textContent="Choose distance, angle, or dihedral, then click atoms in the 3D structure.";return;}
+    const left=required-state.measurementPicks.length;
+    status.textContent=state.measurementPicks.length
+      ? type[0].toUpperCase()+type.slice(1)+": "+state.measurementPicks.length+" atom"+(state.measurementPicks.length===1?"":"s")+" selected · choose "+left+" more."
+      : type[0].toUpperCase()+type.slice(1)+" mode: choose "+required+" atoms.";
   }
 
   function applyStyles(renderNow=true){
@@ -436,16 +497,12 @@ const TertiaryExplorer = (() => {
       if(mate>=0&&residues[mate])viewer.addStyle(selectorForResidue(residues[mate]),{stick:{radius:.25,color:"#74d7b6"},sphere:{radius:.28,color:"#74d7b6",opacity:.38}});
     }
     if(residues[state.selected])viewer.addStyle(selectorForResidue(residues[state.selected]),{stick:{radius:.34,color:"#ffffff"},sphere:{radius:.34,color:"#ffffff",opacity:.42}});
-    addPairs();addIndices();addProximity();addMeasurement();
+    addPairs();addIndices();addProximity();addMeasurements();
     if(renderNow)viewer.render();
   }
 
   function chooseResidue(index){
     state.selected=clamp(index,0,Math.max(0,activeResidues().length-1));
-    if(state.measureEnabled){
-      if(state.measureA==null||state.measureB!=null){state.measureA=state.selected;state.measureB=null;}
-      else if(state.selected!==state.measureA)state.measureB=state.selected;
-    }
     if(state.mapping.enabled){
       if(isCuratedDefaultPair())state.onSelect(state.selected);
       else if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.followExternal)SecondaryExplorer.followExternal(state.selected);
@@ -605,7 +662,10 @@ const TertiaryExplorer = (() => {
       '<label class="te-check"><input id="teProximity" type="checkbox"> Highlight 3D proximity</label>'+
       '<label>Proximity cutoff (Å)<input id="teProximityCutoff" type="number" min="6" max="30" step="0.5" value="12"></label>'+
       '<p id="teProximityStatus">Highlights C4′ spatial neighbors that are not immediate sequence neighbors.</p>'+
-      '<button type="button" id="teMeasureToggle" aria-pressed="false">Measure C4′ distance</button><p id="teMeasureStatus">Select two residues to measure a C4′–C4′ distance.</p>'+
+      '<fieldset class="te-measure-tools"><legend>Atom measurements</legend>'+
+      '<label>Measurement<select id="teMeasureMode"><option value="off">Off</option><option value="distance">Distance · 2 atoms</option><option value="angle">Angle · 3 atoms</option><option value="dihedral">Dihedral · 4 atoms</option></select></label>'+
+      '<div class="te-button-row"><button type="button" id="teMeasureUndo">Undo pick</button><button type="button" id="teMeasureClear">Clear all</button></div>'+
+      '<p id="teMeasureStatus">Choose distance, angle, or dihedral, then click atoms in the 3D structure.</p><div id="teMeasurementList" class="te-measurement-list">No saved measurements.</div></fieldset>'+
       '<label class="te-check"><input id="teSplit" type="checkbox"> 2D + 3D linked view</label></details>'+
       '<details id="teFocusDetails"><summary>Focus on structural region</summary><div class="te-button-row te-region-buttons">'+
       '<button type="button" data-te-region="Acceptor stem">Acceptor</button><button type="button" data-te-region="Anticodon arm">Anticodon</button>'+
@@ -619,7 +679,9 @@ const TertiaryExplorer = (() => {
     $("teShowIndices").addEventListener("change",e=>{state.showIndices=e.target.checked;render();});
     $("teProximity").addEventListener("change",e=>{state.proximityEnabled=e.target.checked;render();});
     $("teProximityCutoff").addEventListener("input",e=>{if(e.target.checkValidity()){state.proximityCutoff=Number(e.target.value);render();}});
-    $("teMeasureToggle").addEventListener("click",()=>{state.measureEnabled=!state.measureEnabled;if(!state.measureEnabled){state.measureA=null;state.measureB=null;}render();});
+    $("teMeasureMode").addEventListener("change",e=>{state.measurementMode=e.target.value;state.measurementPicks=[];render();});
+    $("teMeasureUndo").addEventListener("click",()=>{state.measurementPicks.pop();render();});
+    $("teMeasureClear").addEventListener("click",()=>{state.measurementPicks=[];state.measurements=[];render();});
     $("teSplit").addEventListener("change",e=>{state.split=e.target.checked&&state.mapping.enabled;render();});
     $("teSameMolecule").addEventListener("change",e=>{state.sameMoleculeConfirmed=e.target.checked;evaluateMapping();render();});
     $("teChainSelect").addEventListener("change",e=>{state.activeChain=e.target.value;state.chainNeedsChoice=false;state.sameMoleculeConfirmed=false;buildResidueLookup();evaluateMapping();state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();render();});
