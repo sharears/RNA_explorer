@@ -117,6 +117,8 @@ assert(pdb.includes("ATOM") && pdb.includes("END"), "PDB exporter should emit co
 const cif = tertiaryApi.serializeCif([{atom:"P",resn:"G",chain:"A",resi:1,x:1,y:2,z:3,elem:"P",hetflag:false}]);
 assert(cif.includes("_atom_site.Cartn_x") && cif.includes("data_rna_explorer"), "mmCIF exporter should emit an atom_site loop");
 
+assert(!tertiary.includes("model.addStyle"), "GLModel overlay styling should use setStyle(..., true), not viewer-only addStyle");
+assert(tertiary.includes("model.setStyle")&&tertiary.includes(",true);"), "Overlay styles should be additive through GLModel.setStyle");
 assert(tertiary.includes("handleAtomMeasurementClick"), "Atom-click measurement workflow should be available");
 assert(tertiary.includes("teMeasurementList")&&tertiary.includes("teMeasureClear"), "Multiple measurements can be listed and cleared");
 assert(tertiary.includes("getCurrentPositions")&&tertiary.includes("secondaryLayoutPositions"), "Linked 2D/3D view preserves the edited Secondary layout when available");
