@@ -246,3 +246,17 @@
   .se-legend-settings label { grid-template-columns:1fr; gap:4px; }
   .se-toolbar { align-items:flex-start; }
 }
+
+
+/* Secondary structure import/export and workspace helpers */
+.secondary-file-tools{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.secondary-file-tools .secondary-action{margin:0}
+.se-export-dialog{width:min(520px,calc(100% - 28px));background:#0d1726;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:26px;box-shadow:0 28px 90px rgba(0,0,0,.55)}
+.se-export-dialog::backdrop{background:rgba(4,8,15,.72);backdrop-filter:blur(4px)}
+.se-export-dialog h3{margin:0 0 18px;font-size:1.35rem}
+.se-export-dialog label{display:grid;gap:6px;margin:12px 0;color:var(--cream);font-size:.78rem}
+.se-export-dialog select,.se-export-dialog input{border:1px solid var(--line);border-radius:7px;background:#091321;color:var(--text);padding:8px}
+.se-export-dialog output{color:var(--mint);font-family:"DM Mono",monospace}
+.se-export-dialog #seExportDialogStatus{min-height:1.3em;color:var(--muted);font-size:.78rem}
+.se-toolbar{flex-wrap:wrap}
+.se-toolbar input[type="number"]{width:76px}
