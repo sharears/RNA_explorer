@@ -581,15 +581,15 @@ const SecondaryExplorer = (() => {
   function reorganizeControls(controls){
     const old=[...controls.children].filter(el=>el.tagName==="DETAILS");
     function group(name){
-      const el=document.createElement("details");el.open=name==="Residue ID";
+      const el=document.createElement("details");el.open=name==="Display · Residue ID";
       el.innerHTML='<summary>'+name+'</summary><details open><summary>Selected</summary></details><details><summary>All</summary></details>';
       controls.insertBefore(el,old[0]);return [el.children[1],el.children[2]];
     }
-    const [bs,ba]=group("Backbone"),[rs,ra]=group("Residue ID"),[ps,pa]=group("Base pairs"),[ixs,ixa]=group("Residue index");
-    const layerBox=document.createElement("fieldset");
+    const [bs,ba]=group("Display · Backbone"),[rs,ra]=group("Display · Residue ID"),[ps,pa]=group("Display · Base pairs"),[ixs,ixa]=group("Display · Residue index");
+    const layerBox=document.createElement("details");
     layerBox.className="se-data-layers";
-    layerBox.innerHTML='<legend>Data layers</legend><p>Load reactivity/residue information, base-pair probabilities, or both. Loaded data stay available while you turn each visual layer on or off independently.</p><label><input id="seLayerReactivity" type="checkbox" disabled> Show reactivity colors</label><label><input id="seLayerPairProb" type="checkbox" disabled> Show base-pair probability colors</label><p id="seLayerStatus" role="status">Reactivity: not loaded · Pair probability: not loaded</p>';
-    controls.insertBefore(layerBox,controls.firstElementChild);
+    layerBox.innerHTML='<summary>Analyze · Data layers</summary><p>Load reactivity/residue information, base-pair probabilities, or both. Loaded data stay available while you turn each visual layer on or off independently.</p><label><input id="seLayerReactivity" type="checkbox" disabled> Show reactivity colors</label><label><input id="seLayerPairProb" type="checkbox" disabled> Show base-pair probability colors</label><p id="seLayerStatus" role="status">Reactivity: not loaded · Pair probability: not loaded</p>';
+    const hint=document.createElement("p");hint.className="se-workspace-hint";hint.textContent="Start with the RNA input above, then open only the Display or Analyze section you need.";controls.insertBefore(hint,controls.firstElementChild);controls.insertBefore(layerBox,hint.nextSibling);
     setupIndexControls(ixs,ixa);
     backFields.forEach(([k])=>ba.append($("se-"+k).closest("label")));
     ba.insertAdjacentHTML("afterbegin","<p>Phosphodiester connections between consecutive residues.</p>");
