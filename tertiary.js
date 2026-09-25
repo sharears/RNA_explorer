@@ -583,11 +583,11 @@ const TertiaryExplorer = (() => {
       const row=document.createElement("div");row.className="te-object-row";
       const name=document.createElement("input");name.value=o.name;name.setAttribute("aria-label","Object name");
       name.addEventListener("change",()=>{o.name=name.value.trim()||o.name;});
-      const show=document.createElement("button");show.type="button";show.textContent=o.visible?"Hide":"Show";show.addEventListener("click",()=>{o.visible=!o.visible;renderObjectList();render();});
-      const isolate=document.createElement("button");isolate.type="button";isolate.textContent=state.isolateObjectId===o.id?"Show all":"Isolate";isolate.addEventListener("click",()=>{state.isolateObjectId=state.isolateObjectId===o.id?null:o.id;renderObjectList();render();});
+      const show=document.createElement("button");show.type="button";show.textContent=o.visible?"Hide":"Show";show.addEventListener("click",()=>{o.visible=!o.visible;renderObjectList();refreshExportObjectOptions();render();});
+      const isolate=document.createElement("button");isolate.type="button";isolate.textContent=state.isolateObjectId===o.id?"Show all":"Isolate";isolate.addEventListener("click",()=>{state.isolateObjectId=state.isolateObjectId===o.id?null:o.id;renderObjectList();refreshExportObjectOptions();render();});
       const pdb=document.createElement("button");pdb.type="button";pdb.textContent="PDB";pdb.addEventListener("click",()=>downloadStructure("pdb",o.indices,o.name));
       const cif=document.createElement("button");cif.type="button";cif.textContent="mmCIF";cif.addEventListener("click",()=>downloadStructure("cif",o.indices,o.name));
-      const del=document.createElement("button");del.type="button";del.textContent="Delete";del.addEventListener("click",()=>{state.savedObjects=state.savedObjects.filter(x=>x.id!==o.id);if(state.isolateObjectId===o.id)state.isolateObjectId=null;renderObjectList();render();});
+      const del=document.createElement("button");del.type="button";del.textContent="Delete";del.addEventListener("click",()=>{state.savedObjects=state.savedObjects.filter(x=>x.id!==o.id);if(state.isolateObjectId===o.id)state.isolateObjectId=null;renderObjectList();refreshExportObjectOptions();render();});
       row.append(name,show,isolate,pdb,cif,del);box.append(row);
     });
   }
@@ -642,7 +642,7 @@ const TertiaryExplorer = (() => {
   function createObject(){
     const indices=state.selectionIndices.size?new Set(state.selectionIndices):new Set([state.selected]);
     const name=prompt("Object name","object_"+state.objectSerial);if(name===null)return;
-    state.savedObjects.push({id:state.objectSerial,name:name.trim()||("object_"+state.objectSerial),indices,visible:true});state.objectSerial++;renderObjectList();render();
+    state.savedObjects.push({id:state.objectSerial,name:name.trim()||("object_"+state.objectSerial),indices,visible:true});state.objectSerial++;renderObjectList();refreshExportObjectOptions();render();
   }
 
   function atomLinePdb(atom,serial){
@@ -739,11 +739,13 @@ const TertiaryExplorer = (() => {
     const chains=rnaChainsFromAtoms(temp.selectedAtoms({})),ref=activeResidues();
     if(!chains.length||ref.length<3){viewer.removeModel(temp);throw new Error("Could not find comparable RNA residues.");}
     const cmp=chains.slice().sort((a,b)=>Math.abs(a.residues.length-ref.length)-Math.abs(b.residues.length-ref.length))[0],n=Math.min(ref.length,cmp.residues.length);
-    const mov=cmp.residues.slice(0,n).map(r=>r.coord),target=ref.slice(0,n).map(r=>r.coord);
+    let indices=Array.from({length:n},(_,i)=>i);
+    if($("teAlignScope")?.value==="selection"){indices=[...state.selectionIndices].filter(i=>i<n).sort((a,b)=>a-b);if(indices.length<3)throw new Error("Select at least three corresponding residues for selection-based alignment.");}
+    const mov=indices.map(i=>cmp.residues[i].coord),target=indices.map(i=>ref[i].coord);
     const fit=hornFit(mov,target),alignedAtoms=temp.selectedAtoms({});
     alignedAtoms.forEach(a=>{const p=fit.transform(a);a.x=p.x;a.y=p.y;a.z=p.z;});
-    const alignedPdb=serializePdb(alignedAtoms);viewer.removeModel(temp);temp=viewer.addModel(alignedPdb,"pdb",{keepH:false});
-    state.comparison={model:temp,name:file.name,rmsd:fit.rmsd,count:n,visible:true,status:""};updateComparisonStatus();render();
+    const alignedPdb=serializePdb(alignedAtoms);viewer.removeModel(temp);temp=viewer.addModel(alignedPdb,"pdb",{keepH:true});
+    state.comparison={model:temp,name:file.name,rmsd:fit.rmsd,count:indices.length,visible:true,status:""};updateComparisonStatus();render();
   }
 
   async function handleStructureUpload(file){
@@ -803,9 +805,9 @@ const TertiaryExplorer = (() => {
       '<fieldset class="te-measure-tools"><legend>Atom measurements</legend><label>Measurement<select id="teMeasureMode"><option value="off">Off</option><option value="distance">Distance · 2 atoms</option><option value="angle">Angle · 3 atoms</option><option value="dihedral">Dihedral · 4 atoms</option></select></label><div class="te-button-row"><button type="button" id="teMeasureUndo">Undo pick</button><button type="button" id="teMeasureClear">Clear all</button></div><p id="teMeasureStatus">Choose distance, angle, or dihedral, then click atoms in the 3D structure.</p><div id="teMeasurementList" class="te-measurement-list">No saved measurements.</div></fieldset>'+
       '<label class="te-check"><input id="teSplit" type="checkbox"> 2D + 3D linked view</label></details>'+
       '<details><summary>Clipping</summary><label class="te-check"><input id="teClipEnabled" type="checkbox"> Enable clipping slab</label><div class="te-inline-grid"><label>Near<input id="teClipNear" type="range" min="-100" max="0" step="1" value="-40"></label><label>Far<input id="teClipFar" type="range" min="0" max="100" step="1" value="40"></label></div><p class="te-tool-note">Clipping changes only what is visible; it does not delete atoms.</p></details>'+
-      '<details><summary>Compare / align structures</summary><label>Comparison PDB / mmCIF<input id="teAlignFile" type="file" accept=".pdb,.ent,.cif,.mmcif"></label><label class="te-check"><input id="teCompareVisible" type="checkbox" checked> Show aligned comparison</label><button type="button" id="teClearAlignment">Clear comparison</button><p id="teAlignmentStatus">Upload a second PDB/mmCIF structure to superimpose it on the active RNA chain.</p></details>'+
+      '<details><summary>Compare / align structures</summary><label>Alignment scope<select id="teAlignScope"><option value="full">Whole active RNA chain</option><option value="selection">Current residue selection</option></select></label><label>Comparison PDB / mmCIF<input id="teAlignFile" type="file" accept=".pdb,.ent,.cif,.mmcif"></label><label class="te-check"><input id="teCompareVisible" type="checkbox" checked> Show aligned comparison</label><button type="button" id="teClearAlignment">Clear comparison</button><p id="teAlignmentStatus">Upload a second PDB/mmCIF structure to superimpose it on the active RNA chain.</p></details>'+
       '<details><summary>Saved camera views</summary><button type="button" id="teSaveView">Save current view</button><div id="teSavedViews">No saved views.</div></details>'+
-      '<details><summary>Export structure</summary><p class="te-tool-note">Export the full loaded structure or the current RNA selection. Saved objects have their own PDB/mmCIF buttons.</p><label>Export scope<select id="teStructureExportScope"><option value="full">Entire loaded structure</option><option value="selection">Current RNA selection</option></select></label><label>Format<select id="teStructureExportFormat"><option value="pdb">PDB</option><option value="cif">mmCIF</option></select></label><button type="button" id="teExportStructure">Export structure</button></details>'+
+
       '<details id="teFocusDetails"><summary>Focus on structural region</summary><div class="te-button-row te-region-buttons"><button type="button" data-te-region="Acceptor stem">Acceptor</button><button type="button" data-te-region="Anticodon arm">Anticodon</button><button type="button" data-te-region="elbow">D/T-loop elbow</button><button type="button" data-te-region="full">Full structure</button></div></details>'+
       '<div class="te-region-legend" id="teRegionLegend" hidden></div></div>';
 
@@ -844,15 +846,53 @@ const TertiaryExplorer = (() => {
     $("teAlignFile").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;state.comparison.status="Aligning "+f.name+"…";updateComparisonStatus();try{await alignComparison(f);}catch(err){state.comparison.status="Alignment failed: "+err.message;updateComparisonStatus();}});
     $("teCompareVisible").addEventListener("change",e=>{state.comparison.visible=e.target.checked;render();});$("teClearAlignment").addEventListener("click",()=>clearComparison());
     $("teSaveView").addEventListener("click",saveView);
-    $("teExportStructure").addEventListener("click",()=>{const scope=$("teStructureExportScope").value,format=$("teStructureExportFormat").value,indices=scope==="selection"?state.selectionIndices:null;downloadStructure(format,indices,state.currentFileName.replace(/\.[^.]+$/,""));});
     box.querySelectorAll("[data-te-region]").forEach(b=>b.addEventListener("click",()=>{const r=b.dataset.teRegion;if(r==="full")resetView();else if(r==="elbow")focus([...regionIndices("D arm"),...regionIndices("T arm")]);else focus(regionIndices(r));}));
+  }
+  async function exportViewerImage(format,scale,background){
+    if(!viewer)throw new Error("3D viewer is not ready.");
+    const status=$("teExportStatus"),viewport=$("tertiaryViewport"),view=viewer.getView?viewer.getView():null;
+    const baseW=Math.max(1,Math.round(viewport.clientWidth||720)),baseH=Math.max(1,Math.round(viewport.clientHeight||560));
+    const actual=Math.min(Number(scale)||2,4096/baseW,4096/baseH,Math.sqrt(16000000/(baseW*baseH))),width=Math.max(1,Math.round(baseW*actual)),height=Math.max(1,Math.round(baseH*actual));
+    const oldBg=state.backgroundColor;
+    try{
+      viewer.setWidth(width);viewer.setHeight(height);if(view)viewer.setView(view);
+      if(background==="transparent")viewer.setBackgroundColor("#000000",0);else viewer.setBackgroundColor(background,1);
+      viewer.render();await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      const dataUrl=viewer.pngURI(),base="rna-tertiary-"+(state.currentFileName.replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase()||"structure");
+      if(format==="pdf")await ExportTools.exportRasterPdf(dataUrl,width,height,base);
+      else {const response=await fetch(dataUrl);ExportTools.downloadBlob(await response.blob(),base+".png");}
+      if(status)status.textContent=(format==="pdf"?"PDF":"PNG")+" exported · "+width+" × "+height+".";
+    } finally {
+      viewer.setWidth(baseW);viewer.setHeight(baseH);if(view)viewer.setView(view);viewer.setBackgroundColor(oldBg,1);viewer.render();
+    }
+  }
+  function refreshExportObjectOptions(){
+    const select=$("teExportScope");if(!select)return;const current=select.value;select.replaceChildren(new Option("Entire loaded structure","full"),new Option("Current RNA selection","selection"));
+    state.savedObjects.forEach(o=>select.append(new Option("Saved object · "+o.name,"object:"+o.id)));if([...select.options].some(o=>o.value===current))select.value=current;
   }
   function setupToolbar(){
     const toolbar=document.querySelector("#scene-tertiary .te-toolbar");if(!toolbar)return;
-    if(!$("teExportScale"))toolbar.insertAdjacentHTML("beforeend",'<label class="te-resolution-control">Export resolution <input id="teExportScale" type="range" min="1" max="4" step=".5" value="2"><output id="teExportScaleValue">2×</output></label><button id="teDownload" type="button">Export PNG</button>');
+    toolbar.insertAdjacentHTML("beforeend",'<button id="teFitAll" type="button">Fit all</button><button id="teOpenExport" type="button">Export…</button>');
     const status=document.createElement("p");status.id="teExportStatus";status.className="te-export-status";status.setAttribute("role","status");toolbar.insertAdjacentElement("afterend",status);
-    $("teExportScale").addEventListener("input",e=>{state.exportScale=Number(e.target.value);$("teExportScaleValue").textContent=state.exportScale+"×";});
-    $("teDownload").addEventListener("click",exportPng);
+    const dialog=document.createElement("dialog");dialog.id="teExportDialog";dialog.className="te-export-dialog";
+    dialog.innerHTML='<button type="button" class="dialog-close" id="teExportClose" aria-label="Close">×</button><h3>Export Tertiary Structure</h3><label>Export type<select id="teExportType"><option value="image">Image</option><option value="structure">Structure</option></select></label><div id="teImageExportOptions"><label>Format<select id="teImageFormat"><option value="png">PNG</option><option value="pdf">PDF</option></select></label><label>Resolution / scale<input id="teImageScale" type="range" min="1" max="5" step=".5" value="2"><output id="teImageScaleValue">2×</output></label><label>Background<select id="teImageBackground"><option value="#ffffff">White</option><option value="#07111c">Dark</option><option value="transparent">Transparent</option></select></label></div><div id="teStructureExportOptions" hidden><label>Scope<select id="teExportScope"><option value="full">Entire loaded structure</option><option value="selection">Current RNA selection</option></select></label><label>Format<select id="teExportFormat"><option value="pdb">PDB</option><option value="cif">mmCIF</option></select></label></div><button type="button" id="teExportNow" class="primary-action">Export</button><p id="teExportDialogStatus" role="status"></p>';
+    document.body.append(dialog);refreshExportObjectOptions();
+    $("teOpenExport").addEventListener("click",()=>{refreshExportObjectOptions();dialog.showModal();});$("teExportClose").addEventListener("click",()=>dialog.close());
+    $("teExportType").addEventListener("change",e=>{$("teImageExportOptions").hidden=e.target.value!=="image";$("teStructureExportOptions").hidden=e.target.value!=="structure";});
+    $("teImageScale").addEventListener("input",e=>$("teImageScaleValue").textContent=e.target.value+"×");
+    $("teExportNow").addEventListener("click",async()=>{
+      const out=$("teExportDialogStatus");out.textContent="Preparing export…";
+      try{
+        if($("teExportType").value==="image"){await exportViewerImage($("teImageFormat").value,Number($("teImageScale").value),$("teImageBackground").value);out.textContent="Image exported.";}
+        else{
+          const scope=$("teExportScope").value,fmt=$("teExportFormat").value;let indices=null,label=state.currentFileName.replace(/\.[^.]+$/,"");
+          if(scope==="selection")indices=state.selectionIndices;
+          else if(scope.startsWith("object:")){const o=state.savedObjects.find(x=>x.id===Number(scope.split(":")[1]));if(!o)throw new Error("Saved object is no longer available.");indices=o.indices;label=o.name;}
+          downloadStructure(fmt,indices,label);out.textContent=(fmt==="cif"?"mmCIF":"PDB")+" structure exported.";
+        }
+      }catch(error){out.textContent="Export failed: "+error.message;}
+    });
+    $("teFitAll").addEventListener("click",()=>{if(viewer){viewer.zoomTo({},350);viewer.render();}});
     $("teZoomIn")?.addEventListener("click",()=>{if(viewer){viewer.zoom(1.25,250);viewer.render();}});
     $("teZoomOut")?.addEventListener("click",()=>{if(viewer){viewer.zoom(.8,250);viewer.render();}});
     $("teResetView")?.addEventListener("click",resetView);$("teCenterSelected")?.addEventListener("click",centerSelected);
@@ -878,6 +918,7 @@ const TertiaryExplorer = (() => {
     $("followButton")?.addEventListener("click",()=>{const n=activeResidues().length;if(n<2)return;let next=state.selected;while(next===state.selected)next=Math.floor(Math.random()*n);chooseResidue(next);});
     window.addEventListener("rna-metadata-change",e=>applyMetadata(e.detail));
     window.addEventListener("rna-secondary-context",e=>handleSecondaryContext(e.detail));
+    window.addEventListener("rna-secondary-layout",e=>{if(state.split&&e.detail?.sequence===state.secondarySequence)miniSecondary();});
     window.addEventListener("rna-secondary-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){state.selected=clamp(e.detail.index,0,state.secondarySequence.length-1);render();}});
     render();
   }
