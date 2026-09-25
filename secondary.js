@@ -1065,7 +1065,7 @@ const SecondaryExplorer = (() => {
     load(sequence,structure);
     if(restoreWorkspaceLocal()){panel();render();broadcastContext();}
   }
-  return {setup,render,parse,parseMetadata,parsePairProbabilities,parseDbnText,parseCtText,serializeDbn,serializeCt,radial,orientEndsBottom,
+  return {setup,render,parse,parseMetadata,parsePairProbabilities,radial,orientEndsBottom,parseDbnText,parseCtText,serializeDbn,serializeCt,
     getCurrentPositions(){return coordinates().map(p=>({x:p.x,y:p.y}));},
     getWorkspaceSnapshot(){return workspaceSnapshot();},
 
