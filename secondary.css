@@ -260,3 +260,13 @@
 .se-export-dialog #seExportDialogStatus{min-height:1.3em;color:var(--muted);font-size:.78rem}
 .se-toolbar{flex-wrap:wrap}
 .se-toolbar input[type="number"]{width:76px}
+
+
+/* Calmer Secondary workspace disclosure */
+.se-workspace-hint{margin:0 0 10px!important;padding:9px 10px;border-left:3px solid var(--mint);background:rgba(116,215,182,.04)}
+.se-data-layers>summary{cursor:pointer;color:var(--mint);font-weight:700;list-style:none}
+.se-data-layers>summary::-webkit-details-marker{display:none}
+.se-data-layers>summary::after{content:"+";float:right;color:var(--muted);font-family:"DM Mono",monospace}
+.se-data-layers[open]>summary::after{content:"−";color:var(--mint)}
+.se-controls>details>summary::after{content:"+";float:right;color:var(--muted);font-family:"DM Mono",monospace}
+.se-controls>details[open]>summary::after{content:"−";color:var(--mint)}
