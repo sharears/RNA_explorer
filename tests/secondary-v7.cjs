@@ -71,5 +71,11 @@ assert(source.includes("sePairProbFile")&&source.includes("pairProbEnabled"),"Pa
 assert(source.includes("seLayerReactivity")&&source.includes("seLayerPairProb"),"Loaded reactivity and pair-probability layers have independent top-level toggles");
 assert(source.includes("base-pair probability data and pair styling were left unchanged"),"Loading reactivity preserves the pair-probability layer");
 assert(source.includes("MoleculeEditor.openPair"),"Secondary base pairs open the shared chemistry editor");
+assert(source.includes("rna_base_pair_probability_example.csv")&&source.includes("sePairProbExample"),"A synthetic example base-pair probability dataset is available");
+assert(source.includes("parseDbnText")&&source.includes("parseCtText")&&source.includes("serializeDbn")&&source.includes("serializeCt"),"Secondary structure supports DBN/CT import and export");
+assert(source.includes("seExportType")&&source.includes("seImageFormat")&&source.includes("seStructureFormat"),"Secondary uses a unified image/structure export dialog");
+assert(source.includes("seImageDpi"),"Secondary image export exposes a DPI target");
+assert(source.includes("WORKSPACE_KEY")&&source.includes("saveWorkspaceLocal"),"Secondary workspace can autosave locally without an account");
+assert(source.includes("rna-secondary-layout")&&source.includes("getCurrentPositions"),"Secondary broadcasts its edited layout for linked 2D/3D display");
 
 console.log("PASS: secondary Sept-24 logic and rendering-unit checks (not a browser integration test).");
