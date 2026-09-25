@@ -118,6 +118,12 @@ const MoleculeEditor = (() => {
         </div>
         <div class="chem-editor-footer">
           <p id="chemEditorStatus" role="status"></p>
+          <div class="chem-editor-export">
+            <label>Export image<select id="chemExportFormat"><option value="svg">SVG</option><option value="png">PNG</option><option value="pdf">PDF</option></select></label>
+            <label>Scale<input id="chemExportScale" type="range" min="1" max="6" step=".5" value="2"><output id="chemExportScaleValue">2×</output></label>
+            <label>Background<select id="chemExportBackground"><option value="transparent">Transparent</option><option value="#ffffff">White</option><option value="#0b1220">Dark</option></select></label>
+            <button type="button" id="chemExportButton">Export</button>
+          </div>
           <div><button type="button" id="chemEditorReset">Reset</button><button type="button" id="chemEditorSave" class="primary-action">Save structure</button></div>
         </div>
       </div>`;
@@ -139,6 +145,8 @@ const MoleculeEditor = (() => {
     dialog.querySelector("#chemBondOrder").addEventListener("change",e=>bondOrder=Number(e.target.value));
     dialog.querySelector("#chemChargeMinus").addEventListener("click",()=>changeCharge(-1));
     dialog.querySelector("#chemChargePlus").addEventListener("click",()=>changeCharge(1));
+    dialog.querySelector("#chemExportScale").addEventListener("input",e=>dialog.querySelector("#chemExportScaleValue").textContent=e.target.value+"×");
+    dialog.querySelector("#chemExportButton").addEventListener("click",async()=>{status.textContent="Preparing export…";try{await exportCurrentDrawing();}catch(error){status.textContent="Export failed: "+error.message;}});
     dialog.querySelector("#chemEditorReset").addEventListener("click",()=>loadCurrent());
     dialog.querySelector("#chemEditorSave").addEventListener("click",()=>{
       if(mode==="base")storeBase(base,graph);
@@ -331,7 +339,21 @@ const MoleculeEditor = (() => {
     }
   }
 
-  function validate(){
+  async function exportCurrentDrawing(){
+    if(typeof ExportTools==="undefined")throw new Error("Export tools are unavailable.");
+    const format=dialog.querySelector("#chemExportFormat").value,scale=Number(dialog.querySelector("#chemExportScale").value)||2,background=dialog.querySelector("#chemExportBackground").value;
+    const oldSelected=new Set(selectedAtoms),oldAtom=selectedAtom,oldPending=pendingAtom,oldBox=selectionBox;
+    selectedAtoms.clear();selectedAtom=null;pendingAtom=null;selectionBox=null;render();
+    try{
+      const label=mode==="pair"?"rna-base-pair-"+leftBase+"-"+rightBase:"rna-nucleobase-"+base;
+      await ExportTools.exportSvgElement(svg,{format,filename:label,scale,background,viewBox:"0 0 820 470"});
+      status.textContent=format.toUpperCase()+" image exported.";
+    }finally{
+      selectedAtoms=oldSelected;selectedAtom=oldAtom;pendingAtom=oldPending;selectionBox=oldBox;render();
+    }
+  }
+
+    function validate(){
     const sums={};graph.atoms.forEach(a=>sums[a.id]=0);
     graph.bonds.forEach(b=>{sums[b.a]=(sums[b.a]||0)+Number(b.order||1);sums[b.b]=(sums[b.b]||0)+Number(b.order||1);});
     const warnings=[];
