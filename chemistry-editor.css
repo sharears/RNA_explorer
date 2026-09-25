@@ -58,3 +58,10 @@
 }
 #chemEditorSvg { cursor: crosshair; }
 .chem-editor-toolbar button[data-chem-tool="select"].active ~ * {}
+
+
+.chem-editor-export{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-right:auto}
+.chem-editor-export label{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:.72rem}
+.chem-editor-export select,.chem-editor-export input{border:1px solid var(--line);border-radius:6px;background:#091321;color:var(--text);padding:6px}
+.chem-editor-export output{color:var(--mint);font-family:"DM Mono",monospace}
+@media(max-width:720px){.chem-editor-export{width:100%;margin-bottom:8px}.chem-editor-footer{align-items:flex-start}}
