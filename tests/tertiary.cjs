@@ -80,6 +80,10 @@ const tertiary = read("tertiary.js");
   "Import PDB / mmCIF",
   "I confirm that the Secondary and 3D inputs describe the same RNA molecule",
   "teImageScale",
+  "teImageDpi",
+  "SVG (raster embedded)",
+  "rna-secondary-layout",
+  "secondaryLayoutPositions",
   "setWidth(width)",
   "pngURI()",
   "sequence identity and residue count match"
@@ -106,6 +110,8 @@ assert(cif.includes("_atom_site.Cartn_x") && cif.includes("data_rna_explorer"), 
 
 assert(tertiary.includes("handleAtomMeasurementClick"), "Atom-click measurement workflow should be available");
 assert(tertiary.includes("teMeasurementList")&&tertiary.includes("teMeasureClear"), "Multiple measurements can be listed and cleared");
+assert(tertiary.includes("getCurrentPositions")&&tertiary.includes("secondaryLayoutPositions"), "Linked 2D/3D view preserves the edited Secondary layout when available");
+assert(tertiary.includes("SVG (raster embedded)")&&tertiary.includes("teImageDpi"), "Tertiary image export exposes PNG/PDF/SVG plus DPI control");
 assert(!html.includes('id="tertiarySvg"'), "Legacy SVG tertiary canvas should be removed");
 assert(html.includes("All-atom molecular coordinates"), "Tertiary description should identify the all-atom model");
 console.log("tertiary molecular/static checks passed");
