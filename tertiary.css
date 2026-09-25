@@ -38,7 +38,8 @@
 .te-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; z-index:4; }
 .te-toolbar output { min-width:50px; text-align:center; font:13px "DM Mono",monospace; color:var(--muted); }
 
-.te-split-shell { display:grid; grid-template-columns:auto minmax(0,1fr); gap:10px; min-height:560px; width:100%; min-width:0; }
+.te-split-shell { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; min-height:560px; width:100%; min-width:0; }
+.te-split-shell.linked { grid-template-columns:auto minmax(0,1fr); }
 .te-mini-panel {
   width:300px; min-width:0; border:1px solid var(--line); border-radius:9px;
   background:rgba(10,17,32,.78); overflow:hidden;
