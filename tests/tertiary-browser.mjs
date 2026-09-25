@@ -36,7 +36,7 @@ try{
   if(letters<20)throw new Error("Linked 2D panel is not rendering residue letters; text count="+letters);
 
   await split.uncheck();
-  await page.waitForSelector("#tertiaryMiniPanel[hidden]",{timeout:10000});
+  await page.waitForSelector("#tertiaryMiniPanel",{state:"hidden",timeout:10000});
   if(!(await page.locator("#tertiaryMolecularViewer canvas").isVisible()))throw new Error("3D viewer disappeared after disabling linked view.");
 
   await page.fill("#tePdbId","1EHZ");
