@@ -9,29 +9,47 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=homepage-1" />
-  <link rel="stylesheet" href="secondary.css?v=secondary-12" />
-  <link rel="stylesheet" href="tertiary.css?v=tertiary-4" />
+  <link rel="stylesheet" href="styles.css?v=workspace-ux-1" />
+  <link rel="stylesheet" href="secondary.css?v=secondary-13" />
+  <link rel="stylesheet" href="tertiary.css?v=tertiary-5" />
   <link rel="stylesheet" href="chemistry-editor.css?v=chem-editor-2" />
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <a class="brand" href="#" aria-label="RNA Structure Explorer home">
+      <a class="brand" href="./" aria-label="RNA Structure Explorer home">
         <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
         <span>RNA Structure Explorer</span>
         <span class="beta">BETA</span>
       </a>
-      <button class="about-button" id="aboutButton" type="button">About this model</button>
+      <nav class="inner-nav" id="innerNav" aria-label="Workspace navigation" hidden>
+        <a href="./">Home</a>
+        <div class="nav-menu">
+          <button type="button" aria-haspopup="true" aria-expanded="false">Learn</button>
+          <div class="nav-menu-panel">
+            <a href="?page=journey">Start guided journey</a>
+            <a href="?page=example">Open example tRNA</a>
+          </div>
+        </div>
+        <div class="nav-menu">
+          <button type="button" aria-haspopup="true" aria-expanded="false">Analyze</button>
+          <div class="nav-menu-panel">
+            <a href="?page=secondary">Open Secondary Structure Workspace</a>
+            <a href="?page=tertiary">Open Tertiary Structure Workspace</a>
+          </div>
+        </div>
+        <a class="nav-feedback" href="mailto:mks7008@psu.edu?subject=RNA%20Structure%20Explorer%20Feedback%20or%20Question">Feedback &amp; Questions</a>
+      </nav>
+      <button class="about-button" id="aboutButton" type="button">About</button>
     </header>
 
     <main>
       <section class="intro" aria-labelledby="pageTitle">
         <div>
-          <p class="eyebrow">Explore RNA at different scales</p>
-          <h1 id="pageTitle">Build it. Trace it. See it fold.</h1>
+          <p class="eyebrow">RNA Structure Explorer</p>
+          <h1 id="pageTitle">Build, view, and explore RNA.</h1>
         </div>
-        <p>Learn RNA structure step by step, or jump directly into the analysis workspace with your own RNA data.</p>
+        <p>Choose a guided learning path or open an analysis workspace.</p>
       </section>
 
       <section class="home-paths" aria-label="Choose how to start">
@@ -40,8 +58,8 @@
           <h2>Learn RNA structure</h2>
           <p>Follow the guided six-scale journey from chemical building blocks through primary, secondary, and tertiary structure.</p>
           <div class="home-path-actions">
-            <button class="primary-action" id="homeLearnButton" type="button">Start guided journey</button>
-            <button class="secondary-action" id="homeExampleButton" type="button">Open example tRNA</button>
+            <a class="home-solid-action" id="homeLearnButton" href="?page=journey">Start guided journey</a>
+            <a class="home-solid-action" id="homeExampleButton" href="?page=example">Open example tRNA</a>
           </div>
         </article>
         <article class="home-path-card">
@@ -49,8 +67,8 @@
           <h2>Analyze your own RNA</h2>
           <p>Enter a sequence and secondary structure, load reactivity and/or base-pair probability data, then link a matching 3D structure.</p>
           <div class="home-path-actions">
-            <button class="primary-action" id="homeAnalyzeButton" type="button">Open Secondary workspace</button>
-            <button class="secondary-action" id="homeUpload3DButton" type="button">Upload 3D structure</button>
+            <a class="home-solid-action" id="homeAnalyzeButton" href="?page=secondary">Open Secondary Structure Workspace</a>
+            <a class="home-solid-action" id="homeUpload3DButton" href="?page=tertiary">Open Tertiary Structure Workspace</a>
           </div>
         </article>
       </section>
@@ -231,6 +249,8 @@
         </section>
       </div>
 
+      <a class="home-feedback-button" id="homeFeedbackButton" href="mailto:mks7008@psu.edu?subject=RNA%20Structure%20Explorer%20Feedback%20or%20Question">Feedback &amp; Questions</a>
+
       <footer class="scene-footer">
         <button class="nav-button previous" id="previousButton" type="button" disabled><span>←</span> Previous</button>
         <p><span id="progressText">1 of 6</span> · From building blocks to RNA</p>
@@ -251,8 +271,8 @@
   <script src="chemistry-editor.js?v=chem-editor-2"></script>
   <script src="journey.js"></script>
   <script src="primary-animation.js"></script>
-  <script src="secondary.js?v=secondary-12"></script>
-  <script src="tertiary.js?v=tertiary-4"></script>
-  <script src="app.js?v=homepage-1"></script>
+  <script src="secondary.js?v=secondary-13"></script>
+  <script src="tertiary.js?v=tertiary-5"></script>
+  <script src="app.js?v=workspace-ux-1"></script>
 </body>
 </html>
