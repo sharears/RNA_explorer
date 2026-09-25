@@ -1024,5 +1024,11 @@ const TertiaryExplorer = (() => {
     render();
   }
 
-  return {setup,render,compareChain,normalizeBase,normalizePdbId,hornFit,serializePdb,serializeCif,atomDistance,atomAngle,atomDihedral};
+  return {setup,render,compareChain,normalizeBase,normalizePdbId,hornFit,serializePdb,serializeCif,atomDistance,atomAngle,atomDihedral,
+    getDebugState(){
+      const atom=activeResidues()[0]?.atoms?.[0];
+      const canvas=$("tertiaryMolecularViewer")?.querySelector("canvas");
+      return {representation:state.representation,colorMode:state.colorMode,modelAtoms:model?.selectedAtoms?model.selectedAtoms({}).length:0,atomStyle:atom?.style||null,
+        canvasWidth:canvas?.width||0,canvasHeight:canvas?.height||0,split:state.split,mapping:state.mapping.enabled};
+    }};
 })();
