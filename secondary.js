@@ -16,6 +16,11 @@ const SecondaryExplorer = (() => {
   let metadata={}, heatEnabled=false, heatTheme="viridis", heatRange=[0,1], metadataTicket=0;
   let pairProbabilities={}, pairProbEnabled=false, pairProbTheme="viridis", pairProbTicket=0, pairChemistry={};
   let arcPairStyle="arc", exportScale=2;
+  let manualOffsets={}, pinnedResidues=new Set(), dragMode="residue", flexDrag=true, nodeDrag=null, suppressNodeClick=false;
+  const legendSettings={
+    heat:{visible:true,orientation:"horizontal",thickness:16,tickThickness:1,tickCount:3,tickValues:"",font:"monospace",fontSize:12,fontColor:"#bacbd7",x:18,y:88},
+    pair:{visible:true,orientation:"horizontal",thickness:16,tickThickness:1,tickCount:3,tickValues:"",font:"monospace",fontSize:12,fontColor:"#bacbd7",x:18,y:188}
+  };
   const defaults={...settings};
   const palettes={
     viridis:["#440154","#3b528b","#21918c","#5ec962","#fde725"],
@@ -200,13 +205,83 @@ const SecondaryExplorer = (() => {
   }
   function coordinates() {
     const n=seq.length;
-    if(layout==="radial") return orientEndsBottom(radial(n,partner));
-    if(layout==="arc") return Array.from({length:n},(_,i)=>({x:i*56,y:0}));
-    const r=Math.max(60,n*36/(2*Math.PI));
-    return orientEndsBottom(Array.from({length:n},(_,i)=>{
-      const angle=-Math.PI/2+i*(2*Math.PI-0.18)/Math.max(1,n-1);
-      return {x:r*Math.cos(angle),y:r*Math.sin(angle)};
-    }));
+    let out;
+    if(layout==="radial") out=orientEndsBottom(radial(n,partner));
+    else if(layout==="arc") out=Array.from({length:n},(_,i)=>({x:i*56,y:0}));
+    else {
+      const r=Math.max(60,n*36/(2*Math.PI));
+      out=orientEndsBottom(Array.from({length:n},(_,i)=>{
+        const angle=-Math.PI/2+i*(2*Math.PI-0.18)/Math.max(1,n-1);
+        return {x:r*Math.cos(angle),y:r*Math.sin(angle)};
+      }));
+    }
+    return out.map((p,i)=>({x:p.x+(manualOffsets[i]?.x||0),y:p.y+(manualOffsets[i]?.y||0)}));
+  }
+  function dragGroupFor(index){
+    if(dragMode==="whole")return Array.from({length:seq.length},(_,i)=>i);
+    if(dragMode==="branch"){
+      let a=index,b=partner[index];
+      if(b<0){
+        let enclosing=null;
+        pairs.forEach(([x,y])=>{if(x<index&&index<y&&(!enclosing||y-x<enclosing[1]-enclosing[0]))enclosing=[x,y];});
+        if(enclosing){a=enclosing[0];b=enclosing[1];}
+      }
+      if(b>=0){const lo=Math.min(a,b),hi=Math.max(a,b);return Array.from({length:hi-lo+1},(_,k)=>lo+k);}
+    }
+    return [index];
+  }
+  function dragWeightsFor(index){
+    const group=dragGroupFor(index),weights=new Map();
+    group.forEach(i=>{if(!pinnedResidues.has(i))weights.set(i,1);});
+    if(!flexDrag||dragMode==="whole")return weights;
+    const adjacency=i=>[i-1,i+1,partner[i]].filter(j=>j>=0&&j<seq.length);
+    const seen=new Set(group),queue=group.map(i=>[i,0]);
+    while(queue.length){
+      const [i,d]=queue.shift();if(d>=4)continue;
+      adjacency(i).forEach(j=>{
+        if(seen.has(j))return;seen.add(j);queue.push([j,d+1]);
+        if(!pinnedResidues.has(j)){
+          const w=[0,.42,.23,.12,.06][d+1]||0;
+          if(w>0)weights.set(j,Math.max(weights.get(j)||0,w));
+        }
+      });
+    }
+    return weights;
+  }
+  function pointerInSecondary(event){
+    const root=$("secondarySvg"),rect=root.getBoundingClientRect(),v=root.getAttribute("viewBox").split(/\s+/).map(Number);
+    return {x:v[0]+(event.clientX-rect.left)/rect.width*v[2],y:v[1]+(event.clientY-rect.top)/rect.height*v[3]};
+  }
+  function installNodeDragging(root){
+    root.addEventListener("pointerdown",event=>{
+      if(event.button!==0)return;
+      const node=event.target.closest?.(".se-node");if(!node)return;
+      const index=Number(node.dataset.residueIndex);if(!Number.isInteger(index))return;
+      select(index);
+      const weights=dragWeightsFor(index);
+      if(!weights.size){$("seDragStatus").textContent="That selection is pinned. Unpin it before moving.";return;}
+      const start=pointerInSecondary(event),base={};
+      weights.forEach((w,i)=>base[i]={x:manualOffsets[i]?.x||0,y:manualOffsets[i]?.y||0,w});
+      nodeDrag={pointer:event.pointerId,start,base,moved:false};
+      root.setPointerCapture?.(event.pointerId);event.preventDefault();
+    });
+    root.addEventListener("pointermove",event=>{
+      if(!nodeDrag||event.pointerId!==nodeDrag.pointer)return;
+      const p=pointerInSecondary(event),dx=p.x-nodeDrag.start.x,dy=p.y-nodeDrag.start.y;
+      if(Math.hypot(dx,dy)>1)nodeDrag.moved=true;
+      Object.entries(nodeDrag.base).forEach(([key,o])=>{
+        const i=Number(key);manualOffsets[i]={x:o.x+dx*o.w,y:o.y+dy*o.w};
+      });
+      suppressNodeClick=nodeDrag.moved;render();
+    });
+    const finish=event=>{
+      if(!nodeDrag||event.pointerId!==nodeDrag.pointer)return;
+      const moved=nodeDrag.moved;nodeDrag=null;
+      if(root.hasPointerCapture?.(event.pointerId))root.releasePointerCapture(event.pointerId);
+      $("seDragStatus").textContent=moved?"Manual layout updated. Connected backbone and pair lines follow the moved residues.":"Drag a nucleotide, branch/stem, or whole structure.";
+      setTimeout(()=>suppressNodeClick=false,60);
+    };
+    root.addEventListener("pointerup",finish);root.addEventListener("pointercancel",finish);
   }
   const keyOf = (a,b) => `${Math.min(a,b)}:${Math.max(a,b)}`;
   function activeKey(){return partner[selected]<0?null:keyOf(selected,partner[selected]);}
@@ -339,7 +414,7 @@ const SecondaryExplorer = (() => {
     pairs.forEach(([a,b])=>pairGraphic(root,a,b,pos,keyOf(a,b)));
     pos.forEach((p,i)=>{
       const s=residueStyle(i);
-      const g=svg("g",{transform:`translate(${p.x} ${p.y})`,class:"se-node",tabindex:0,role:"button","aria-label":`${seq[i]}${i+1}, ${partner[i]<0?"unpaired":"paired with "+(partner[i]+1)}`});
+      const g=svg("g",{transform:`translate(${p.x} ${p.y})`,class:"se-node"+(pinnedResidues.has(i)?" pinned":""),tabindex:0,role:"button","data-residue-index":i,"aria-label":`${seq[i]}${i+1}, ${partner[i]<0?"unpaired":"paired with "+(partner[i]+1)}`});
       if(i===selected || i===partner[selected]) g.append(svg("circle",{"data-export-remove":"",r:20,fill:"none",stroke:"#ffffff","stroke-width":1.5,"stroke-dasharray":i===selected?"none":"3 3"}));
       g.append(svg("circle",{r:16,fill:s.fillColor,stroke:s.circleColor,"stroke-width":s.circleWidth}));
       text(g,seq[i],{y:0,fill:s.letterColor,"font-family":s.font,"font-size":s.letterSize,"font-style":s.fontStyle==="italic"?"italic":"normal","font-weight":s.fontStyle==="bold"?"700":"400","text-anchor":"middle","dominant-baseline":"central"});
@@ -353,7 +428,7 @@ const SecondaryExplorer = (() => {
         number.setAttribute("class","se-index");
       }
       const title=svg("title");title.textContent=`${seq[i]}${i+1}`+(metadata[i]?` · ${metadata[i].id} · ${metadata[i].value??"No value"}`:"");g.append(title);
-      g.addEventListener("click",()=>select(i));
+      g.addEventListener("click",()=>{if(!suppressNodeClick)select(i);});
       g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select(i);}});
       root.append(g);
     });
@@ -373,7 +448,7 @@ const SecondaryExplorer = (() => {
     const parsed=parse(sequence,structure);
     const changed=sequence!==seq||structure!==db;
     seq=sequence;db=structure;pairs=parsed.pairs;partner=parsed.partner;selected=0;
-    if(changed){overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;pairProbabilities={};pairProbEnabled=false;pairProbTicket++;pairChemistry={};zoom=1;panX=panY=0;
+    if(changed){overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;pairProbabilities={};pairProbEnabled=false;pairProbTicket++;pairChemistry={};manualOffsets={};pinnedResidues=new Set();zoom=1;panX=panY=0;
       indexMode="default";indexOverrides={};indexSelection=new Set([...sequence].map((_,i)=>i).filter(i=>i===0||(i+1)%5===0||i===sequence.length-1));
       if($("seMetadataFile"))$("seMetadataFile").value="";
       if($("seMetadataStatus"))$("seMetadataStatus").textContent="Upload metadata for the current sequence.";
@@ -455,6 +530,29 @@ const SecondaryExplorer = (() => {
     ps.append($("seSelected"),$("sePairList").closest("label"),$("sePairEditor"));
     $("sePairEditor").insertAdjacentHTML("beforeend",'<button type="button" id="sePairChemButton">Open base-pair chemistry</button><p id="sePairChemStatus">Select a base pair to open its chemistry.</p>');
     ra.insertAdjacentHTML("beforeend",'<button id="seNaturalColors" type="button">Restore A/G/C/U fill colors</button><fieldset><legend>Reactivity / residue information</legend><p>Headers: Residue_Index, Residue_ID, Residue_Information. Indices start at 1. Numeric values are mapped linearly; blank or NA values keep the standard nucleotide color. Upload applies the heatmap and resets other colors to defaults; you can edit them afterward.</p><label>Reactivity / metadata CSV<input id="seMetadataFile" type="file" accept=".csv,text/csv"></label><label>Heatmap theme<select id="seHeatTheme"><option value="viridis">Viridis</option><option value="magma">Magma</option><option value="blueRed">Blue–white–red</option><option value="cividis">Cividis</option></select></label><label><input type="checkbox" id="seHeatEnabled">Show reactivity colors</label><button id="seClearMetadata" type="button">Clear metadata</button><p id="seMetadataStatus" role="status">Upload metadata for the current sequence.</p></fieldset>');
+    const reactivityField=$("seMetadataFile").closest("fieldset"),probabilityField=$("sePairProbFile").closest("fieldset");
+    layerBox.append(reactivityField,probabilityField);
+    layerBox.insertAdjacentHTML("beforeend",
+      '<details class="se-legend-settings"><summary>Reactivity color bar</summary>'+
+      '<label><input id="seHeatLegendVisible" type="checkbox" checked> Show color bar</label>'+
+      '<label>Orientation<select id="seHeatLegendOrientation"><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label>'+
+      '<label>Automatic tick count<input id="seHeatLegendTicks" type="number" min="2" max="12" step="1" value="3"></label>'+
+      '<label>Custom tick values<input id="seHeatLegendValues" type="text" placeholder="e.g. 0, 0.5, 1, 1.5, 2"></label>'+
+      '<label>Bar thickness<input id="seHeatLegendThickness" type="number" min="4" max="60" step="1" value="16"></label>'+
+      '<label>Tick thickness<input id="seHeatTickThickness" type="number" min="0.5" max="6" step="0.5" value="1"></label>'+
+      '<label>Font family<select id="seHeatLegendFont"><option>monospace</option><option>Arial</option><option>Calibri</option><option>Times New Roman</option></select></label>'+
+      '<label>Font size<input id="seHeatLegendFontSize" type="number" min="8" max="36" step="1" value="12"></label>'+
+      '<label>Font color<input id="seHeatLegendFontColor" type="color" value="#bacbd7"></label></details>'+
+      '<details class="se-legend-settings"><summary>Base-pair probability color bar</summary>'+
+      '<label><input id="sePairLegendVisible" type="checkbox" checked> Show color bar</label>'+
+      '<label>Orientation<select id="sePairLegendOrientation"><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label>'+
+      '<label>Automatic tick count<input id="sePairLegendTicks" type="number" min="2" max="12" step="1" value="3"></label>'+
+      '<label>Custom tick values<input id="sePairLegendValues" type="text" placeholder="e.g. 0, 0.2, 0.5, 0.8, 1"></label>'+
+      '<label>Bar thickness<input id="sePairLegendThickness" type="number" min="4" max="60" step="1" value="16"></label>'+
+      '<label>Tick thickness<input id="sePairTickThickness" type="number" min="0.5" max="6" step="0.5" value="1"></label>'+
+      '<label>Font family<select id="sePairLegendFont"><option>monospace</option><option>Arial</option><option>Calibri</option><option>Times New Roman</option></select></label>'+
+      '<label>Font size<input id="sePairLegendFontSize" type="number" min="8" max="36" step="1" value="12"></label>'+
+      '<label>Font color<input id="sePairLegendFontColor" type="color" value="#bacbd7"></label></details>');
     old.forEach(el=>el.remove());
     $("seMetadataFile").closest("fieldset").insertAdjacentHTML("afterbegin",'<button type="button" id="seExample">Load example reactivity CSV</button><p><a href="data/rna_residue_reactivity.csv" download>Download example CSV</a> · Values supplied for the default tRNA.</p>');
     $("seBackList").addEventListener("change",e=>{selectedBackbone=Number(e.target.value);panel();});
@@ -528,6 +626,19 @@ const SecondaryExplorer = (() => {
         render();
       }catch(error){if(ticket===pairProbTicket)$("sePairProbStatus").textContent="Upload failed: "+error.message;}
     });
+    function bindLegendControls(kind,prefix){
+      const cfg=legendSettings[kind],pairs=[
+        ["Visible","visible",el=>el.checked],["Orientation","orientation",el=>el.value],
+        ["Ticks","tickCount",el=>Number(el.value)],["Values","tickValues",el=>el.value],
+        ["Thickness","thickness",el=>Number(el.value)],["TickThickness","tickThickness",el=>Number(el.value)],
+        ["Font","font",el=>el.value],["FontSize","fontSize",el=>Number(el.value)],["FontColor","fontColor",el=>el.value]
+      ];
+      pairs.forEach(([suffix,key,read])=>$(prefix+suffix)?.addEventListener("input",e=>{if(e.target.checkValidity?.()===false)return;cfg[key]=read(e.target);render();}));
+      $(prefix+"Visible")?.addEventListener("change",e=>{cfg.visible=e.target.checked;render();});
+      $(prefix+"Orientation")?.addEventListener("change",e=>{cfg.orientation=e.target.value;render();});
+    }
+    bindLegendControls("heat","seHeatLegend");
+    bindLegendControls("pair","sePairLegend");
     $("seExample").addEventListener("click",async()=>{
       const ticket=++metadataTicket;$("seMetadataStatus").textContent="Loading example…";
       try{
@@ -592,21 +703,52 @@ const SecondaryExplorer = (() => {
     $("seResidueList").value=String(selected);
     $("seIndexMode").textContent="Showing: "+(indexMode==="default"?"1, every 5, and last":indexMode==="all"?"all indices":indexSelection.size+" selected indices");
   }
+  function legendTickValues(cfg,min,max){
+    const custom=String(cfg.tickValues||"").split(",").map(v=>Number(v.trim())).filter(Number.isFinite);
+    if(custom.length>=2)return custom;
+    const n=Math.max(2,Math.min(12,Number(cfg.tickCount)||3));
+    return Array.from({length:n},(_,i)=>min+(max-min)*i/(n-1));
+  }
+  function startLegendDrag(box,key,event){
+    if(!event.target.closest(".se-legend-drag-handle"))return;
+    event.preventDefault();const cfg=legendSettings[key],stage=box.parentElement,rect=stage.getBoundingClientRect();
+    const start={x:event.clientX,y:event.clientY,left:cfg.x,top:cfg.y};
+    box.setPointerCapture?.(event.pointerId);
+    const move=e=>{
+      if(e.pointerId!==event.pointerId)return;
+      cfg.x=Math.max(0,Math.min(rect.width-box.offsetWidth,start.left+e.clientX-start.x));
+      cfg.y=Math.max(0,Math.min(rect.height-box.offsetHeight,start.top+e.clientY-start.y));
+      box.style.left=cfg.x+"px";box.style.top=cfg.y+"px";
+    };
+    const up=e=>{
+      if(e.pointerId!==event.pointerId)return;
+      box.removeEventListener("pointermove",move);box.removeEventListener("pointerup",up);box.removeEventListener("pointercancel",up);
+      if(box.hasPointerCapture?.(e.pointerId))box.releasePointerCapture(e.pointerId);
+    };
+    box.addEventListener("pointermove",move);box.addEventListener("pointerup",up);box.addEventListener("pointercancel",up);
+  }
+  function renderScaleLegend(box,key,title,stops,min,max,active){
+    const cfg=legendSettings[key];box.hidden=!active||!cfg.visible;box.replaceChildren();if(box.hidden)return;
+    box.className="se-data-legend "+cfg.orientation;box.style.left=cfg.x+"px";box.style.top=cfg.y+"px";
+    box.style.setProperty("--legend-thickness",cfg.thickness+"px");box.style.setProperty("--tick-thickness",cfg.tickThickness+"px");
+    box.style.setProperty("--legend-font",cfg.font);box.style.setProperty("--legend-font-size",cfg.fontSize+"px");box.style.setProperty("--legend-font-color",cfg.fontColor);
+    const head=document.createElement("div");head.className="se-legend-drag-handle";head.innerHTML="<strong>"+title+"</strong><span>drag</span>";
+    const body=document.createElement("div");body.className="se-legend-body";
+    const bar=document.createElement("div");bar.className="se-heat-bar";bar.style.background="linear-gradient("+(cfg.orientation==="vertical"?"to top":"to right")+","+stops.join(",")+")";
+    const ticks=document.createElement("div");ticks.className="se-legend-ticks";
+    legendTickValues(cfg,min,max).forEach(value=>{
+      const item=document.createElement("span"),mark=document.createElement("i"),label=document.createElement("b");
+      mark.setAttribute("aria-hidden","true");label.textContent=Number(value.toFixed(4)).toString();item.append(mark,label);ticks.append(item);
+    });
+    body.append(bar,ticks);box.append(head,body);box.onpointerdown=e=>startLegendDrag(box,key,e);
+  }
   function renderPairProbabilityLegend(){
     const box=$("sePairProbLegend");if(!box)return;
-    box.hidden=!pairProbEnabled;box.replaceChildren();if(!pairProbEnabled)return;
-    const title=document.createElement("strong");title.textContent="Base-pair probability · "+pairProbTheme;
-    const bar=document.createElement("div");bar.className="se-heat-bar";bar.style.background="linear-gradient(to right,"+palettes[pairProbTheme].join(",")+")";
-    const label=document.createElement("p");label.textContent="0 → 1. Pair connectors with loaded values use this scale; selected manual pair-color overrides take priority.";
-    box.append(title,bar,label);
+    renderScaleLegend(box,"pair","Base-pair probability",palettes[pairProbTheme],0,1,pairProbEnabled);
   }
   function renderHeatLegend(){
     const box=$("seHeatLegend");if(!box)return;
-    box.hidden=!heatEnabled;box.replaceChildren();if(!heatEnabled)return;
-    const title=document.createElement("strong");title.textContent="Residue information · "+heatTheme;
-    const bar=document.createElement("div");bar.className="se-heat-bar";bar.style.background="linear-gradient(to right,"+palettes[heatTheme].join(",")+")";
-    const label=document.createElement("p");label.textContent=heatRange[0]+" → "+heatRange[1]+" · Linear scale. Missing values use nucleotide colors. Manual overrides take priority.";
-    box.append(title,bar,label);
+    renderScaleLegend(box,"heat","Reactivity / residue information",palettes[heatTheme],heatRange[0],heatRange[1],heatEnabled);
   }
   function applyZoom(){
     const root=$("secondarySvg"),v=root.dataset.fullViewBox.split(/\s+/).map(Number);
@@ -651,7 +793,7 @@ const SecondaryExplorer = (() => {
   }
   function setupToolbar(viewport,stage){
     const toolbar=document.createElement("div");toolbar.className="se-toolbar";
-    toolbar.innerHTML='<button id="seZoomOut" type="button" aria-label="Zoom out">−</button><output id="seZoomValue" aria-live="polite">100%</output><button id="seZoomIn" type="button" aria-label="Zoom in">+</button><button id="seZoomReset" type="button">Reset view</button><label class="se-resolution-control">Export resolution <input id="seExportScale" type="range" min="1" max="4" step=".5" value="2"><output id="seExportScaleValue">2×</output></label><button id="seDownload" type="button">Download PNG</button>';
+    toolbar.innerHTML='<button id="seZoomOut" type="button" aria-label="Zoom out">−</button><output id="seZoomValue" aria-live="polite">100%</output><button id="seZoomIn" type="button" aria-label="Zoom in">+</button><button id="seZoomReset" type="button">Reset view</button><label>Move<select id="seDragMode"><option value="residue">Nucleotide</option><option value="branch">Stem / branch</option><option value="whole">Whole structure</option></select></label><label class="se-inline-check"><input id="seFlexDrag" type="checkbox" checked> Flexible neighbors</label><button id="sePinSelected" type="button">Pin selected</button><button id="seResetManualLayout" type="button">Reset layout edits</button><label class="se-resolution-control">Export resolution <input id="seExportScale" type="range" min="1" max="4" step=".5" value="2"><output id="seExportScaleValue">2×</output></label><button id="seDownload" type="button">Download PNG</button>';
     viewport.before(toolbar);
     const message=document.createElement("p");message.id="seExportStatus";message.setAttribute("role","status");message.className="se-export-status";viewport.after(message);
     const legend=document.createElement("div");legend.id="seHeatLegend";legend.hidden=true;stage.append(legend);
@@ -679,7 +821,15 @@ const SecondaryExplorer = (() => {
     const endDrag=e=>{if(drag&&e.pointerId===drag.id){drag=null;viewport.classList.remove("se-panning");if(viewport.hasPointerCapture(e.pointerId))viewport.releasePointerCapture(e.pointerId);setTimeout(()=>suppressMenu=false,100);}};
     viewport.addEventListener("pointerup",endDrag);viewport.addEventListener("pointercancel",endDrag);
     viewport.addEventListener("contextmenu",e=>{if(drag||suppressMenu)e.preventDefault();});
-    toolbar.insertAdjacentHTML("afterend",'<p class="se-export-status">Mouse wheel: zoom · Right-button drag: pan · Reset view: fit structure</p>');
+    toolbar.insertAdjacentHTML("afterend",'<p class="se-export-status" id="seDragStatus">Left-drag a nucleotide to edit the layout · Mouse wheel: zoom · Right-button drag: pan.</p>');
+    $("seDragMode").addEventListener("change",e=>{dragMode=e.target.value;$("seDragStatus").textContent="Drag mode: "+e.target.options[e.target.selectedIndex].text+".";});
+    $("seFlexDrag").addEventListener("change",e=>{flexDrag=e.target.checked;});
+    $("sePinSelected").addEventListener("click",()=>{
+      if(pinnedResidues.has(selected)){pinnedResidues.delete(selected);$("seDragStatus").textContent="Residue "+(selected+1)+" unpinned.";}
+      else {pinnedResidues.add(selected);$("seDragStatus").textContent="Residue "+(selected+1)+" pinned. Neighbor relaxation will leave it fixed.";}
+      render();
+    });
+    $("seResetManualLayout").addEventListener("click",()=>{manualOffsets={};pinnedResidues.clear();$("seDragStatus").textContent="Manual layout edits cleared.";render();});
     $("seExportScale").addEventListener("input",e=>{exportScale=Number(e.target.value);$("seExportScaleValue").textContent=exportScale+"×";});
     $("seDownload").addEventListener("click",exportPng);
     if(typeof ResizeObserver!=="undefined")new ResizeObserver(()=>{if(seq)applyZoom();}).observe(viewport);
@@ -746,6 +896,7 @@ const SecondaryExplorer = (() => {
     const viewport=document.createElement("div");viewport.className="se-viewport";root.before(viewport);viewport.append(root);
     const legend=document.createElement("div");legend.id="seLegend";legend.setAttribute("aria-label","Base-pair legend");stage.append(legend);
     setupToolbar(viewport,stage);
+    installNodeDragging(root);
     const status=(message,error=false)=>{$("secondaryInputStatus").textContent=message;$("secondaryInputStatus").classList.toggle("error",error);};
     $("renderSecondaryButton").addEventListener("click",()=>{
       try {
