@@ -403,14 +403,19 @@ const TertiaryExplorer = (() => {
         const toggle=document.createElement("input");toggle.type="checkbox";toggle.checked=bs.visible!==false;toggle.setAttribute("aria-label","Show hydrogen bond "+(idx+1));
         toggle.addEventListener("change",()=>{bs.visible=toggle.checked;style.bonds[hit.key]=bs;render();});
         const label=document.createElement("span");label.textContent=atomName(hit.a)+" ↔ "+atomName(hit.b)+" · "+hit.d.toFixed(2)+" Å";
-        const individual=document.createElement("button");individual.type="button";individual.textContent="Style";individual.addEventListener("click",()=>{
-          const color=prompt("Hydrogen-bond color",bs.color||style.color);if(color&&/^#[0-9a-f]{6}$/i.test(color))bs.color=color;
-          const line=prompt("Line style: solid, dashed, or dotted",bs.lineStyle||style.lineStyle);if(["solid","dashed","dotted"].includes(line))bs.lineStyle=line;
-          const thick=Number(prompt("Thickness",String(bs.radius||style.radius)));if(Number.isFinite(thick))bs.radius=clamp(thick,.02,.2);
-          const op=Number(prompt("Opacity 0–1",String(bs.opacity??style.opacity)));if(Number.isFinite(op))bs.opacity=clamp(op,.05,1);
-          style.bonds[hit.key]=bs;render();
-        });
-        row.append(toggle,label,individual);card.append(row);
+        const details=document.createElement("details");details.className="te-hbond-individual";
+        const summary=document.createElement("summary");summary.textContent="Style";
+        const editor=document.createElement("div");editor.className="te-hbond-individual-style";
+        editor.innerHTML='<label>Line<select data-hbi="lineStyle"><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label><label>Thickness<input data-hbi="radius" type="range" min="0.02" max="0.2" step="0.01"></label><label>Opacity<input data-hbi="opacity" type="range" min="0.05" max="1" step="0.05"></label><label>Color<input data-hbi="color" type="color"></label><label class="te-check"><input data-hbi="labelVisible" type="checkbox"> Distance label</label>';
+        editor.querySelector('[data-hbi="lineStyle"]').value=bs.lineStyle||style.lineStyle;
+        editor.querySelector('[data-hbi="radius"]').value=bs.radius||style.radius;
+        editor.querySelector('[data-hbi="opacity"]').value=bs.opacity??style.opacity;
+        editor.querySelector('[data-hbi="color"]').value=bs.color||style.color;
+        editor.querySelector('[data-hbi="labelVisible"]').checked=bs.labelVisible??style.labelVisible??false;
+        editor.querySelectorAll("[data-hbi]").forEach(input=>input.addEventListener("change",()=>{
+          const k=input.dataset.hbi;bs[k]=input.type==="range"?Number(input.value):input.type==="checkbox"?input.checked:input.value;style.bonds[hit.key]=bs;render();
+        }));
+        details.append(summary,editor);row.append(toggle,label,details);card.append(row);
       });
       box.append(card);
     });
