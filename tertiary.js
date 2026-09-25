@@ -137,7 +137,7 @@ const TertiaryExplorer = (() => {
   }
   function loadScript(src){
     return new Promise((resolve,reject)=>{
-      const existing=[...document.scripts].find(s=>s.src===src);
+      const scripts=document.scripts?[...document.scripts]:[];const existing=scripts.find(s=>s.src===src);
       if(existing){
         if(window.$3Dmol)return resolve();
         existing.addEventListener("load",resolve,{once:true});existing.addEventListener("error",reject,{once:true});return;
