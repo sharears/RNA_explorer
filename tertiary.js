@@ -181,21 +181,29 @@ const TertiaryExplorer = (() => {
     if(!viewer)return;
     try{if(typeof viewer.resize==="function")viewer.resize();}catch(error){console.warn("3D viewer resize:",error);}
   }
+  function forceViewerRefresh({fit=false}={}){
+    if(!viewer)return;
+    safeViewerResize();
+    let view=null;
+    try{view=viewer.getView?viewer.getView():null;}catch(_){}
+    if(model)applyStyles(false);
+    try{
+      if(fit)viewer.zoomTo({},0);
+      else if(view&&viewer.setView)viewer.setView(view);
+      viewer.render();
+    }catch(error){console.warn("3D viewer refresh:",error);}
+  }
   async function settleViewerLayout({fit=false}={}){
     const ticket=++resizeTicket;await nextFrame();await nextFrame();if(ticket!==resizeTicket||!viewer)return;
-    safeViewerResize();
-    if(fit){try{viewer.zoomTo({},0);}catch(error){console.warn("3D viewer fit:",error);}}
-    if(model)applyStyles(false);
-    try{viewer.render();}catch(error){console.warn("3D viewer render:",error);}
+    forceViewerRefresh({fit});
+    await nextFrame();if(ticket!==resizeTicket||!viewer)return;
+    forceViewerRefresh();
   }
   function scheduleViewerLayout(){
     if(!viewer)return;
-    safeViewerResize();if(model)applyStyles();
+    forceViewerRefresh();
     const ticket=++resizeTicket;
-    nextFrame().then(nextFrame).then(()=>{
-      if(ticket!==resizeTicket||!viewer)return;
-      safeViewerResize();if(model)applyStyles();
-    });
+    nextFrame().then(nextFrame).then(()=>{if(ticket===resizeTicket&&viewer)forceViewerRefresh();});
   }
 
   function residuesFromAtoms(atoms){
@@ -897,10 +905,10 @@ const TertiaryExplorer = (() => {
       '<div class="te-region-legend" id="teRegionLegend" hidden></div></div>';
 
     $("teRepresentation").value=state.representation;$("teColorMode").value=state.colorMode;$("teShowPairs").checked=state.showPairs;$("teShowIndices").checked=state.showIndices;
-    $("teRepresentation").addEventListener("change",e=>{state.representation=e.target.value;render();});
-    $("teColorMode").addEventListener("change",e=>{state.colorMode=e.target.value;render();});
-    $("teUniformColor").addEventListener("input",e=>{state.uniformColor=e.target.value;if(state.colorMode==="uniform")render();});
-    $("teBackgroundColor").addEventListener("input",e=>{state.backgroundColor=e.target.value;if(viewer){viewer.setBackgroundColor(state.backgroundColor,1);viewer.render();}});
+    $("teRepresentation").addEventListener("change",e=>{state.representation=e.target.value;if(viewer&&model)forceViewerRefresh();render();});
+    $("teColorMode").addEventListener("change",e=>{state.colorMode=e.target.value;if(viewer&&model)forceViewerRefresh();render();});
+    $("teUniformColor").addEventListener("input",e=>{state.uniformColor=e.target.value;if(state.colorMode==="uniform"){if(viewer&&model)forceViewerRefresh();render();}});
+    $("teBackgroundColor").addEventListener("input",e=>{state.backgroundColor=e.target.value;if(viewer){viewer.setBackgroundColor(state.backgroundColor,1);forceViewerRefresh();}});
     $("teOrthographic").addEventListener("change",e=>{state.orthographic=e.target.checked;if(viewer?.setCameraParameters){viewer.setCameraParameters({orthographic:state.orthographic});viewer.render();}});
     $("teFullscreen").addEventListener("click",()=>{$("tertiaryStage")?.requestFullscreen?.();});
     $("teShowPairs").addEventListener("change",e=>{state.showPairs=e.target.checked;render();});
