@@ -730,8 +730,9 @@ const SecondaryExplorer = (() => {
   function renderScaleLegend(box,key,title,stops,min,max,active){
     const cfg=legendSettings[key];box.hidden=!active||!cfg.visible;box.replaceChildren();if(box.hidden)return;
     box.className="se-data-legend "+cfg.orientation;box.style.left=cfg.x+"px";box.style.top=cfg.y+"px";
-    box.style.setProperty("--legend-thickness",cfg.thickness+"px");box.style.setProperty("--tick-thickness",cfg.tickThickness+"px");
-    box.style.setProperty("--legend-font",cfg.font);box.style.setProperty("--legend-font-size",cfg.fontSize+"px");box.style.setProperty("--legend-font-color",cfg.fontColor);
+    const cssVar=(name,value)=>box.style.setProperty?box.style.setProperty(name,value):box.style[name]=value;
+    cssVar("--legend-thickness",cfg.thickness+"px");cssVar("--tick-thickness",cfg.tickThickness+"px");
+    cssVar("--legend-font",cfg.font);cssVar("--legend-font-size",cfg.fontSize+"px");cssVar("--legend-font-color",cfg.fontColor);
     const head=document.createElement("div");head.className="se-legend-drag-handle";head.innerHTML="<strong>"+title+"</strong><span>drag</span>";
     const body=document.createElement("div");body.className="se-legend-body";
     const bar=document.createElement("div");bar.className="se-heat-bar";bar.style.background="linear-gradient("+(cfg.orientation==="vertical"?"to top":"to right")+","+stops.join(",")+")";
