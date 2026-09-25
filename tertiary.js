@@ -527,7 +527,7 @@ const TertiaryExplorer = (() => {
     state.measurementPicks.push(atomSnapshot(atom));
     if(state.measurementPicks.length>=required){
       const points=state.measurementPicks.slice(0,required),value=measurementValue(type,points);
-      if(Number.isFinite(value))state.measurements.push({id:state.measurementSerial++,type,points,value});
+      if(Number.isFinite(value))state.measurements.push({id:state.measurementSerial++,type,points,value,style:styleDefaults("measurement")});
       state.measurementPicks=[];
     }
     render();
@@ -537,18 +537,33 @@ const TertiaryExplorer = (() => {
     const box=$("teMeasurementList");if(!box)return;box.replaceChildren();
     if(!state.measurements.length){box.textContent="No saved measurements.";return;}
     state.measurements.forEach(m=>{
-      const row=document.createElement("div");row.className="te-measurement-row";
-      const text=document.createElement("span");text.textContent=m.type[0].toUpperCase()+m.type.slice(1)+" "+m.value.toFixed(2)+" "+measurementUnit(m.type)+" · "+m.points.map(atomLabel).join(" → ");
-      const del=document.createElement("button");del.type="button";del.textContent="Delete";del.addEventListener("click",()=>{state.measurements=state.measurements.filter(x=>x.id!==m.id);render();});
-      row.append(text,del);box.append(row);
+      m.style={...styleDefaults("measurement"),...(m.style||{})};
+      const card=document.createElement("details");card.className="te-style-card";
+      const summary=document.createElement("summary");summary.textContent=m.type[0].toUpperCase()+m.type.slice(1)+" · "+m.value.toFixed(2)+" "+measurementUnit(m.type);
+      const atoms=document.createElement("p");atoms.textContent=m.points.map(atomLabel).join(" → ");
+      const makeSelect=(label,value,options,onchange)=>{
+        const row=document.createElement("label");row.textContent=label;const sel=document.createElement("select");
+        options.forEach(([v,t])=>sel.append(new Option(t,v)));sel.value=value;sel.addEventListener("change",()=>onchange(sel.value));row.append(sel);return row;
+      };
+      const visible=document.createElement("label"),vis=document.createElement("input");vis.type="checkbox";vis.checked=m.style.visible!==false;visible.append(vis,document.createTextNode(" Show measurement"));vis.addEventListener("change",()=>{m.style.visible=vis.checked;render();});
+      const labelToggle=document.createElement("label"),lab=document.createElement("input");lab.type="checkbox";lab.checked=m.style.label!==false;labelToggle.append(lab,document.createTextNode(" Show value label"));lab.addEventListener("change",()=>{m.style.label=lab.checked;render();});
+      const color=document.createElement("label"),colorInput=document.createElement("input");color.textContent="Color";colorInput.type="color";colorInput.value=m.style.color;colorInput.addEventListener("input",()=>{m.style.color=colorInput.value;render();});color.append(colorInput);
+      const thick=document.createElement("label"),thickInput=document.createElement("input");thick.textContent="Thickness";thickInput.type="range";thickInput.min=".5";thickInput.max="4";thickInput.step=".25";thickInput.value=m.style.thickness;thickInput.addEventListener("input",()=>{m.style.thickness=Number(thickInput.value);render();});thick.append(thickInput);
+      const opacity=document.createElement("label"),opInput=document.createElement("input");opacity.textContent="Transparency";opInput.type="range";opInput.min=".1";opInput.max="1";opInput.step=".05";opInput.value=m.style.opacity;opInput.addEventListener("input",()=>{m.style.opacity=Number(opInput.value);render();});opacity.append(opInput);
+      const line=makeSelect("Line style",m.style.lineStyle,[["solid","Solid"],["dashed","Dashed"],["dotted","Dotted"]],v=>{m.style.lineStyle=v;render();});
+      const del=document.createElement("button");del.type="button";del.textContent="Delete measurement";del.addEventListener("click",()=>{state.measurements=state.measurements.filter(x=>x.id!==m.id);render();});
+      card.append(summary,atoms,visible,labelToggle,line,color,thick,opacity,del);box.append(card);
     });
   }
   function addMeasurements(){
     const status=$("teMeasureStatus"),type=state.measurementMode,required=requiredPicks(type);
     state.measurements.forEach(m=>{
-      m.points.forEach(p=>viewer.addSphere({center:p,radius:.22,color:"#ffffff",opacity:.9}));
-      for(let i=0;i<m.points.length-1;i++)viewer.addCylinder({start:m.points[i],end:m.points[i+1],radius:.07,color:"#ffffff",opacity:.82,fromCap:1,toCap:1});
-      const c=measurementCentroid(m.points);viewer.addLabel(m.value.toFixed(2)+" "+measurementUnit(m.type),{position:c,fontSize:13,fontColor:"#fff",backgroundColor:"#08111e",backgroundOpacity:.88,borderColor:"#6f8798",borderThickness:1,inFront:true});
+      m.style={...styleDefaults("measurement"),...(m.style||{})};if(m.style.visible===false)return;
+      m.points.forEach(p=>viewer.addSphere({center:p,radius:.20*Math.max(.7,m.style.thickness||1),color:m.style.color,opacity:m.style.opacity}));
+      for(let i=0;i<m.points.length-1;i++)drawStyledLine(m.points[i],m.points[i+1],m.style,.055);
+      if(m.style.label!==false){
+        const c=measurementCentroid(m.points);viewer.addLabel(m.value.toFixed(2)+" "+measurementUnit(m.type),{position:c,fontSize:13,fontColor:"#fff",backgroundColor:"#08111e",backgroundOpacity:.88,borderColor:m.style.color,borderThickness:1,inFront:true});
+      }
     });
     state.measurementPicks.forEach(p=>viewer.addSphere({center:p,radius:.3,color:"#f2c66d",opacity:.75}));
     renderMeasurementList();if(!status)return;
@@ -557,11 +572,76 @@ const TertiaryExplorer = (() => {
     status.textContent=state.measurementPicks.length?type[0].toUpperCase()+type.slice(1)+": "+state.measurementPicks.length+" atoms selected · choose "+left+" more.":type[0].toUpperCase()+type.slice(1)+" mode: choose "+required+" atoms.";
   }
 
+  function addSelectedPairHydrogenBonds(){
+    if(!viewer||!state.mapping.enabled)return;
+    state.selectedPairs.forEach(key=>{
+      const hbonds=pairHydrogenBonds(key);
+      hbonds.forEach(h=>{
+        const style=resolvedHBondStyle(key,h);if(style.visible===false)return;
+        drawStyledLine(h.atomA,h.atomB,style,.052);
+        if(style.label){
+          const c=linePoint(h.atomA,h.atomB,.5);
+          viewer.addLabel(h.distance.toFixed(2)+" Å",{position:c,fontSize:11,fontColor:"#07111c",backgroundColor:style.color,backgroundOpacity:.88,borderColor:"#ffffff",borderThickness:.5,inFront:true});
+        }
+      });
+    });
+  }
+  function renderPairSelectionPanel(){
+    const box=$("tePairSelectionPanel");if(!box)return;box.replaceChildren();
+    if(!state.selectedPairs.size){box.hidden=true;return;}box.hidden=false;
+    const heading=document.createElement("div");heading.className="te-context-heading";heading.innerHTML="<strong>Selected base pairs</strong><span>Hydrogen bonds are shown only when donor/acceptor heavy atoms satisfy the current distance cutoff.</span>";box.append(heading);
+    state.selectedPairs.forEach(key=>{
+      const [a,b]=parsePairKey(key),hbonds=pairHydrogenBonds(key),style=ensurePairStyle(key);
+      const card=document.createElement("details");card.className="te-style-card";card.open=true;
+      const summary=document.createElement("summary");summary.textContent=baseAt(a)+(a+1)+" — "+baseAt(b)+(b+1)+" · "+hbonds.length+" H-bond"+(hbonds.length===1?"":"s");card.append(summary);
+      if(!hbonds.length){
+        const note=document.createElement("p");note.className="te-hbond-none";note.textContent="The 2D structure marks this pair, but no donor–acceptor heavy-atom contact meets the "+state.pairHBondCutoff.toFixed(1)+" Å cutoff in the current 3D coordinates.";card.append(note);
+      }else{
+        const group=document.createElement("div");group.className="te-style-grid";
+        const styleSelect=document.createElement("select");[["solid","Solid"],["dashed","Dashed"],["dotted","Dotted"]].forEach(([v,t])=>styleSelect.append(new Option(t,v)));styleSelect.value=style.lineStyle;styleSelect.addEventListener("change",()=>{style.lineStyle=styleSelect.value;render();});
+        const styleLabel=document.createElement("label");styleLabel.textContent="All bond lines";styleLabel.append(styleSelect);
+        const colorLabel=document.createElement("label"),color=document.createElement("input");colorLabel.textContent="Color";color.type="color";color.value=style.color;color.addEventListener("input",()=>{style.color=color.value;render();});colorLabel.append(color);
+        const thickLabel=document.createElement("label"),thick=document.createElement("input");thickLabel.textContent="Thickness";thick.type="range";thick.min=".5";thick.max="4";thick.step=".25";thick.value=style.thickness;thick.addEventListener("input",()=>{style.thickness=Number(thick.value);render();});thickLabel.append(thick);
+        const opLabel=document.createElement("label"),opacity=document.createElement("input");opLabel.textContent="Transparency";opacity.type="range";opacity.min=".1";opacity.max="1";opacity.step=".05";opacity.value=style.opacity;opacity.addEventListener("input",()=>{style.opacity=Number(opacity.value);render();});opLabel.append(opacity);
+        const labLabel=document.createElement("label"),lab=document.createElement("input");lab.type="checkbox";lab.checked=!!style.label;labLabel.append(lab,document.createTextNode(" Show distance labels"));lab.addEventListener("change",()=>{style.label=lab.checked;render();});
+        group.append(styleLabel,colorLabel,thickLabel,opLabel,labLabel);card.append(group);
+        const list=document.createElement("div");list.className="te-hbond-list";
+        hbonds.forEach((h,n)=>{
+          const own=style.individual[h.id]||(style.individual[h.id]={});
+          const row=document.createElement("details");row.className="te-hbond-row";
+          const sum=document.createElement("summary");
+          const check=document.createElement("input");check.type="checkbox";check.checked=own.visible!==false;check.addEventListener("click",e=>e.stopPropagation());check.addEventListener("change",()=>{own.visible=check.checked;render();});
+          const text=document.createElement("span");text.textContent=(n+1)+". "+atomName(h.atomA)+" ↔ "+atomName(h.atomB)+" · "+h.distance.toFixed(2)+" Å";sum.append(check,text);row.append(sum);
+          const individual=document.createElement("div");individual.className="te-style-grid";
+          const lsel=document.createElement("select");[["","Use pair style"],["solid","Solid"],["dashed","Dashed"],["dotted","Dotted"]].forEach(([v,t])=>lsel.append(new Option(t,v)));lsel.value=own.lineStyle||"";lsel.addEventListener("change",()=>{own.lineStyle=lsel.value||undefined;render();});
+          const ll=document.createElement("label");ll.textContent="Line";ll.append(lsel);
+          const ci=document.createElement("input");ci.type="color";ci.value=own.color||style.color;ci.addEventListener("input",()=>{own.color=ci.value;render();});const cl=document.createElement("label");cl.textContent="Color";cl.append(ci);
+          const ti=document.createElement("input");ti.type="range";ti.min=".5";ti.max="4";ti.step=".25";ti.value=own.thickness||style.thickness;ti.addEventListener("input",()=>{own.thickness=Number(ti.value);render();});const tl=document.createElement("label");tl.textContent="Thickness";tl.append(ti);
+          const oi=document.createElement("input");oi.type="range";oi.min=".1";oi.max="1";oi.step=".05";oi.value=own.opacity??style.opacity;oi.addEventListener("input",()=>{own.opacity=Number(oi.value);render();});const ol=document.createElement("label");ol.textContent="Transparency";ol.append(oi);
+          individual.append(ll,cl,tl,ol);row.append(individual);list.append(row);
+        });card.append(list);
+      }
+      const remove=document.createElement("button");remove.type="button";remove.textContent="Remove pair selection";remove.addEventListener("click",()=>togglePairSelection(a,b));card.append(remove);box.append(card);
+    });
+  }
+  function renderSelectionContext(){
+    const panel=$("teContextPanel");if(!panel)return;refreshCombinedSelection();
+    const count=state.selectionIndices.size,pairsCount=state.selectedPairs.size;panel.hidden=!count&&!pairsCount&&!state.measurements.length;
+    const summary=$("teContextSummary");if(summary)summary.textContent=count+" residue"+(count===1?"":"s")+" selected"+(pairsCount?" · "+pairsCount+" base pair"+(pairsCount===1?"":"s"):"");
+    renderPairSelectionPanel();
+  }
+  function applySelectionStyle(){
+    refreshCombinedSelection();if(!state.selectionIndices.size)return;
+    const color=$("teSelectionStyleColor")?.value||"#f2c66d",thickness=Number($("teSelectionStyleThickness")?.value)||1,opacity=Number($("teSelectionStyleOpacity")?.value)||1;
+    state.selectionIndices.forEach(i=>state.residueStyles[i]={color,thickness,opacity});render();
+  }
+  function resetSelectionStyle(){refreshCombinedSelection();state.selectionIndices.forEach(i=>delete state.residueStyles[i]);render();}
+
   function addSelectionHighlights(){
     const residues=activeResidues();
     state.selectionIndices.forEach(i=>{
       if(!isVisibleIndex(i)||!residues[i])return;
-      model.addStyle(selectorForResidue(residues[i]),{stick:{radius:.24,color:"#f2c66d"},sphere:{radius:.28,color:"#f2c66d",opacity:.28}});
+      const styled=state.residueStyles[i];model.addStyle(selectorForResidue(residues[i]),{stick:{radius:styled?.thickness?.18*Math.max(.5,styled.thickness):.24,color:styled?.color||"#f2c66d",opacity:styled?.opacity??1},sphere:{radius:.28*Math.max(.7,styled?.thickness||1),color:styled?.color||"#f2c66d",opacity:.22*(styled?.opacity??1)}});
       if(state.selectionLabels&&residues[i].coord)viewer.addLabel(baseAt(i)+(i+1),{position:residues[i].coord,fontSize:11,fontColor:"#07111c",backgroundColor:"#f2c66d",backgroundOpacity:.9,inFront:true});
     });
   }
@@ -602,7 +682,7 @@ const TertiaryExplorer = (() => {
       if(mate>=0&&residues[mate]&&isVisibleIndex(mate))safe("paired highlight",()=>model.addStyle(selectorForResidue(residues[mate]),{stick:{radius:.25,color:"#74d7b6"},sphere:{radius:.28,color:"#74d7b6",opacity:.38}}));
     }
     if(residues[state.selected]&&isVisibleIndex(state.selected))safe("selected highlight",()=>model.addStyle(selectorForResidue(residues[state.selected]),{stick:{radius:.34,color:"#ffffff"},sphere:{radius:.34,color:"#ffffff",opacity:.42}}));
-    safe("selection highlights",addSelectionHighlights);safe("object highlights",addObjectHighlights);safe("pair connectors",addPairs);
+    safe("selection highlights",addSelectionHighlights);safe("object highlights",addObjectHighlights);safe("pair connectors",addPairs);safe("selected pair hydrogen bonds",addSelectedPairHydrogenBonds);
     safe("indices",addIndices);safe("selected label",addSelectedLabel);safe("proximity",addProximity);safe("contacts",addContacts);
     safe("measurements",addMeasurements);safe("surface",updateSurface);safe("clipping",applyClipping);
     if(renderNow)safe("render",()=>viewer.render());
@@ -730,7 +810,7 @@ const TertiaryExplorer = (() => {
   }
   function render(selected){
     if(selected!==undefined)state.selected=clamp(selected,0,Math.max(0,(state.mapping.enabled?state.secondarySequence.length:activeResidues().length)-1));
-    miniSecondary();heatLegend();regionLegend();updateCopy();updateControls();renderSequencePanel();renderObjectList();renderSavedViews();
+    miniSecondary();heatLegend();regionLegend();updateCopy();updateControls();renderSequencePanel();renderObjectList();renderSavedViews();renderSelectionContext();
     const scene=$("scene-tertiary");if(!scene||scene.hidden)return;
     ensureViewer().then(()=>{scheduleViewerResize(true);applyStyles();}).catch(error=>console.error("Tertiary render:",error));
   }
