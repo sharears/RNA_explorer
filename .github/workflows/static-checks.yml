@@ -14,7 +14,7 @@ jobs:
           node-version: "22"
       - run: npm install --no-save linkedom playwright
       - run: npx playwright install --with-deps chromium
-      - run: mkdir -p dist && cp index.html *.js *.css dist/ && cp -r data dist/data
+      - run: mkdir -p dist && cp index.html *.js *.css dist/ && cp -r data dist/data && cp -r assets dist/assets
       - run: node tests/tertiary.cjs
       - run: node tests/chemistry-editor.cjs
       - run: node tests/chemistry.cjs
@@ -24,4 +24,5 @@ jobs:
           python3 -m http.server 4173 --directory dist > /tmp/rna-explorer-http.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID' EXIT
+          node tests/homepage-browser.mjs
           node tests/tertiary-browser.mjs
