@@ -75,7 +75,8 @@ const hash=b=>crypto.createHash("sha256").update(b).digest("hex");
     await split.check();
     await wait(350);
     assert(await page.locator("#tertiaryMiniPanel").isVisible(),"Linked 2D panel should appear");
-    assert.strictEqual(await page.locator("#tertiaryMiniSvg .te-mini-node text").count(),76,"Linked 2D view should render residue letters");
+    assert.strictEqual(await page.locator('#tertiaryMiniSvg [data-residue-index] text').count(),76,"Linked 2D view should render all residue letters from the Secondary workspace");
+    assert.strictEqual((await page.locator('#tertiaryMiniSvg [data-residue-index="0"] text').textContent()).trim(),"G","Linked 2D view should preserve residue identity text");
     await split.uncheck();
     await wait(350);
     assert(!(await page.locator("#tertiaryMiniPanel").isVisible()),"Linked 2D panel should hide");
@@ -83,15 +84,52 @@ const hash=b=>crypto.createHash("sha256").update(b).digest("hex");
     const afterUnlink=await page.locator("#tertiaryMolecularViewer canvas").boundingBox();
     assert(afterUnlink&&afterUnlink.width>300,"3D canvas should remain sized after unlinking");
 
-    // Basic analysis controls should execute without runtime errors.
+    // Analysis controls: proximity, contacts, measurements, selection, surface and clipping.
     await page.check("#teProximity");
+    await page.waitForFunction(()=>/residue|neighbor|within/i.test(document.querySelector("#teProximityStatus")?.textContent||""));
     await page.check("#teContacts");
+    await page.waitForFunction(()=>/contacts|H-bond/i.test(document.querySelector("#teContactStatus")?.textContent||""));
     await page.selectOption("#teMeasureMode","distance");
+    assert(/distance/i.test(await page.locator("#teMeasureStatus").textContent()),"Distance measurement mode should activate");
+
+    await page.fill("#teSelectStart","1");
+    await page.fill("#teSelectEnd","5");
     await page.click("#teSelectRange");
+    assert.strictEqual(await page.locator("#teSequencePanel .chosen").count(),5,"Residue range selection should select five residues");
     await page.click("#teFocusSelection");
+
+    page.once("dialog",d=>d.accept("browser_test_object"));
+    await page.click("#teCreateObject");
+    await page.waitForFunction(()=>[...document.querySelectorAll("#teObjectList input")].some(e=>e.value==="browser_test_object"));
+    const objectRow=page.locator("#teObjectList .te-object-row").filter({has:page.locator('input[value="browser_test_object"]')});
+    await objectRow.getByRole("button",{name:"Isolate"}).click();
+    await wait(250);
+    assert(await viewport.isVisible(),"Isolating a saved object should keep the 3D viewer visible");
+    await objectRow.getByRole("button",{name:"Show all"}).click();
+
     await page.check("#teSurface");
     await wait(500);
     await page.uncheck("#teSurface");
+    await page.check("#teClipEnabled");
+    await page.locator("#teClipNear").evaluate((el)=>{el.value="-25";el.dispatchEvent(new Event("input",{bubbles:true}));});
+    await page.locator("#teClipFar").evaluate((el)=>{el.value="25";el.dispatchEvent(new Event("input",{bubbles:true}));});
+    await wait(250);
+    await page.uncheck("#teClipEnabled");
+
+    page.once("dialog",d=>d.accept("browser_test_view"));
+    await page.click("#teSaveView");
+    await page.waitForFunction(()=>document.querySelector("#teSavedViews")?.textContent.includes("browser_test_view"));
+
+    // Structure export should produce a real PDB download from the current selection.
+    await page.click("#teOpenExport");
+    await page.selectOption("#teExportType","structure");
+    await page.selectOption("#teExportScope","selection");
+    await page.selectOption("#teExportFormat","pdb");
+    const pdbDownloadPromise=page.waitForEvent("download");
+    await page.click("#teExportNow");
+    const pdbDownload=await pdbDownloadPromise;
+    assert(/\.pdb$/i.test(pdbDownload.suggestedFilename()),"Selection export should download a PDB file");
+    await page.locator("#teExportClose").click();
 
     // Direct RCSB import by PDB ID.
     await page.fill("#tePdbId","1EHZ");
