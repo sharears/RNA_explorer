@@ -20,6 +20,22 @@ const server=http.createServer((req,res)=>{
 });
 const listen=()=>new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
+function mockRcsbCif(){
+  const app=fs.readFileSync(path.join(root,"app.js"),"utf8");
+  const sequence=app.match(/const RNA_SEQUENCE = "([ACGU]+)"/)[1];
+  const headers=[
+    "group_PDB","id","type_symbol","label_atom_id","label_alt_id","label_comp_id","label_asym_id","label_entity_id","label_seq_id","pdbx_PDB_ins_code",
+    "Cartn_x","Cartn_y","Cartn_z","occupancy","B_iso_or_equiv","pdbx_formal_charge","auth_seq_id","auth_comp_id","auth_asym_id","auth_atom_id","pdbx_PDB_model_num"
+  ];
+  const lines=["data_1EHZ","#","loop_",...headers.map(h=>"_atom_site."+h)];
+  let serial=1;
+  [...sequence].forEach((base,i)=>{
+    const r=i+1,x=(i%12)*2.1,y=Math.floor(i/12)*2.1,z=Math.sin(i*.35)*2;
+    lines.push(["ATOM",serial++,"P","P",".",base,"A","1",r,"?",x.toFixed(3),y.toFixed(3),z.toFixed(3),"1.00","10.00","?",r,base,"A","P","1"].join(" "));
+    lines.push(["ATOM",serial++,"C","C4*",".",base,"A","1",r,"?",(x+.8).toFixed(3),(y+.5).toFixed(3),(z+.2).toFixed(3),"1.00","10.00","?",r,base,"A","C4*","1"].join(" "));
+  });
+  lines.push("#");return lines.join("\n")+"\n";
+}
 
 (async()=>{
   await listen();
@@ -31,6 +47,7 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
   page.on("console",m=>{if(m.type()==="error")errors.push("console: "+m.text());});
 
   try{
+    await page.route("https://files.rcsb.org/download/1EHZ.cif",route=>route.fulfill({status:200,contentType:"text/plain",body:mockRcsbCif()}));
     await page.goto(`http://127.0.0.1:${port}/?page=tertiary`,{waitUntil:"domcontentloaded",timeout:30000});
     try{
       await page.waitForFunction(()=>{
