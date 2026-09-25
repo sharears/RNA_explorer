@@ -731,7 +731,13 @@ const TertiaryExplorer = (() => {
       root.querySelectorAll("[tabindex]").forEach(el=>el.removeAttribute("tabindex"));
       root.querySelectorAll("[data-residue-index]").forEach(node=>{
         const i=Number(node.getAttribute("data-residue-index"));node.style.cursor="pointer";
-        node.addEventListener("click",()=>chooseResidue(i));
+        node.classList.toggle("te-linked-chosen",state.selectionIndices.has(i));
+        node.addEventListener("click",e=>{e.stopPropagation();toggleResidueSelection(i);});
+      });
+      root.querySelectorAll("[data-pair]").forEach(node=>{
+        const key=node.getAttribute("data-pair"),[a,b]=parsePairKey(key);node.style.cursor="pointer";
+        node.classList.toggle("te-linked-pair-chosen",state.selectedPairs.has(key));
+        node.addEventListener("click",e=>{e.stopPropagation();togglePairSelection(a,b);});
       });
       scheduleViewerResize(true);return;
     }
@@ -749,13 +755,18 @@ const TertiaryExplorer = (() => {
     const minX=Math.min(...pos.map(p=>p.x)),maxX=Math.max(...pos.map(p=>p.x)),minY=Math.min(...pos.map(p=>p.y)),maxY=Math.max(...pos.map(p=>p.y));
     const pad=34,scale=Math.min((340-2*pad)/Math.max(1,maxX-minX),(430-2*pad)/Math.max(1,maxY-minY));
     const map=pos.map(p=>({x:pad+(p.x-minX)*scale,y:pad+(p.y-minY)*scale}));root.setAttribute("viewBox","0 0 340 430");
-    pairs.forEach(([a,b])=>root.append(make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,class:"te-mini-pair"+(a===state.selected||b===state.selected?" selected":"")})));
+    pairs.forEach(([a,b])=>{
+      const key=pairKey(a,b),g=make("g",{"data-pair":key,class:"te-mini-pair-group"+(state.selectedPairs.has(key)?" te-linked-pair-chosen":"")});
+      g.append(make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,class:"te-mini-pair"+(state.selectedPairs.has(key)?" selected":"")}));
+      const hit=make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,stroke:"transparent","stroke-width":14,"pointer-events":"stroke"});
+      g.append(hit);g.addEventListener("click",()=>togglePairSelection(a,b));root.append(g);
+    });
     root.append(make("polyline",{points:map.map(p=>p.x+","+p.y).join(" "),class:"te-mini-backbone"}));
     map.forEach((p,i)=>{
-      const g=make("g",{class:"te-mini-node"+(i===state.selected?" selected":"")+(partner[state.selected]===i?" paired-selected":""),transform:"translate("+p.x+" "+p.y+")",role:"button","data-residue-index":i,"aria-label":state.secondarySequence[i]+(i+1)});
+      const g=make("g",{class:"te-mini-node"+(i===state.selected?" selected":"")+(state.selectionIndices.has(i)?" te-linked-chosen":""),transform:"translate("+p.x+" "+p.y+")",role:"button","data-residue-index":i,"aria-label":state.secondarySequence[i]+(i+1)});
       g.append(make("circle",{r:11,fill:residueColor(i,activeResidues()[i]),stroke:"#d5e2e9","stroke-width":1}));
       const label=make("text",{x:0,y:1,fill:"#07111c","font-size":10,"font-family":"monospace","text-anchor":"middle","dominant-baseline":"central"});label.textContent=state.secondarySequence[i];g.append(label);
-      g.addEventListener("click",()=>chooseResidue(i));root.append(g);
+      g.addEventListener("click",()=>toggleResidueSelection(i));root.append(g);
     });
     scheduleViewerResize(true);
   }
