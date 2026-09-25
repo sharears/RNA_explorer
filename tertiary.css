@@ -225,3 +225,18 @@
   overflow-wrap:anywhere;
 }
 #teChainSelect:disabled { opacity:.65; }
+
+
+/* Atom measurement workspace */
+.te-measure-tools {
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:11px;
+  margin-top:12px;
+  background:rgba(7,15,28,.35);
+}
+.te-measure-tools legend { color:var(--cream); font-weight:700; padding:0 5px; }
+.te-measurement-list { display:grid; gap:7px; margin-top:9px; color:var(--muted); font-size:.75rem; line-height:1.4; }
+.te-measurement-row { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:start; border-top:1px solid var(--line); padding-top:7px; }
+.te-measurement-row button { border:1px solid var(--line); background:transparent; color:var(--text); border-radius:6px; padding:5px 8px; cursor:pointer; }
+.te-measurement-row button:hover { border-color:var(--mint); color:var(--mint); }

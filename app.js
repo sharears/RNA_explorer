@@ -129,22 +129,41 @@ function setupNavigation() {
 }
 
 function setupHomePaths() {
-  const jump=(sceneIndex,focusId)=>{
-    showScene(sceneIndex);
-    const target=document.getElementById(focusId);
-    if(target){
-      target.scrollIntoView({behavior:"smooth",block:"center"});
-      if(typeof target.focus==="function")setTimeout(()=>target.focus({preventScroll:true}),250);
-    }
-  };
-  document.querySelector(".brand")?.addEventListener("click",e=>{e.preventDefault();showScene(0);window.scrollTo({top:0,behavior:"smooth"});});
-  document.getElementById("homeLearnButton")?.addEventListener("click",()=>jump(0,"scene-blocks"));
-  document.getElementById("homeExampleButton")?.addEventListener("click",()=>jump(4,"secondarySvg"));
-  document.getElementById("homeAnalyzeButton")?.addEventListener("click",()=>jump(4,"secondarySequence"));
-  document.getElementById("homeUpload3DButton")?.addEventListener("click",()=>{
-    showScene(5);
-    document.getElementById("teStructureFile")?.click();
+  // Home cards are real links so every destination gets its own URL/page load.
+  document.querySelectorAll(".nav-menu > button").forEach(button=>{
+    button.addEventListener("click",()=>{
+      const open=button.getAttribute("aria-expanded")==="true";
+      document.querySelectorAll(".nav-menu > button").forEach(b=>b.setAttribute("aria-expanded","false"));
+      button.setAttribute("aria-expanded",String(!open));
+    });
   });
+  document.addEventListener("click",event=>{
+    if(!event.target.closest(".nav-menu"))document.querySelectorAll(".nav-menu > button").forEach(b=>b.setAttribute("aria-expanded","false"));
+  });
+}
+
+function applyPageMode() {
+  const search=String(window.location&&window.location.search||"");
+  const match=search.match(/[?&]page=([^&]+)/);
+  const mode=match?decodeURIComponent(match[1]):"home";
+  const valid=["home","journey","example","secondary","tertiary"];
+  const page=valid.includes(mode)?mode:"home";
+  document.body.dataset.pageMode=page;
+  const inner=document.getElementById("innerNav");
+  if(inner)inner.hidden=page==="home";
+
+  if(page==="home"){
+    showScene(0);
+    return;
+  }
+  if(page==="journey"){showScene(0);return;}
+  if(page==="example"){
+    showScene(4);
+    document.getElementById("restoreTrnaButton")?.click();
+    return;
+  }
+  if(page==="secondary"){showScene(4);return;}
+  if(page==="tertiary"){showScene(5);return;}
 }
 
 
@@ -347,7 +366,7 @@ function initialize() {
   setupDialog();
   registerWebMCPTools();
   selectResidue(0);
-  showScene(0);
+  applyPageMode();
 }
 
 initialize();
