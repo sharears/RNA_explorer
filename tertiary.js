@@ -416,7 +416,7 @@ const TertiaryExplorer = (() => {
     });
   }
   function addSelectedPairHbonds(){
-    if(!viewer||!state.mapping.enabled)return;
+    if(!viewer||!state.mapping.enabled||!state.showPairs){renderPairHbondPanel();return;}
     [...state.selectedPairs].forEach(key=>{
       const [a,b]=key.split(":").map(Number);if(!isVisibleIndex(a)||!isVisibleIndex(b))return;
       const pairStyle=pairStyleFor(key),hits=pairHydrogenBonds(a,b);
@@ -624,10 +624,6 @@ const TertiaryExplorer = (() => {
     if(state.visibility.rna)residues.forEach((r,i)=>{if(isVisibleIndex(i))safe("residue style "+(i+1),()=>applyResidueRepresentation(r,i));});
     safe("component styles",applyCategoryStyles);
     if(state.comparison.model&&state.comparison.visible)safe("comparison style",()=>state.comparison.model.setStyle({},{line:{linewidth:2,color:"#f0a36f",opacity:.8}}));
-    if(state.mapping.enabled){
-      const mate=partner[state.selected];
-      if(mate>=0&&residues[mate]&&isVisibleIndex(mate))safe("paired highlight",()=>model.addStyle(selectorForResidue(residues[mate]),{stick:{radius:.25,color:"#74d7b6"},sphere:{radius:.28,color:"#74d7b6",opacity:.38}}));
-    }
     if(residues[state.selected]&&isVisibleIndex(state.selected))safe("selected highlight",()=>model.addStyle(selectorForResidue(residues[state.selected]),{stick:{radius:.34,color:"#ffffff"},sphere:{radius:.34,color:"#ffffff",opacity:.42}}));
     safe("selection highlights",addSelectionHighlights);safe("object highlights",addObjectHighlights);safe("selected pair hydrogen bonds",addSelectedPairHbonds);
     safe("indices",addIndices);safe("selected label",addSelectedLabel);safe("proximity",addProximity);safe("contacts",addContacts);
@@ -635,12 +631,27 @@ const TertiaryExplorer = (() => {
     if(renderNow)safe("render",()=>viewer.render());
   }
 
-  function chooseResidue(index){
+  function chooseResidue(index,syncSecondary=true){
     state.selected=clamp(index,0,Math.max(0,activeResidues().length-1));
-    if(state.mapping.enabled){
-      if(isCuratedDefaultPair())state.onSelect(state.selected);
-      else if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.followExternal)SecondaryExplorer.followExternal(state.selected);
+    if(state.selectionIndices.has(state.selected))state.selectionIndices.delete(state.selected);else state.selectionIndices.add(state.selected);
+    if(state.mapping.enabled&&syncSecondary){
+      if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.toggleExternalResidue)SecondaryExplorer.toggleExternalResidue(state.selected);
+      else if(isCuratedDefaultPair())state.onSelect(state.selected);
     }
+    render();
+  }
+  function togglePairSelection3D(a,b,syncSecondary=true){
+    const key=pairKey(a,b),on=!state.selectedPairs.has(key);
+    if(on){state.selectedPairs.add(key);state.selectionIndices.add(a);state.selectionIndices.add(b);}else state.selectedPairs.delete(key);
+    state.selected=a;
+    if(state.mapping.enabled&&syncSecondary&&typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.toggleExternalPair)SecondaryExplorer.toggleExternalPair(a,b);
+    render();
+  }
+  function applySecondarySelection(detail){
+    if(!detail||detail.sequence!==state.secondarySequence||detail.structure!==state.structure)return;
+    state.selectionIndices=new Set((detail.selectedResidues||[]).filter(i=>Number.isInteger(i)&&i>=0&&i<activeResidues().length));
+    state.selectedPairs=new Set((detail.selectedPairs||[]).map(p=>pairKey(Number(p[0]),Number(p[1]))));
+    if(Number.isInteger(detail.index))state.selected=clamp(detail.index,0,Math.max(0,activeResidues().length-1));
     render();
   }
   function updateSourceCopy(){
@@ -1006,7 +1017,7 @@ const TertiaryExplorer = (() => {
     $("teIndexDefault").addEventListener("click",()=>{state.indexSelection=defaultIndices();buildIndexChoices();render();});
     $("teIndexAll").addEventListener("click",()=>{const n=state.mapping.enabled?state.secondarySequence.length:activeResidues().length;state.indexSelection=new Set(Array.from({length:n},(_,i)=>i));buildIndexChoices();render();});
     $("teIndexNone").addEventListener("click",()=>{state.indexSelection.clear();buildIndexChoices();render();});
-    $("teSelectRange").addEventListener("click",selectRange);$("teSelectCurrent").addEventListener("click",addCurrentToSelection);$("teSelectSubtract").addEventListener("click",subtractCurrentFromSelection);$("teSelectChain").addEventListener("click",selectActiveChain);$("teSelectInvert").addEventListener("click",invertSelection);$("teSelectClear").addEventListener("click",()=>{state.selectionIndices.clear();render();});
+    $("teSelectRange").addEventListener("click",selectRange);$("teSelectCurrent").addEventListener("click",addCurrentToSelection);$("teSelectSubtract").addEventListener("click",subtractCurrentFromSelection);$("teSelectChain").addEventListener("click",selectActiveChain);$("teSelectInvert").addEventListener("click",invertSelection);$("teSelectClear").addEventListener("click",()=>{state.selectionIndices.clear();state.selectedPairs.clear();if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.clearLinkedSelection)SecondaryExplorer.clearLinkedSelection(false);render();});
     $("teSelectBaseButton").addEventListener("click",selectBase);$("teSelectNearButton").addEventListener("click",selectNearby);$("teFocusSelection").addEventListener("click",focusSelection);
     $("teSelectionLabels").addEventListener("change",e=>{state.selectionLabels=e.target.checked;render();});$("teCreateObject").addEventListener("click",createObject);
     $("teClipEnabled").addEventListener("change",e=>{state.clipEnabled=e.target.checked;render();});$("teClipNear").addEventListener("input",e=>{state.clipNear=Number(e.target.value);render();});$("teClipFar").addEventListener("input",e=>{state.clipFar=Number(e.target.value);render();});
