@@ -4,7 +4,7 @@ const assert = require("assert");
 const root = __dirname + "/..";
 const read = file => fs.readFileSync(root + "/" + file, "utf8");
 
-for (const file of ["app.js","chemistry.js","journey.js","primary-animation.js","secondary.js","tertiary.js"]) {
+for (const file of ["app.js","export-tools.js","chemistry.js","journey.js","primary-animation.js","secondary.js","tertiary.js"]) {
   const source = read(file);
   assert.doesNotThrow(() => new Function(source), file + " should parse as JavaScript");
 }
@@ -59,13 +59,19 @@ const tertiary = read("tertiary.js");
   "Select around current residue",
   "Create object from selection",
   "Isolate",
-  "Export structure",
+  "Export Tertiary Structure",
   "PDB",
   "mmCIF",
   "Enable clipping slab",
   "Compare / align structures",
   "RMSD",
   "Saved camera views",
+  "Orthographic projection",
+  "Full-screen viewer",
+  "Uniform custom color",
+  "Select RNA chain",
+  "Invert",
+  "Alignment scope",
   "Show aligned comparison",
   "cdn.jsdelivr.net/npm/3dmol@2.5.5",
   "files.rcsb.org/download/1EHZ.pdb",
@@ -73,7 +79,7 @@ const tertiary = read("tertiary.js");
   "viewer.setClickable",
   "Import PDB / mmCIF",
   "I confirm that the Secondary and 3D inputs describe the same RNA molecule",
-  "teExportScale",
+  "teImageScale",
   "setWidth(width)",
   "pngURI()",
   "sequence identity and residue count match"
