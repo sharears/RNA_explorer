@@ -175,7 +175,7 @@ const SecondaryExplorer = (() => {
   }
   function restoreWorkspaceLocal(){
     if(typeof localStorage==="undefined")return false;
-    const search=String(window.location?.search||"");if(!/[?&]page=(secondary|tertiary)(?:&|$)/.test(search))return false;
+    if(typeof window==="undefined")return false;const search=String(window.location?.search||"");if(!/[?&]page=(secondary|tertiary)(?:&|$)/.test(search))return false;
     try{
       const raw=localStorage.getItem(WORKSPACE_KEY);if(!raw)return false;const w=JSON.parse(raw);
       if(!w?.sequence||!w?.structure)return false;parse(w.sequence,w.structure);
@@ -510,10 +510,11 @@ const SecondaryExplorer = (() => {
     text(root,"3′",{x:pos.at(-1).x+30,y:pos.at(-1).y,fill:"#74d7b6","font-size":16});
     $("secondaryStageNote").textContent=`${layout[0].toUpperCase()+layout.slice(1)} · ${seq.length} residues · ${pairs.length} pairs · Select a residue index or pair`;
     renderLegend();renderHeatLegend();renderPairProbabilityLegend();updateLayerSummary();saveWorkspaceLocal();
-    window.dispatchEvent(new CustomEvent("rna-secondary-layout",{detail:{sequence:seq,structure:db,layout,positions:pos.map(p=>({x:p.x,y:p.y}))}}));
+    if(typeof window!=="undefined"&&typeof CustomEvent!=="undefined")window.dispatchEvent(new CustomEvent("rna-secondary-layout",{detail:{sequence:seq,structure:db,layout,positions:pos.map(p=>({x:p.x,y:p.y}))}}));
   }
   function broadcastContext() {
     const isDefault=seq===defaultSeq&&db===defaultDb;
+    if(typeof window==="undefined"||typeof CustomEvent==="undefined"){saveWorkspaceLocal();return;}
     window.dispatchEvent(new CustomEvent("rna-secondary-context",{detail:{isDefault,sequence:seq,structure:db}}));
     window.dispatchEvent(new CustomEvent("rna-metadata-change",{detail:{
       isDefault,sequence:seq,metadata:{...metadata},heatEnabled,heatTheme,heatRange:[...heatRange]
