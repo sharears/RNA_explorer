@@ -260,3 +260,13 @@
 .se-export-dialog #seExportDialogStatus{min-height:1.3em;color:var(--muted);font-size:.78rem}
 .se-toolbar{flex-wrap:wrap}
 .se-toolbar input[type="number"]{width:76px}
+
+
+/* Progressive Secondary controls */
+.se-controls>details{margin-bottom:8px}
+.se-controls>details>summary{font-weight:750}
+.se-controls>details:not([open])>summary{color:var(--muted)}
+.se-controls>details[open]>summary{color:var(--mint)}
+.se-data-layers{border:1px solid var(--line);border-radius:9px;padding:10px;margin:0 0 10px}
+.se-data-layers>summary{cursor:pointer;font-weight:750;color:var(--mint)}
+.se-data-layers:not([open])>summary{color:var(--muted)}
