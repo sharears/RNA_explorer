@@ -447,8 +447,8 @@ const TertiaryExplorer = (() => {
     }
   }
   function renderPairHbondPanel(){
-    const box=$("tePairHbondList"),status=$("tePairHbondStatus");if(!box||!status)return;
-    box.replaceChildren();
+    const box=$("tePairHbondList"),status=$("tePairHbondStatus"),details=$("tePairHbondDetails");if(!box||!status)return;
+    box.replaceChildren();if(details)details.hidden=!state.selectedPairs.size;
     if(!state.selectedPairs.size){status.textContent="Select a base pair in the linked 2D view to inspect its 3D donor–acceptor contacts.";return;}
     let total=0;
     for(const key of state.selectedPairs){
@@ -685,9 +685,13 @@ const TertiaryExplorer = (() => {
       [...source.children].forEach(child=>root.append(child.cloneNode(true)));
       root.querySelectorAll("[data-export-remove]").forEach(el=>el.remove());
       root.querySelectorAll("[tabindex]").forEach(el=>el.removeAttribute("tabindex"));
+      root.querySelectorAll("[data-pair]").forEach(node=>{
+        const key=node.getAttribute("data-pair"),[a,b]=pairIndices(key);node.style.cursor="pointer";node.classList.toggle("linked-selected",state.selectedPairs.has(key));
+        node.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();togglePairSelection(a,b);});
+      });
       root.querySelectorAll("[data-residue-index]").forEach(node=>{
-        const i=Number(node.getAttribute("data-residue-index"));node.style.cursor="pointer";
-        node.addEventListener("click",()=>chooseResidue(i));
+        const i=Number(node.getAttribute("data-residue-index"));node.style.cursor="pointer";node.classList.toggle("linked-selected",state.selectionIndices.has(i));
+        node.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();toggleResidueSelection(i,true);});
       });
       scheduleViewerResize(true);return;
     }
@@ -705,13 +709,16 @@ const TertiaryExplorer = (() => {
     const minX=Math.min(...pos.map(p=>p.x)),maxX=Math.max(...pos.map(p=>p.x)),minY=Math.min(...pos.map(p=>p.y)),maxY=Math.max(...pos.map(p=>p.y));
     const pad=34,scale=Math.min((340-2*pad)/Math.max(1,maxX-minX),(430-2*pad)/Math.max(1,maxY-minY));
     const map=pos.map(p=>({x:pad+(p.x-minX)*scale,y:pad+(p.y-minY)*scale}));root.setAttribute("viewBox","0 0 340 430");
-    pairs.forEach(([a,b])=>root.append(make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,class:"te-mini-pair"+(a===state.selected||b===state.selected?" selected":"")})));
+    pairs.forEach(([a,b])=>{
+      const key=pairKey(a,b),line=make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,class:"te-mini-pair"+(state.selectedPairs.has(key)?" linked-selected":""),"data-pair":key,role:"button",tabindex:0});
+      line.addEventListener("click",()=>togglePairSelection(a,b));line.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();togglePairSelection(a,b);}});root.append(line);
+    });
     root.append(make("polyline",{points:map.map(p=>p.x+","+p.y).join(" "),class:"te-mini-backbone"}));
     map.forEach((p,i)=>{
-      const g=make("g",{class:"te-mini-node"+(i===state.selected?" selected":"")+(partner[state.selected]===i?" paired-selected":""),transform:"translate("+p.x+" "+p.y+")",role:"button","data-residue-index":i,"aria-label":state.secondarySequence[i]+(i+1)});
+      const g=make("g",{class:"te-mini-node"+(i===state.selected?" selected":"")+(state.selectionIndices.has(i)?" linked-selected":""),transform:"translate("+p.x+" "+p.y+")",role:"button","data-residue-index":i,"aria-label":state.secondarySequence[i]+(i+1)});
       g.append(make("circle",{r:11,fill:residueColor(i,activeResidues()[i]),stroke:"#d5e2e9","stroke-width":1}));
       const label=make("text",{x:0,y:1,fill:"#07111c","font-size":10,"font-family":"monospace","text-anchor":"middle","dominant-baseline":"central"});label.textContent=state.secondarySequence[i];g.append(label);
-      g.addEventListener("click",()=>chooseResidue(i));root.append(g);
+      g.addEventListener("click",()=>toggleResidueSelection(i,true));root.append(g);
     });
     scheduleViewerResize(true);
   }
@@ -768,9 +775,18 @@ const TertiaryExplorer = (() => {
   function updateControls(){
     evaluateMapping();const focusDetails=$("teFocusDetails");if(focusDetails)focusDetails.hidden=!state.secondaryIsDefault||!state.mapping.enabled;updateSourceCopy();
   }
+  function renderSelectionContext(){
+    const box=$("teSelectionContext"),count=$("teSelectionCount");if(!box||!count)return;
+    const n=state.selectionIndices.size,p=state.selectedPairs.size;box.hidden=n===0&&p===0;
+    count.textContent=n+" residue"+(n===1?"":"s")+" selected"+(p?" · "+p+" base pair"+(p===1?"":"s")+" selected":"");
+    const color=$("teSelectionColor"),thick=$("teSelectionThickness"),opacity=$("teSelectionOpacity");
+    if(color&&document.activeElement!==color)color.value=state.selectionStyle.color;
+    if(thick&&document.activeElement!==thick)thick.value=state.selectionStyle.thickness;
+    if(opacity&&document.activeElement!==opacity)opacity.value=state.selectionStyle.opacity;
+  }
   function render(selected){
     if(selected!==undefined)state.selected=clamp(selected,0,Math.max(0,(state.mapping.enabled?state.secondarySequence.length:activeResidues().length)-1));
-    miniSecondary();heatLegend();regionLegend();updateCopy();updateControls();renderSequencePanel();renderPairHbondPanel();renderObjectList();renderSavedViews();
+    miniSecondary();heatLegend();regionLegend();updateCopy();updateControls();renderSequencePanel();renderSelectionContext();renderPairHbondPanel();renderObjectList();renderSavedViews();
     const scene=$("scene-tertiary");if(!scene||scene.hidden)return;
     ensureViewer().then(()=>{scheduleViewerResize(true);applyStyles();}).catch(error=>console.error("Tertiary render:",error));
   }
