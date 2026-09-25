@@ -39,19 +39,39 @@ assert(secondary.includes('"rna-metadata-change"'), "Secondary view should broad
 const tertiary = read("tertiary.js");
 [
   "PyMOL-style sticks",
+  "Ball &amp; stick",
+  "RNA backbone",
+  "Molecular surface",
+  "Color by",
+  "Chain",
+  "Element",
   "Show mapped secondary-structure pair connections",
   "Highlight 3D proximity",
+  "possible H-bond contacts",
   "Distance · 2 atoms",
   "Angle · 3 atoms",
   "Dihedral · 4 atoms",
   "2D + 3D linked view",
   "Secondary element",
   "Residue information",
+  "Sequence-linked selection",
+  "Select range",
+  "Select around current residue",
+  "Create object from selection",
+  "Isolate",
+  "Export structure",
+  "PDB",
+  "mmCIF",
+  "Enable clipping slab",
+  "Compare / align structures",
+  "RMSD",
+  "Saved camera views",
+  "Show aligned comparison",
   "cdn.jsdelivr.net/npm/3dmol@2.5.5",
   "files.rcsb.org/download/1EHZ.pdb",
   "viewer.addModel",
   "viewer.setClickable",
-  "Upload 3D structure",
+  "Import PDB / mmCIF",
   "I confirm that the Secondary and 3D inputs describe the same RNA molecule",
   "teExportScale",
   "setWidth(width)",
@@ -67,6 +87,16 @@ const fakeChain = {residues:[{base:"A"},{base:"C"},{base:"G"},{base:"U"}]};
 assert.strictEqual(tertiaryApi.compareChain(fakeChain,"ACGU").exact,true,"Exact sequence mapping is recognized");
 assert.strictEqual(tertiaryApi.compareChain(fakeChain,"ACGA").mismatches.length,1,"Sequence mismatch is detected");
 assert.strictEqual(tertiaryApi.compareChain(fakeChain,"ACG").lengthMatch,false,"Length mismatch is detected");
+
+const ref = [{x:0,y:0,z:0},{x:1,y:0,z:0},{x:0,y:1,z:0},{x:0,y:0,z:1}];
+const moved = ref.map(p => ({x:-p.y+5,y:p.x-2,z:p.z+3}));
+const fit = tertiaryApi.hornFit(moved,ref);
+assert(fit.rmsd < 0.001, "Rigid-body alignment should recover a transformed coordinate set");
+
+const pdb = tertiaryApi.serializePdb([{atom:"P",resn:"G",chain:"A",resi:1,x:1,y:2,z:3,elem:"P",hetflag:false}]);
+assert(pdb.includes("ATOM") && pdb.includes("END"), "PDB exporter should emit coordinate records");
+const cif = tertiaryApi.serializeCif([{atom:"P",resn:"G",chain:"A",resi:1,x:1,y:2,z:3,elem:"P",hetflag:false}]);
+assert(cif.includes("_atom_site.Cartn_x") && cif.includes("data_rna_explorer"), "mmCIF exporter should emit an atom_site loop");
 
 assert(tertiary.includes("handleAtomMeasurementClick"), "Atom-click measurement workflow should be available");
 assert(tertiary.includes("teMeasurementList")&&tertiary.includes("teMeasureClear"), "Multiple measurements can be listed and cleared");
