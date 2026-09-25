@@ -12,9 +12,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: npm install --no-save linkedom
+      - run: npm install --no-save linkedom playwright
+      - run: npx playwright install --with-deps chromium
       - run: mkdir -p dist && cp index.html *.js *.css dist/ && cp -r data dist/data
       - run: node tests/tertiary.cjs
       - run: node tests/chemistry-editor.cjs
       - run: node tests/chemistry.cjs
       - run: node tests/secondary-v7.cjs
+      - run: node tests/tertiary-browser.cjs
