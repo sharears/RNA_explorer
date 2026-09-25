@@ -1128,7 +1128,8 @@ const TertiaryExplorer = (() => {
     window.addEventListener("rna-metadata-change",e=>applyMetadata(e.detail));
     window.addEventListener("rna-secondary-context",e=>handleSecondaryContext(e.detail));
     window.addEventListener("rna-secondary-layout",e=>handleSecondaryLayout(e.detail));
-    window.addEventListener("rna-secondary-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){state.selected=clamp(e.detail.index,0,state.secondarySequence.length-1);render();}});
+    window.addEventListener("rna-secondary-selection",e=>{if(state.mapping.enabled)applySecondarySelection(e.detail);});
+    window.addEventListener("rna-secondary-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){state.selected=clamp(e.detail.index,0,state.secondarySequence.length-1);}});
     window.addEventListener("resize",()=>scheduleViewerResize(true));
     if(typeof ResizeObserver!=="undefined"){const viewport=$("tertiaryViewport");if(viewport)new ResizeObserver(()=>scheduleViewerResize(true)).observe(viewport);}
     try{const p=typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.getCurrentPositions?SecondaryExplorer.getCurrentPositions():null;if(Array.isArray(p)&&p.length===state.secondarySequence.length)state.secondaryLayoutPositions=p.map(x=>({x:Number(x.x),y:Number(x.y)}));}catch(_){}
@@ -1138,7 +1139,8 @@ const TertiaryExplorer = (() => {
   return {setup,render,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,
     getDiagnostics(){return {viewerReady:!!viewer,modelReady:!!model,atomCount:model?.selectedAtoms?model.selectedAtoms({}).length:0,representation:state.representation,colorMode:state.colorMode,split:state.split,mappingEnabled:state.mapping.enabled,source:state.currentFileName,
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
-      selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
+      selectionCount:state.selectionIndices.size,selectedPairCount:state.selectedPairs.size,hbondCount:[...state.selectedPairs].reduce((n,k)=>{const [a,b]=k.split(":").map(Number);return n+pairHydrogenBonds(a,b).length;},0),
+      savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
       comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count};}
   };
 })();
