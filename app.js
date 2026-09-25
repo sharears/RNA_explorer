@@ -142,6 +142,16 @@ function setupHomePaths() {
   });
 }
 
+
+function setupHomeAnalyzeToggle(){
+  const button=document.getElementById("homeAnalyzeToggle"),panel=document.getElementById("homeAnalyzeBranches");
+  if(!button||!panel)return;
+  button.addEventListener("click",()=>{
+    const open=button.getAttribute("aria-expanded")!=="true";
+    button.setAttribute("aria-expanded",String(open));panel.hidden=!open;
+    if(open)panel.querySelector("a")?.focus({preventScroll:true});
+  });
+}
 function applyPageMode() {
   const search=String(window.location&&window.location.search||"");
   const match=search.match(/[?&]page=([^&]+)/);
@@ -366,7 +376,8 @@ function initialize() {
   setupDialog();
   registerWebMCPTools();
   selectResidue(0);
-  applyPageMode();
+  setupHomeAnalyzeToggle();
+applyPageMode();
 }
 
 initialize();
