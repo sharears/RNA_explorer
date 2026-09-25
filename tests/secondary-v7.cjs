@@ -57,7 +57,7 @@ assert(oriented[0].x<oriented.at(-1).x&&Math.abs(oriented[0].y-oriented.at(-1).y
 assert(meanInterior<=baseline+1e-6,"Secondary structure extends above the bottom end baseline");
 assert(source.includes('orientEndsBottom'),"Secondary layouts enforce bottom-left 5-prime and bottom-right 3-prime orientation");
 assert(source.includes('data-arc-style="square"'),"Arc figure includes square pair connector option");
-assert(source.includes('seExportScale')&&source.includes('exportScale'),"2D export resolution is user-adjustable");
+assert(source.includes('seImageScale')&&source.includes('seImageDpi'),"2D image export resolution and DPI are user-adjustable");
 assert(source.includes('"Arial"')&&source.includes('"Calibri"')&&source.includes('"Times New Roman"'),"Expanded font families are available");
 assert(source.includes('"Font color"')&&source.includes('"Font size"'),"Residue typography labels use font terminology");
 assert(source.includes('se-color-code'),"Color picker has editable color-code companion");
