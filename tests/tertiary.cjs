@@ -78,6 +78,10 @@ const tertiary = read("tertiary.js");
   "viewer.addModel",
   "viewer.setClickable",
   "Import PDB / mmCIF",
+  "Load from RCSB PDB",
+  "tePdbId",
+  "fetchRcsbCif",
+  "RCSB PDB · ",
   "I confirm that the Secondary and 3D inputs describe the same RNA molecule",
   "teImageScale",
   "teImageDpi",
@@ -111,6 +115,8 @@ assert(cif.includes("_atom_site.Cartn_x") && cif.includes("data_rna_explorer"), 
 assert(tertiary.includes("handleAtomMeasurementClick"), "Atom-click measurement workflow should be available");
 assert(tertiary.includes("teMeasurementList")&&tertiary.includes("teMeasureClear"), "Multiple measurements can be listed and cleared");
 assert(tertiary.includes("getCurrentPositions")&&tertiary.includes("secondaryLayoutPositions"), "Linked 2D/3D view preserves the edited Secondary layout when available");
+assert(tertiary.includes('root.replaceChildren(...[...source.childNodes].map(node=>node.cloneNode(true)))'), "Linked 2D view clones the actual Secondary SVG so residue letters and styling are preserved");
+assert(tertiary.includes("safeViewerResize")&&tertiary.includes("scheduleViewerLayout"), "Tertiary viewer is explicitly resized after visibility/layout changes");
 assert(tertiary.includes("SVG (raster embedded)")&&tertiary.includes("teImageDpi"), "Tertiary image export exposes PNG/PDF/SVG plus DPI control");
 assert(!html.includes('id="tertiarySvg"'), "Legacy SVG tertiary canvas should be removed");
 assert(html.includes("All-atom molecular coordinates"), "Tertiary description should identify the all-atom model");
