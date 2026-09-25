@@ -83,6 +83,7 @@ try{
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().measurementMode==="distance");
   await page.selectOption("#teMeasureMode","off");
 
+  await page.locator(".te-controls > details > summary").filter({hasText:/^Select$/}).click();
   await page.click("#teSelectCurrent");
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectionCount>0);
   await page.locator("summary").filter({hasText:"Objects"}).click();
