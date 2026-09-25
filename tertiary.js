@@ -536,7 +536,7 @@ const TertiaryExplorer = (() => {
     state.measurementPicks.push(atomSnapshot(atom));
     if(state.measurementPicks.length>=required){
       const points=state.measurementPicks.slice(0,required),value=measurementValue(type,points);
-      if(Number.isFinite(value))state.measurements.push({id:state.measurementSerial++,type,points,value});
+      if(Number.isFinite(value))state.measurements.push({id:state.measurementSerial++,type,points,value,style:{visible:true,lineStyle:"solid",radius:.07,color:"#ffffff",opacity:.82,labelVisible:true}});
       state.measurementPicks=[];
     }
     render();
@@ -546,18 +546,34 @@ const TertiaryExplorer = (() => {
     const box=$("teMeasurementList");if(!box)return;box.replaceChildren();
     if(!state.measurements.length){box.textContent="No saved measurements.";return;}
     state.measurements.forEach(m=>{
+      m.style??={visible:true,lineStyle:"solid",radius:.07,color:"#ffffff",opacity:.82,labelVisible:true};
       const row=document.createElement("div");row.className="te-measurement-row";
-      const text=document.createElement("span");text.textContent=m.type[0].toUpperCase()+m.type.slice(1)+" "+m.value.toFixed(2)+" "+measurementUnit(m.type)+" · "+m.points.map(atomLabel).join(" → ");
+      const head=document.createElement("div");head.className="te-measurement-head";
+      const visible=document.createElement("input");visible.type="checkbox";visible.checked=m.style.visible!==false;visible.setAttribute("aria-label","Show measurement");
+      visible.addEventListener("change",()=>{m.style.visible=visible.checked;render();});
+      const label=document.createElement("span");label.textContent=m.type[0].toUpperCase()+m.type.slice(1)+" "+m.value.toFixed(2)+" "+measurementUnit(m.type);
       const del=document.createElement("button");del.type="button";del.textContent="Delete";del.addEventListener("click",()=>{state.measurements=state.measurements.filter(x=>x.id!==m.id);render();});
-      row.append(text,del);box.append(row);
+      head.append(visible,label,del);
+      const style=document.createElement("div");style.className="te-measurement-style";
+      style.innerHTML='<label>Line<select data-ms="lineStyle"><option value="solid">Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></label><label>Thickness<input data-ms="radius" type="range" min="0.02" max="0.2" step="0.01"></label><label>Opacity<input data-ms="opacity" type="range" min="0.05" max="1" step="0.05"></label><label>Color<input data-ms="color" type="color"></label><label class="te-check"><input data-ms="labelVisible" type="checkbox"> Label</label>';
+      style.querySelector('[data-ms="lineStyle"]').value=m.style.lineStyle;style.querySelector('[data-ms="radius"]').value=m.style.radius;style.querySelector('[data-ms="opacity"]').value=m.style.opacity;style.querySelector('[data-ms="color"]').value=m.style.color;style.querySelector('[data-ms="labelVisible"]').checked=m.style.labelVisible!==false;
+      style.querySelectorAll("[data-ms]").forEach(input=>input.addEventListener("input",()=>{
+        const k=input.dataset.ms;m.style[k]=input.type==="range"?Number(input.value):input.type==="checkbox"?input.checked:input.value;render();
+      }));
+      const atoms=document.createElement("small");atoms.textContent=m.points.map(atomLabel).join(" → ");
+      row.append(head,style,atoms);box.append(row);
     });
   }
   function addMeasurements(){
     const status=$("teMeasureStatus"),type=state.measurementMode,required=requiredPicks(type);
     state.measurements.forEach(m=>{
-      m.points.forEach(p=>viewer.addSphere({center:p,radius:.22,color:"#ffffff",opacity:.9}));
-      for(let i=0;i<m.points.length-1;i++)viewer.addCylinder({start:m.points[i],end:m.points[i+1],radius:.07,color:"#ffffff",opacity:.82,fromCap:1,toCap:1});
-      const c=measurementCentroid(m.points);viewer.addLabel(m.value.toFixed(2)+" "+measurementUnit(m.type),{position:c,fontSize:13,fontColor:"#fff",backgroundColor:"#08111e",backgroundOpacity:.88,borderColor:"#6f8798",borderThickness:1,inFront:true});
+      m.style??={visible:true,lineStyle:"solid",radius:.07,color:"#ffffff",opacity:.82,labelVisible:true};
+      if(m.style.visible===false)return;
+      m.points.forEach(p=>viewer.addSphere({center:p,radius:.22,color:m.style.color,opacity:clamp(m.style.opacity,0,1)}));
+      for(let i=0;i<m.points.length-1;i++)addStyledLine(m.points[i],m.points[i+1],m.style);
+      if(m.style.labelVisible!==false){
+        const c=measurementCentroid(m.points);viewer.addLabel(m.value.toFixed(2)+" "+measurementUnit(m.type),{position:c,fontSize:13,fontColor:"#fff",backgroundColor:"#08111e",backgroundOpacity:.88,borderColor:m.style.color,borderThickness:1,inFront:true});
+      }
     });
     state.measurementPicks.forEach(p=>viewer.addSphere({center:p,radius:.3,color:"#f2c66d",opacity:.75}));
     renderMeasurementList();if(!status)return;
@@ -570,15 +586,17 @@ const TertiaryExplorer = (() => {
     const residues=activeResidues();
     state.selectionIndices.forEach(i=>{
       if(!isVisibleIndex(i)||!residues[i])return;
-      model.addStyle(selectorForResidue(residues[i]),{stick:{radius:.24,color:"#f2c66d"},sphere:{radius:.28,color:"#f2c66d",opacity:.28}});
+      const st=state.selectionStyle;
+      model.addStyle(selectorForResidue(residues[i]),{stick:{radius:st.radius,color:st.color,opacity:st.opacity},sphere:{radius:st.radius*1.18,color:st.color,opacity:Math.min(.45,st.opacity)}});
       if(state.selectionLabels&&residues[i].coord)viewer.addLabel(baseAt(i)+(i+1),{position:residues[i].coord,fontSize:11,fontColor:"#07111c",backgroundColor:"#f2c66d",backgroundOpacity:.9,inFront:true});
     });
   }
   function addObjectHighlights(){
     const residues=activeResidues();
     state.savedObjects.filter(o=>o.visible&&state.isolateObjectId==null).forEach((o,oi)=>{
-      const color=CHAIN_COLORS[(oi+2)%CHAIN_COLORS.length];
-      o.indices.forEach(i=>{if(residues[i])model.addStyle(selectorForResidue(residues[i]),{stick:{radius:.2,color},sphere:{radius:.25,color,opacity:.18}});});
+      o.style??={color:CHAIN_COLORS[(oi+2)%CHAIN_COLORS.length],radius:.2,opacity:.22};
+      const st=o.style;
+      o.indices.forEach(i=>{if(residues[i])model.addStyle(selectorForResidue(residues[i]),{stick:{radius:st.radius,color:st.color,opacity:st.opacity},sphere:{radius:st.radius*1.2,color:st.color,opacity:Math.min(.4,st.opacity)}});});
     });
   }
   function updateSurface(){
@@ -775,7 +793,7 @@ const TertiaryExplorer = (() => {
   function createObject(){
     const indices=state.selectionIndices.size?new Set(state.selectionIndices):new Set([state.selected]);
     const name=prompt("Object name","object_"+state.objectSerial);if(name===null)return;
-    state.savedObjects.push({id:state.objectSerial,name:name.trim()||("object_"+state.objectSerial),indices,visible:true});state.objectSerial++;renderObjectList();refreshExportObjectOptions();render();
+    state.savedObjects.push({id:state.objectSerial,name:name.trim()||("object_"+state.objectSerial),indices,visible:true,style:{color:CHAIN_COLORS[(state.objectSerial+1)%CHAIN_COLORS.length],radius:.2,opacity:.22}});state.objectSerial++;renderObjectList();refreshExportObjectOptions();render();
   }
 
   function atomLinePdb(atom,serial){
