@@ -32,6 +32,21 @@ const TertiaryExplorer = (() => {
     C:{donors:new Set(["N4"]),acceptors:new Set(["N3","O2"])},
     U:{donors:new Set(["N3"]),acceptors:new Set(["O2","O4"])}
   };
+  const CANONICAL_PAIR_ATOMS={
+    GC:[["O6","N4"],["N1","N3"],["N2","O2"]],
+    CG:[["N4","O6"],["N3","N1"],["O2","N2"]],
+    AU:[["N6","O4"],["N1","N3"]],
+    UA:[["O4","N6"],["N3","N1"]],
+    GU:[["O6","N3"],["N1","O2"]],
+    UG:[["N3","O6"],["O2","N1"]]
+  };
+  const BASE_RING_ATOMS={
+    A:["N9","C8","N7","C5","C6","N1","C2","N3","C4"],
+    G:["N9","C8","N7","C5","C6","N1","C2","N3","C4"],
+    C:["N1","C2","N3","C4","C5","C6"],
+    U:["N1","C2","N3","C4","C5","C6"]
+  };
+  const BASE_PLANE_TRIPLE={A:["N9","C4","C8"],G:["N9","C4","C8"],C:["N1","C2","C6"],U:["N1","C2","C6"]};
   const DEFAULT_LINE_STYLE={lineStyle:"dashed",color:"#ffffff",thickness:.07,opacity:.82,visible:true,labelVisible:true};
   const DEFAULT_HBOND_STYLE={lineStyle:"dashed",color:"#74d7b6",thickness:.055,opacity:.95,visible:true,labelVisible:false};
 
@@ -54,7 +69,7 @@ const TertiaryExplorer = (() => {
     savedViews:[],viewSerial:1,
     comparison:{model:null,name:"",rmsd:null,count:0,visible:true,status:""},
     clipEnabled:false,clipNear:-40,clipFar:40,
-    secondaryLayoutPositions:null
+    secondaryLayoutPositions:null,derivedSecondary:null
   };
 
   let viewer=null,model=null,viewerPromise=null,initialView=null,hoverLabel=null;
@@ -138,6 +153,80 @@ const TertiaryExplorer = (() => {
     collect(ra,rolesA,rb,rolesB);collect(rb,rolesB,ra,rolesA);
     return candidates.sort((x,y)=>x.distance-y.distance);
   }
+
+  function atomByName(residue,name){return residue?.atoms?.find(a=>atomName(a)===name)||null;}
+  function pointDistance(a,b){return Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);}
+  function baseCentroid(residue,base){
+    const atoms=(BASE_RING_ATOMS[base]||[]).map(name=>atomByName(residue,name)).filter(Boolean);
+    if(atoms.length<3)return null;
+    return {x:atoms.reduce((s,a)=>s+Number(a.x),0)/atoms.length,y:atoms.reduce((s,a)=>s+Number(a.y),0)/atoms.length,z:atoms.reduce((s,a)=>s+Number(a.z),0)/atoms.length};
+  }
+  function basePlaneNormal(residue,base){
+    const names=BASE_PLANE_TRIPLE[base]||[],pts=names.map(name=>atomByName(residue,name));if(pts.some(p=>!p))return null;
+    const u={x:pts[1].x-pts[0].x,y:pts[1].y-pts[0].y,z:pts[1].z-pts[0].z};
+    const v={x:pts[2].x-pts[0].x,y:pts[2].y-pts[0].y,z:pts[2].z-pts[0].z};
+    const n={x:u.y*v.z-u.z*v.y,y:u.z*v.x-u.x*v.z,z:u.x*v.y-u.y*v.x},len=Math.hypot(n.x,n.y,n.z);
+    return len>1e-6?{x:n.x/len,y:n.y/len,z:n.z/len}:null;
+  }
+  function canonicalGeometryCandidate(residues,i,j){
+    if(j-i<3)return null;
+    const a=residues[i],b=residues[j],identity=(a?.base||"?")+(b?.base||"?"),defs=CANONICAL_PAIR_ATOMS[identity];if(!defs)return null;
+    const matched=[];
+    defs.forEach(([nameA,nameB])=>{
+      const atomA=atomByName(a,nameA),atomB=atomByName(b,nameB);if(!atomA||!atomB)return;
+      const distance=atomDistanceRaw(atomA,atomB);if(distance>=1.8&&distance<=3.7)matched.push({nameA,nameB,distance});
+    });
+    if(matched.length<2)return null;
+    const ca=baseCentroid(a,a.base),cb=baseCentroid(b,b.base);if(!ca||!cb)return null;
+    const centerDistance=pointDistance(ca,cb);if(centerDistance<5.5||centerDistance>12.5)return null;
+    const na=basePlaneNormal(a,a.base),nb=basePlaneNormal(b,b.base);
+    let planeAgreement=1;
+    if(na&&nb){planeAgreement=Math.abs(na.x*nb.x+na.y*nb.y+na.z*nb.z);if(planeAgreement<0.72)return null;}
+    const meanDistance=matched.reduce((s,x)=>s+x.distance,0)/matched.length;
+    const score=matched.length*20+planeAgreement*5-meanDistance-Math.abs(centerDistance-9.5)*.25;
+    return {i,j,identity,matched,centerDistance,planeAgreement,score};
+  }
+  function deriveSecondaryFromResidues(residues){
+    if(!Array.isArray(residues)||residues.length<2)throw new Error("Choose an RNA chain before generating a 2D structure.");
+    if(residues.length>1000)throw new Error("3D → 2D generation currently supports RNA chains up to 1,000 residues.");
+    const sequence=residues.map(r=>r.base).join("");
+    const unknown=[...sequence].map((b,i)=>b==="?"?i+1:null).filter(Boolean);
+    if(unknown.length)throw new Error("Cannot derive a complete 2D structure because "+unknown.length+" residue"+(unknown.length===1?" is":"s are")+" not recognized as A, C, G, or U (first: "+unknown.slice(0,8).join(", ")+(unknown.length>8?", …":"")+").");
+    const candidates=[];
+    for(let i=0;i<residues.length;i++)for(let j=i+3;j<residues.length;j++){
+      const candidate=canonicalGeometryCandidate(residues,i,j);if(candidate)candidates.push(candidate);
+    }
+    candidates.sort((a,b)=>b.score-a.score||b.matched.length-a.matched.length||(b.j-b.i)-(a.j-a.i));
+    const chosen=[],used=new Set();
+    const crosses=(x,y)=>chosen.some(p=>(p.i<x&&x<p.j&&p.j<y)||(x<p.i&&p.i<y&&y<p.j));
+    candidates.forEach(candidate=>{
+      if(used.has(candidate.i)||used.has(candidate.j)||crosses(candidate.i,candidate.j))return;
+      chosen.push(candidate);used.add(candidate.i);used.add(candidate.j);
+    });
+    chosen.sort((a,b)=>a.i-b.i);
+    if(!chosen.length)throw new Error("No G–C, A–U, or G–U base pairs passed the current 3D geometry screen for this chain.");
+    const chars=Array(sequence.length).fill(".");
+    chosen.forEach(({i,j})=>{chars[i]="(";chars[j]=")";});
+    return {sequence,structure:chars.join(""),pairs:chosen,candidateCount:candidates.length};
+  }
+  function generateSecondaryFrom3D(){
+    const chain=state.chains.find(c=>c.id===state.activeChain);if(!chain)throw new Error("Choose an RNA chain first.");
+    const derived=deriveSecondaryFromResidues(chain.residues);
+    state.secondarySequence=derived.sequence;state.structure=derived.structure;state.secondaryIsDefault=false;state.sameMoleculeConfirmed=true;
+    state.derivedSecondary={sequence:derived.sequence,structure:derived.structure,chainId:chain.id,source:state.currentFileName,pairCount:derived.pairs.length,candidateCount:derived.candidateCount};
+    const parsed=parseStructure(state.structure,state.secondarySequence.length);pairs=parsed.pairs;partner=parsed.partner;
+    state.selectionIndices.clear();state.selectedPairs.clear();state.pairHbondStyles={};state.secondaryLayoutPositions=null;state.split=true;
+    if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.loadDerived){
+      SecondaryExplorer.loadDerived(derived.sequence,derived.structure,{source:state.currentFileName+" · chain "+(chain.id||"(blank)"),pairCount:derived.pairs.length});
+    }
+    state.sameMoleculeConfirmed=true;evaluateMapping();state.indexSelection=defaultIndices();buildIndexChoices();
+    const status=$("teDerivedStatus");
+    if(status){status.hidden=false;status.textContent="Derived from 3D coordinates · "+derived.pairs.length+" base pairs selected from "+derived.candidateCount+" geometry candidates. G–C, A–U, and G–U pairs are inferred from expected donor/acceptor distances plus base-plane geometry; crossing candidates are omitted from the dot-bracket output.";}
+    const openButton=$("teOpenDerivedSecondary");if(openButton)openButton.hidden=false;
+    const split=$("teSplit");if(split){split.disabled=false;split.checked=true;}
+    render();scheduleViewerResize(true);return derived;
+  }
+
   function ensurePairHbondStyle(key,bonds){
     const group=state.pairHbondStyles[key]??={...DEFAULT_HBOND_STYLE,bonds:{}};
     group.bonds??={};
@@ -281,6 +370,8 @@ const TertiaryExplorer = (() => {
     let level="error",message="",enabled=false;
     if(!chain){
       message=state.chainNeedsChoice?"Multiple RNA chains are equally compatible with the Secondary sequence. Choose the intended RNA chain before linking.":"No RNA-like chain is available for 2D/3D mapping.";
+    }else if(state.derivedSecondary&&state.derivedSecondary.chainId===chain.id&&state.derivedSecondary.sequence===sequence&&state.derivedSecondary.structure===state.structure){
+      enabled=true;level="verified";message="Linked: this Secondary structure was derived from the active 3D coordinates for chain "+(chain.id||"(blank)")+".";
     }else if(isCuratedDefaultPair()){
       if(chain.residues.length===sequence.length){enabled=true;level="verified";message="Linked: the default Secondary example and PDB 1EHZ use the curated 76-residue tRNA mapping.";}
       else message="The default 1EHZ RNA chain length does not match the default Secondary sequence.";
@@ -340,12 +431,13 @@ const TertiaryExplorer = (() => {
     },(_,v)=>{if(hoverLabel){v.removeLabel(hoverLabel);hoverLabel=null;v.render();}});
   }
   function resetModelState(){
-    hoverLabel=null;initialView=null;state.selected=0;state.measurementPicks=[];state.measurements=[];state.measurementMode="off";
+    hoverLabel=null;initialView=null;state.selected=0;state.measurementPicks=[];state.measurements=[];state.measurementMode="off";state.derivedSecondary=null;
     state.selectionIndices.clear();state.selectedPairs.clear();state.pairHbondStyles={};state.savedObjects=[];state.isolateObjectId=null;state.savedViews=[];clearComparison(false);
   }
   async function setModelFromText(text,format,sourceIsDefault,fileName){
     if(!viewer)throw new Error("3D viewer is not ready.");
     resetModelState();viewer.removeAllModels();viewer.removeAllShapes();viewer.removeAllLabels();if(viewer.removeAllSurfaces)viewer.removeAllSurfaces();
+    const derivedStatus=$("teDerivedStatus");if(derivedStatus){derivedStatus.hidden=true;derivedStatus.textContent="";}const openDerived=$("teOpenDerivedSecondary");if(openDerived)openDerived.hidden=true;
     model=viewer.addModel(text,format,{keepH:true});
     if(!model||!model.selectedAtoms({}).length)throw new Error("No atoms could be parsed from this structure file.");
     state.sourceIsDefault=sourceIsDefault;state.currentFileName=fileName;state.currentFormat=format;state.sameMoleculeConfirmed=false;
@@ -425,7 +517,8 @@ const TertiaryExplorer = (() => {
     pairs.forEach(([a,b])=>{
       if(!isVisibleIndex(a)||!isVisibleIndex(b))return;
       const x=residues[a]?.coord,y=residues[b]?.coord;if(!x||!y)return;
-      viewer.addCylinder({start:x,end:y,radius:.045,color:"#71879a",opacity:.32,fromCap:1,toCap:1});
+      const shape=viewer.addShape({clickable:true,callback:()=>choosePair(a,b)});
+      shape.addCylinder({start:x,end:y,radius:.045,color:"#71879a",opacity:.32,fromCap:1,toCap:1});
     });
   }
   function selectedPairResidues(){
@@ -619,13 +712,14 @@ const TertiaryExplorer = (() => {
     }
     if(notify&&state.mapping.enabled){
       if(isCuratedDefaultPair())state.onSelect(state.selected);
-      else if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.followExternal)SecondaryExplorer.followExternal(state.selected);
+      if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.followExternal)SecondaryExplorer.followExternal(state.selected,state.selectionIndices.has(state.selected));
     }
     render();
   }
-  function choosePair(a,b,{toggle=true}={}){
+  function choosePair(a,b,{toggle=true,notify=true}={}){
     const key=pairKey(a,b);state.selected=a;
     if(toggle){if(state.selectedPairs.has(key))state.selectedPairs.delete(key);else state.selectedPairs.add(key);}
+    if(notify&&state.mapping.enabled&&typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.followPairExternal)SecondaryExplorer.followPairExternal(a,b,state.selectedPairs.has(key));
     render();
   }
   function updateSourceCopy(){
@@ -993,6 +1087,8 @@ const TertiaryExplorer = (() => {
       '<div class="te-pdb-id-row"><label>PDB ID<input id="tePdbId" type="text" inputmode="text" maxlength="4" placeholder="1EHZ" autocomplete="off"></label><button type="button" id="teLoadPdbId">Load from RCSB PDB</button></div><p class="te-tool-note" id="tePdbIdStatus">Enter a four-character PDB ID to fetch its mmCIF coordinates directly from RCSB PDB.</p>'+
       '<button type="button" id="teRestoreStructure">Restore example 1EHZ</button>'+
       '<label>RNA chain<select id="teChainSelect"></select></label>'+
+      '<div class="te-button-row"><button type="button" id="teGenerateSecondary">Generate 2D from 3D</button><button type="button" id="teOpenDerivedSecondary" hidden>Open generated 2D in Secondary workspace</button></div>'+
+      '<p id="teDerivedStatus" class="te-derived-status te-tool-note" role="status" hidden></p>'+
       '<label class="te-check"><input id="teSameMolecule" type="checkbox"> I confirm that the Secondary and 3D inputs describe the same RNA molecule</label>'+
       '<p id="teMappingStatus" class="te-mapping-status" role="status"></p></details>'+
       '<section id="teContextPanel" class="te-context-panel" aria-live="polite"></section>'+
@@ -1052,7 +1148,9 @@ const TertiaryExplorer = (() => {
     $("teMeasureClear").addEventListener("click",()=>{state.measurementPicks=[];state.measurements=[];render();});
     $("teSplit").addEventListener("change",e=>{state.split=e.target.checked&&state.mapping.enabled;render();scheduleViewerResize(true);});
     $("teSameMolecule").addEventListener("change",e=>{state.sameMoleculeConfirmed=e.target.checked;evaluateMapping();render();});
-    $("teChainSelect").addEventListener("change",e=>{state.activeChain=e.target.value;state.chainNeedsChoice=false;state.sameMoleculeConfirmed=false;buildResidueLookup();evaluateMapping();state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();render();});
+    $("teChainSelect").addEventListener("change",e=>{state.activeChain=e.target.value;state.chainNeedsChoice=false;state.sameMoleculeConfirmed=false;state.derivedSecondary=null;buildResidueLookup();evaluateMapping();state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();const ds=$("teDerivedStatus");if(ds){ds.hidden=true;ds.textContent="";}const od=$("teOpenDerivedSecondary");if(od)od.hidden=true;render();});
+    $("teGenerateSecondary").addEventListener("click",()=>{const button=$("teGenerateSecondary"),status=$("teDerivedStatus");button.disabled=true;if(status){status.hidden=false;status.textContent="Deriving base pairs from the active 3D RNA chain…";}try{generateSecondaryFrom3D();}catch(error){if(status){status.hidden=false;status.textContent="3D → 2D generation failed: "+error.message;}}finally{button.disabled=false;}});
+    $("teOpenDerivedSecondary").addEventListener("click",()=>{window.location.href="?page=secondary";});
     $("teStructureFile").addEventListener("change",async e=>{const file=e.target.files[0];if(!file)return;setStatus("Loading "+file.name+"…");try{await handleStructureUpload(file);setStatus("");}catch(error){setStatus("Upload failed: "+error.message,"error");}});
     const loadPdbId=async()=>{const status=$("tePdbIdStatus"),button=$("teLoadPdbId");button.disabled=true;status.textContent="Loading from RCSB PDB…";setStatus("Fetching structure from RCSB PDB…");try{const id=await loadFromRcsbId($("tePdbId").value);status.textContent="Loaded RCSB PDB · "+id+" as mmCIF.";setStatus("");render();}catch(error){status.textContent=error.message;setStatus("RCSB import failed: "+error.message,"error");}finally{button.disabled=false;}};
     $("teLoadPdbId").addEventListener("click",loadPdbId);$("tePdbId").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();loadPdbId();}});
@@ -1134,9 +1232,11 @@ const TertiaryExplorer = (() => {
   }
   function handleSecondaryContext(detail){
     if(!detail)return;const changed=detail.sequence!==state.secondarySequence||detail.structure!==state.structure;
+    const matchesDerived=Boolean(state.derivedSecondary&&detail.sequence===state.derivedSecondary.sequence&&detail.structure===state.derivedSecondary.structure);
     state.secondarySequence=detail.sequence;state.structure=detail.structure;state.secondaryIsDefault=Boolean(detail.isDefault);if(changed)state.secondaryLayoutPositions=null;
     const parsed=parseStructure(state.structure,state.secondarySequence.length);pairs=parsed.pairs;partner=parsed.partner;
-    if(changed&&!isCuratedDefaultPair()){state.sameMoleculeConfirmed=false;state.metadata={};state.heatEnabled=false;}
+    if(changed&&!isCuratedDefaultPair()&&!matchesDerived){state.sameMoleculeConfirmed=false;state.derivedSecondary=null;state.metadata={};state.heatEnabled=false;}
+    if(matchesDerived)state.sameMoleculeConfirmed=true;
     evaluateMapping();if(changed){state.indexSelection=defaultIndices();buildIndexChoices();}render();
   }
   function setup(config){
@@ -1148,7 +1248,7 @@ const TertiaryExplorer = (() => {
     window.addEventListener("rna-metadata-change",e=>applyMetadata(e.detail));
     window.addEventListener("rna-secondary-context",e=>handleSecondaryContext(e.detail));
     window.addEventListener("rna-secondary-layout",e=>handleSecondaryLayout(e.detail));
-    window.addEventListener("rna-secondary-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){state.selected=clamp(e.detail.index,0,state.secondarySequence.length-1);render();}});
+    window.addEventListener("rna-secondary-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){state.selected=clamp(e.detail.index,0,state.secondarySequence.length-1);if(e.detail.selected===true)state.selectionIndices.add(state.selected);else if(e.detail.selected===false)state.selectionIndices.delete(state.selected);render();}});
     window.addEventListener("rna-secondary-pair-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){const key=pairKey(e.detail.a,e.detail.b);if(e.detail.selected)state.selectedPairs.add(key);else state.selectedPairs.delete(key);render();}});
     window.addEventListener("resize",()=>scheduleViewerResize(true));
     if(typeof ResizeObserver!=="undefined"){const viewport=$("tertiaryViewport");if(viewport)new ResizeObserver(()=>scheduleViewerResize(true)).observe(viewport);}
@@ -1156,8 +1256,8 @@ const TertiaryExplorer = (() => {
     render();
   }
 
-  return {setup,render,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,
-    getDiagnostics(){return {viewerReady:!!viewer,modelReady:!!model,atomCount:model?.selectedAtoms?model.selectedAtoms({}).length:0,representation:state.representation,colorMode:state.colorMode,split:state.split,mappingEnabled:state.mapping.enabled,source:state.currentFileName,
+  return {setup,render,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,
+    getDiagnostics(){return {viewerReady:!!viewer,modelReady:!!model,atomCount:model?.selectedAtoms?model.selectedAtoms({}).length:0,representation:state.representation,colorMode:state.colorMode,split:state.split,mappingEnabled:state.mapping.enabled,source:state.currentFileName,derivedSecondary:state.derivedSecondary,
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
       selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
       comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count,selectedPairCount:state.selectedPairs.size,

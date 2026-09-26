@@ -35,6 +35,8 @@ assert.strictEqual(coords.length, 76, "The C4-prime trace should contain one coo
 const secondary = read("secondary.js");
 assert(secondary.includes('"rna-secondary-context"'), "Secondary view should broadcast mapping context");
 assert(secondary.includes('"rna-secondary-pair-select"')&&secondary.includes("selectPair"), "Secondary base pairs should dispatch explicit pair selection events");
+assert(secondary.includes("selectedResidues=new Set()")&&secondary.includes("selectedPairKeys=new Set()"), "Secondary selections should be persistent and additive");
+assert(secondary.includes("loadDerived"), "Secondary workspace should accept structures derived from 3D coordinates");
 assert(secondary.includes('"rna-metadata-change"'), "Secondary view should broadcast residue metadata");
 
 const tertiary = read("tertiary.js");
@@ -97,7 +99,11 @@ const tertiary = read("tertiary.js");
   "secondaryLayoutPositions",
   "setWidth(width)",
   "pngURI()",
-  "sequence identity and residue count match"
+  "sequence identity and residue count match",
+  "Generate 2D from 3D",
+  "deriveSecondaryFromResidues",
+  "Derived from 3D coordinates",
+  "followPairExternal"
 ].forEach(text => assert(tertiary.includes(text), "Missing tertiary feature: " + text));
 
 const tertiaryApi = new Function(tertiary + "\nreturn TertiaryExplorer;")();
@@ -119,6 +125,7 @@ assert(pdb.includes("ATOM") && pdb.includes("END"), "PDB exporter should emit co
 const cif = tertiaryApi.serializeCif([{atom:"P",resn:"G",chain:"A",resi:1,x:1,y:2,z:3,elem:"P",hetflag:false}]);
 assert(cif.includes("_atom_site.Cartn_x") && cif.includes("data_rna_explorer"), "mmCIF exporter should emit an atom_site loop");
 
+assert(tertiary.includes('clickable:true,callback:()=>choosePair(a,b)'), "Visible 3D pair guides should be directly selectable and linked back to 2D");
 assert(tertiary.includes("handleAtomMeasurementClick"), "Atom-click measurement workflow should be available");
 assert(tertiary.includes("teMeasurementList")&&tertiary.includes("teMeasureClear"), "Multiple measurements can be listed and cleared");
 assert(tertiary.includes("getCurrentPositions")&&tertiary.includes("secondaryLayoutPositions"), "Linked 2D/3D view preserves the edited Secondary layout when available");

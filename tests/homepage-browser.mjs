@@ -32,7 +32,16 @@ try{
   const destinations=await fork.locator("a").evaluateAll(nodes=>nodes.map(n=>n.getAttribute("href")));
   if(!destinations.includes("?page=secondary")||!destinations.includes("?page=tertiary"))throw new Error("Analyze fork must contain both 2D and 3D workspace links.");
 
-  const serious=errors.filter(x=>!/favicon|ResizeObserver loop/i.test(x));
+  const searchButton=page.locator("#siteSearchButton");
+  await searchButton.click();
+  await page.fill("#siteSearchInput","generate 2D");
+  const generateResult=page.locator(".site-search-result").filter({hasText:"Generate 2D from 3D"}).first();
+  if(await generateResult.count()!==1)throw new Error("Global search did not find the 3D → 2D tool.");
+  await generateResult.click();
+  await page.waitForSelector('body[data-page-mode="tertiary"] #scene-tertiary:not([hidden])',{timeout:10000});
+  if(!(await page.locator("#teGenerateSecondary").isVisible()))throw new Error("Global search did not navigate to the 3D → 2D control.");
+
+    const serious=errors.filter(x=>!/favicon|ResizeObserver loop/i.test(x));
   if(serious.length)throw new Error("Homepage browser runtime errors:\n"+serious.join("\n"));
   console.log("PASS: homepage cover image and navigation smoke test");
 } finally {
