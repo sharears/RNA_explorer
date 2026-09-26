@@ -63,6 +63,16 @@ try{
   d=await page.evaluate(()=>TertiaryExplorer.getDiagnostics());
   if(!d.modelReady||d.atomCount<100)throw new Error("RCSB PDB-ID import did not load a usable model.");
 
+  await page.click("#teGenerateSecondary");
+  await page.waitForFunction(()=>{
+    const d=TertiaryExplorer.getDiagnostics();
+    return d.derivedSecondary&&d.derivedSecondary.pairCount>0&&d.mappingEnabled&&d.split;
+  },{timeout:30000});
+  d=await page.evaluate(()=>TertiaryExplorer.getDiagnostics());
+  if(d.derivedSecondary.pairCount<5)throw new Error("3D → 2D derivation found unexpectedly few base pairs: "+JSON.stringify(d.derivedSecondary));
+  const derivedNote=(await page.locator("#secondarySourceNote").textContent())||"";
+  if(!/Derived from 3D coordinates/i.test(derivedNote))throw new Error("Derived Secondary source note was not populated.");
+
   await page.locator("#teSurface").check();
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().surfaceEnabled===true);
   await page.locator("#teSurface").uncheck();
