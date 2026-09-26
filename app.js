@@ -4,6 +4,30 @@ const BASE_NAMES = { A: "Adenine", G: "Guanine", C: "Cytosine", U: "Uracil" };
 const BASE_COLORS = { A: "#b55d6a", G: "#2f6b57", C: "#c89b4a", U: "#5d7fa3" };
 const SCENES = ["blocks", "nucleoside", "nucleotide", "primary", "secondary", "tertiary"];
 const SCENE_LABELS = ["Building blocks", "Nucleoside", "Nucleotide", "Primary", "Secondary", "Tertiary"];
+const SITE_SEARCH_ITEMS = [
+  {label:"Building blocks",description:"RNA phosphate, ribose, and nucleobase basics",page:"journey",scene:"blocks",target:"#scene-blocks",keywords:"parts chemistry phosphate sugar ribose base"},
+  {label:"Nucleoside",description:"Explore the sugar + base unit",page:"journey",scene:"nucleoside",target:"#scene-nucleoside",keywords:"nucleoside sugar base"},
+  {label:"Nucleotide",description:"Explore phosphate + nucleoside",page:"journey",scene:"nucleotide",target:"#scene-nucleotide",keywords:"nucleotide phosphate"},
+  {label:"Primary sequence",description:"RNA sequence and residue positions",page:"journey",scene:"primary",target:"#scene-primary",keywords:"primary sequence letters residues 5 prime 3 prime"},
+  {label:"Secondary structure workspace",description:"2D RNA structure, dot-bracket, layouts, and styling",page:"secondary",scene:"secondary",target:"#scene-secondary",keywords:"2d secondary dot bracket dbn ct radial circular arc"},
+  {label:"RNA sequence / dot-bracket input",description:"Enter or edit a 2D RNA structure",page:"secondary",scene:"secondary",target:"#secondarySequence",keywords:"sequence structure dot bracket input render"},
+  {label:"Reactivity / residue metadata",description:"Color residues using uploaded numeric metadata",page:"secondary",scene:"secondary",target:"#seMetadataFile",keywords:"reactivity dms shape csv metadata coloring heatmap"},
+  {label:"Base-pair probability",description:"Upload a matrix or sparse probability data",page:"secondary",scene:"secondary",target:"#sePairProbFile",keywords:"base pair probability matrix bpp confidence"},
+  {label:"Base-pair display / Leontis–Westhof",description:"Change pair lines and LW annotations",page:"secondary",scene:"secondary",target:"#se-mode",keywords:"base pair style leontis westhof lw edge cis trans"},
+  {label:"Secondary structure export",description:"Export 2D images or DBN/CT structure files",page:"secondary",scene:"secondary",target:"#seExportDialogButton",keywords:"download export png svg pdf dbn ct image"},
+  {label:"Tertiary structure workspace",description:"Interactive all-atom 3D RNA viewer",page:"tertiary",scene:"tertiary",target:"#scene-tertiary",keywords:"3d tertiary molecular viewer pymol"},
+  {label:"Import PDB / mmCIF",description:"Load a local 3D coordinate file",page:"tertiary",scene:"tertiary",target:"#teStructureFile",keywords:"upload structure pdb cif mmcif coordinates"},
+  {label:"Load by PDB ID",description:"Fetch coordinates directly from RCSB PDB",page:"tertiary",scene:"tertiary",target:"#tePdbId",keywords:"rcsb pdb id fetch download structure"},
+  {label:"RNA chain selection",description:"Choose the RNA chain from a 3D structure",page:"tertiary",scene:"tertiary",target:"#teChainSelect",keywords:"chain select polymer molecule"},
+  {label:"Generate 2D from 3D",description:"Derive a secondary structure from the active 3D RNA chain",page:"tertiary",scene:"tertiary",target:"#teGenerateSecondary",keywords:"generate derive secondary 2d from 3d coordinates base pairs dot bracket"},
+  {label:"Linked 2D + 3D view",description:"Show synchronized secondary and tertiary views",page:"tertiary",scene:"tertiary",target:"#teSplit",keywords:"linked synchronize sync 2d 3d highlight mapping"},
+  {label:"Hydrogen bonds for selected base pairs",description:"Inspect geometry-supported H-bonds for selected pairs",page:"tertiary",scene:"tertiary",target:"#teContextPanel",keywords:"hydrogen bond hbond donor acceptor selected pair geometry"},
+  {label:"Persistent residue selection",description:"Build an additive residue selection",page:"tertiary",scene:"tertiary",target:"#teSequencePanel",keywords:"select residue additive persistent multiple"},
+  {label:"Molecular surface",description:"Toggle and adjust the molecular surface",page:"tertiary",scene:"tertiary",target:"#teSurface",keywords:"surface transparency"},
+  {label:"Measurements and contacts",description:"Distances, angles, dihedrals, contacts, and proximity",page:"tertiary",scene:"tertiary",target:"#teMeasureMode",keywords:"measure distance angle dihedral contacts proximity analyze"},
+  {label:"Compare / align structures",description:"Superimpose another structure and calculate RMSD",page:"tertiary",scene:"tertiary",target:"#teAlignFile",keywords:"compare align superimpose rmsd structures"},
+  {label:"Tertiary structure export",description:"Export 3D images or coordinate files",page:"tertiary",scene:"tertiary",target:"#teOpenExport",keywords:"export png svg pdf pdb mmcif structure image"}
+];
 const NS = "http://www.w3.org/2000/svg";
 
 // C4′ coordinates from the experimentally determined yeast tRNA-Phe structure, PDB 1EHZ.
@@ -148,6 +172,89 @@ function setupHomePaths() {
   document.addEventListener("click",event=>{
     if(!event.target.closest(".nav-menu"))document.querySelectorAll(".nav-menu > button").forEach(b=>b.setAttribute("aria-expanded","false"));
   });
+}
+
+
+function searchRank(item, query) {
+  const q=String(query||"").trim().toLowerCase();
+  if(!q)return 1;
+  const terms=q.split(/\s+/).filter(Boolean);
+  const hay=(item.label+" "+item.description+" "+item.keywords).toLowerCase();
+  if(!terms.every(term=>hay.includes(term)))return 0;
+  let score=terms.length*10;
+  if(item.label.toLowerCase().includes(q))score+=20;
+  if(item.label.toLowerCase().startsWith(q))score+=10;
+  return score;
+}
+
+function revealSearchTarget(item) {
+  if(item.scene){
+    const sceneIndex=SCENES.indexOf(item.scene);
+    if(sceneIndex>=0)showScene(sceneIndex);
+  }
+  requestAnimationFrame(()=>setTimeout(()=>{
+    const target=document.querySelector(item.target)||document.querySelector("[data-scene-panel='"+item.scene+"']");
+    if(!target)return;
+    let node=target;
+    while(node&&node!==document.body){
+      if(node.tagName==="DETAILS")node.open=true;
+      node=node.parentElement;
+    }
+    const highlight=target.matches("input,select,button,textarea")?(target.closest("label,fieldset,details")||target):(target.closest("details")||target);
+    document.querySelectorAll(".search-target-highlight").forEach(el=>el.classList.remove("search-target-highlight"));
+    highlight.classList.add("search-target-highlight");
+    target.scrollIntoView({behavior:"smooth",block:"center"});
+    if(typeof target.focus==="function"&&target.matches("input,select,button,textarea"))target.focus({preventScroll:true});
+    setTimeout(()=>highlight.classList.remove("search-target-highlight"),3000);
+  },90));
+}
+
+function navigateToSearchItem(item) {
+  const url=new URL(window.location.href);
+  url.searchParams.set("page",item.page);
+  history.pushState({page:item.page},"",url);
+  applyPageMode();
+  revealSearchTarget(item);
+}
+
+function setupSiteSearch() {
+  const openButton=document.getElementById("siteSearchButton"),dialog=document.getElementById("siteSearchDialog");
+  const closeButton=document.getElementById("siteSearchClose"),input=document.getElementById("siteSearchInput"),results=document.getElementById("siteSearchResults");
+  if(!openButton||!dialog||!input||!results)return;
+  const renderResults=()=>{
+    const ranked=SITE_SEARCH_ITEMS.map(item=>({item,score:searchRank(item,input.value)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score||a.item.label.localeCompare(b.item.label)).slice(0,12);
+    results.replaceChildren();
+    if(!ranked.length){
+      const empty=document.createElement("p");empty.className="site-search-empty";empty.textContent="No matching tool found. Try a broader term such as “2D”, “3D”, “PDB”, “hydrogen bond”, or “export”.";results.append(empty);return;
+    }
+    ranked.forEach(({item})=>{
+      const button=document.createElement("button");button.type="button";button.className="site-search-result";button.setAttribute("role","option");
+      const title=document.createElement("strong");title.textContent=item.label;
+      const description=document.createElement("span");description.textContent=item.description;
+      button.append(title,description);
+      button.addEventListener("click",()=>{dialog.close();navigateToSearchItem(item);});
+      results.append(button);
+    });
+  };
+  const open=()=>{renderResults();dialog.showModal();setTimeout(()=>{input.focus();input.select();},0);};
+  openButton.addEventListener("click",open);
+  closeButton?.addEventListener("click",()=>dialog.close());
+  input.addEventListener("input",renderResults);
+  input.addEventListener("keydown",event=>{
+    if(event.key==="Enter"){
+      const first=results.querySelector(".site-search-result");if(first){event.preventDefault();first.click();}
+    }
+  });
+  dialog.addEventListener("click",event=>{
+    const bounds=dialog.getBoundingClientRect();
+    if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)dialog.close();
+  });
+  document.addEventListener("keydown",event=>{
+    const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||"");
+    if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="k"){event.preventDefault();open();}
+    else if(event.key==="/"&&!typing&&!dialog.open){event.preventDefault();open();}
+  });
+  window.addEventListener("popstate",applyPageMode);
 }
 
 function applyPageMode() {
@@ -357,6 +464,7 @@ function initialize() {
   }
   setupNavigation();
   setupHomePaths();
+  setupSiteSearch();
   setupChemicalJourney();
   MoleculeEditor.setup();
   renderPrimary();
