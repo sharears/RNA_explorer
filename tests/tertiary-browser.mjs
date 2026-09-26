@@ -148,6 +148,32 @@ try{
   await page.click("#teExportNow");
   const imageFile=await imageDownload;
   if(!imageFile.suggestedFilename().endsWith(".png"))throw new Error("Image export did not produce a PNG download.");
+  await page.click("#teExportClose");
+
+  const projectSnapshot=await page.evaluate(()=>ProjectSession.getProjectSnapshot());
+  if(projectSnapshot.schema!=="rna-explorer-project"||!projectSnapshot.secondary||!projectSnapshot.tertiary?.sourceText)
+    throw new Error("Project snapshot did not include the active 2D/3D workspace.");
+  if(!projectSnapshot.tertiary.savedObjects?.length||!projectSnapshot.tertiary.savedViews?.length||!projectSnapshot.tertiary.comparison)
+    throw new Error("Project snapshot did not retain saved 3D analysis state.");
+
+  const projectDownload=page.waitForEvent("download",{timeout:15000});
+  await page.click("#saveProjectButton");
+  const projectFile=await projectDownload;
+  if(!projectFile.suggestedFilename().endsWith(".rnaexplorer.json"))throw new Error("Save Project did not produce an RNA Explorer JSON project file.");
+  const projectPath=await projectFile.path();
+  if(!projectPath)throw new Error("Downloaded project file was not available to the browser test.");
+
+  await page.selectOption("#teRepresentation","wire");
+  await page.click("#teSelectClear");
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().representation==="wire"&&TertiaryExplorer.getDiagnostics().selectionCount===0);
+  await page.setInputFiles("#projectFileInput",projectPath);
+  await page.waitForFunction(()=>/Project restored/i.test(document.getElementById("projectSessionStatus")?.textContent||""),{timeout:30000});
+  d=await page.evaluate(()=>TertiaryExplorer.getDiagnostics());
+  if(d.representation!=="spheres")throw new Error("Open Project did not restore the saved 3D representation.");
+  if(d.selectionCount<1||d.savedObjectCount!==1||d.savedViewCount!==1||d.comparisonCount<3)
+    throw new Error("Open Project did not restore selections, objects, saved views, and comparison state: "+JSON.stringify(d));
+  secondaryContext=await page.evaluate(()=>SecondaryExplorer.getContext());
+  if(!/Derived from 3D coordinates/i.test(secondaryContext.sourceNote||""))throw new Error("Open Project did not restore the linked generated Secondary structure.");
 
   const serious=pageErrors.filter(x=>!/favicon|ResizeObserver loop/i.test(x));
   if(serious.length)throw new Error("Browser runtime errors:\n"+serious.join("\n"));

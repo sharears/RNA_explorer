@@ -329,6 +329,20 @@ dialog a { color: var(--mint); }
 }
 .site-search-button::before{content:"⌕";margin-right:7px;color:var(--mint);font:700 1rem "DM Mono",monospace}
 .site-search-button:hover{border-color:rgba(116,215,182,.55);color:var(--mint)}
+.project-button{
+  border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.035);color:var(--text);
+  cursor:pointer;padding:9px 12px;font:600 .82rem "Manrope",sans-serif;white-space:nowrap
+}
+.project-button:hover{border-color:rgba(232,187,105,.58);color:var(--cream)}
+.project-button:disabled{opacity:.55;cursor:wait}
+.project-session-status{
+  position:fixed;right:18px;top:74px;z-index:1100;max-width:min(440px,calc(100vw - 36px));
+  margin:0;padding:10px 13px;border:1px solid var(--line);border-radius:9px;background:#0a1625;color:var(--text);
+  box-shadow:0 12px 30px rgba(0,0,0,.3);font-size:.82rem
+}
+.project-session-status[data-kind="success"]{border-color:rgba(116,215,182,.55)}
+.project-session-status[data-kind="error"]{border-color:rgba(181,93,106,.75);color:#f1bcc4}
+.project-session-status[data-kind="working"]{border-color:rgba(232,187,105,.65);color:var(--cream)}
 .site-search-dialog{width:min(680px,calc(100% - 28px));padding:30px}
 .site-search-dialog h2{margin-bottom:18px}
 .site-search-label{display:block;color:var(--cream);font:600 .78rem "DM Mono",monospace;margin-bottom:7px}
@@ -400,6 +414,8 @@ body[data-page-mode="journey"] .home-paths { display:none !important; }
   .inner-nav { width:100%; margin-left:0; flex-wrap:wrap; }
   .topbar-actions{margin-left:auto}
   .site-search-button{padding:8px 10px}
+  .project-button{padding:8px 10px}
+  .project-session-status{top:112px}
   .nav-menu-panel { left:0; right:auto; min-width:min(280px,86vw); }
   .home-paths { min-height:auto; padding:30px 0 80px; }
   .home-feedback-button { right:12px; bottom:12px; }

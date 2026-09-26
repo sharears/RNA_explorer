@@ -424,5 +424,17 @@ const MoleculeEditor = (() => {
     }
   }
 
-  return {setup,openBase,openPair,getBaseGraph:graphFromBase,getSavedBase:b=>savedBases[b]?clone(savedBases[b]):null,pairTemplate,validateGraph:g=>{const old=graph;graph=clone(g);const w=validate();graph=old;return w;}};
+  function getSessionSnapshot(){
+    return {savedBases:clone(savedBases)};
+  }
+  function restoreSessionSnapshot(snapshot={}){
+    Object.keys(savedBases).forEach(key=>delete savedBases[key]);
+    Object.entries(snapshot.savedBases||{}).forEach(([key,value])=>{if(BASES[key]&&value)savedBases[key]=clone(value);});
+    if(dialog?.open)loadCurrent();
+    return getSessionSnapshot();
+  }
+
+  return {setup,openBase,openPair,getBaseGraph:graphFromBase,getSavedBase:b=>savedBases[b]?clone(savedBases[b]):null,pairTemplate,
+    getSessionSnapshot,restoreSessionSnapshot,
+    validateGraph:g=>{const old=graph;graph=clone(g);const w=validate();graph=old;return w;}};
 })();

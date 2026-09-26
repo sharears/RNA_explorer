@@ -167,10 +167,58 @@ const SecondaryExplorer = (() => {
     return lines.join("\n")+"\n";
   }
   function workspaceSnapshot(){
-    return {sequence:seq,structure:db,layout,arcPairStyle,manualOffsets,zoom,panX,panY,metadata,heatEnabled,heatTheme,heatRange,pairProbabilities,pairProbEnabled,pairProbTheme,
+    return {
+      version:2,sequence:seq,structure:db,layout,arcPairStyle,manualOffsets,zoom,panX,panY,
+      settings:{...settings},indexSettings:{...indexSettings},overrides,annotations,pairChemistry,
+      metadata,heatEnabled,heatTheme,heatRange,pairProbabilities,pairProbEnabled,pairProbTheme,
       legendSettings,residueOverrides,backboneOverrides,indexMode,indexSelection:[...indexSelection],indexOverrides,pinnedResidues:[...pinnedResidues],
-      selectedResidues:[...selectedResidues],selectedPairKeys:[...selectedPairKeys],sourceNote};
+      selected:selected,selectedPairKey,selectedResidues:[...selectedResidues],selectedPairKeys:[...selectedPairKeys],
+      exportScale,dragMode,flexDrag,sourceNote
+    };
   }
+  function syncWorkspaceControls(){
+    document.querySelectorAll("[data-secondary-layout]").forEach(b=>{const active=b.dataset.secondaryLayout===layout;b.classList.toggle("active",active);b.setAttribute("aria-pressed",String(active));});
+    document.querySelectorAll("[data-arc-style]").forEach(b=>{const active=b.dataset.arcStyle===arcPairStyle;b.classList.toggle("active",active);b.setAttribute("aria-pressed",String(active));});
+    if($("seArcPairStyle"))$("seArcPairStyle").hidden=layout!=="arc";
+    document.querySelectorAll("[data-setting]").forEach(el=>{
+      const key=el.dataset.setting;if(key in settings)el.value=String(settings[key]);
+    });
+    if($("seLegendToggle")){$("seLegendToggle").textContent=settings.legend?"Hide base-pair legend":"Show base-pair legend";$("seLegendToggle").setAttribute("aria-pressed",String(settings.legend));}
+    if($("seDragMode"))$("seDragMode").value=dragMode;
+    if($("seFlexDrag"))$("seFlexDrag").checked=flexDrag;
+    if($("secondarySequence"))$("secondarySequence").value=seq;
+    if($("secondaryDotBracket"))$("secondaryDotBracket").value=db;
+    setSourceNote(sourceNote);
+  }
+  function restoreWorkspaceSnapshot(w,{saveLocal=true}={}){
+    if(!w?.sequence||!w?.structure)throw Error("Project file is missing the Secondary sequence or dot-bracket structure.");
+    parse(w.sequence,w.structure);
+    restoringWorkspace=true;
+    try{
+      load(w.sequence,w.structure);
+      layout=["radial","circular","arc"].includes(w.layout)?w.layout:"radial";arcPairStyle=w.arcPairStyle==="square"?"square":"arc";
+      if(w.settings&&typeof w.settings==="object")Object.assign(settings,w.settings);
+      if(w.indexSettings&&typeof w.indexSettings==="object")Object.assign(indexSettings,w.indexSettings);
+      overrides=w.overrides&&typeof w.overrides==="object"?w.overrides:{};
+      annotations=w.annotations&&typeof w.annotations==="object"?w.annotations:{};
+      pairChemistry=w.pairChemistry&&typeof w.pairChemistry==="object"?w.pairChemistry:{};
+      manualOffsets=w.manualOffsets||{};zoom=Number(w.zoom)||1;panX=Number(w.panX)||0;panY=Number(w.panY)||0;
+      metadata=w.metadata||{};heatEnabled=!!w.heatEnabled;heatTheme=w.heatTheme||"viridis";heatRange=Array.isArray(w.heatRange)?w.heatRange:[0,1];
+      pairProbabilities=w.pairProbabilities||{};pairProbEnabled=!!w.pairProbEnabled;pairProbTheme=w.pairProbTheme||"viridis";
+      residueOverrides=w.residueOverrides||{};backboneOverrides=w.backboneOverrides||{};indexMode=w.indexMode||"default";indexSelection=new Set(w.indexSelection||[]);indexOverrides=w.indexOverrides||{};pinnedResidues=new Set(w.pinnedResidues||[]);
+      selected=Number.isInteger(w.selected)?Math.max(0,Math.min(seq.length-1,w.selected)):0;
+      selectedPairKey=typeof w.selectedPairKey==="string"?w.selectedPairKey:null;
+      selectedResidues=new Set((w.selectedResidues||[]).filter(i=>Number.isInteger(i)&&i>=0&&i<seq.length));
+      selectedPairKeys=new Set((w.selectedPairKeys||[]).filter(key=>pairs.some(([a,b])=>keyOf(a,b)===key)));
+      sourceNote=String(w.sourceNote||"");
+      exportScale=Number(w.exportScale)||2;dragMode=["residue","branch","whole"].includes(w.dragMode)?w.dragMode:"residue";flexDrag=w.flexDrag!==false;
+      if(w.legendSettings)Object.keys(legendSettings).forEach(k=>Object.assign(legendSettings[k],w.legendSettings[k]||{}));
+      syncWorkspaceControls();panel();render();broadcastContext();
+    } finally {restoringWorkspace=false;}
+    if(saveLocal)saveWorkspaceLocal();
+    return getContextSnapshot();
+  }
+  function getContextSnapshot(){return {sequence:seq,structure:db,isDefault:seq===defaultSeq&&db===defaultDb,selected,selectedPairKey,selectedResidues:[...selectedResidues],selectedPairKeys:[...selectedPairKeys],sourceNote};}
   function setSourceNote(note=""){
     sourceNote=String(note||"");
     const el=$("secondarySourceNote");if(!el)return;
@@ -181,28 +229,10 @@ const SecondaryExplorer = (() => {
     try{localStorage.setItem(WORKSPACE_KEY,JSON.stringify(workspaceSnapshot()));}catch(_){}
   }
   function restoreWorkspaceLocal(){
-    if(typeof localStorage==="undefined")return false;
-    if(typeof window==="undefined")return false;const search=String(window.location?.search||"");if(!/[?&]page=(secondary|tertiary)(?:&|$)/.test(search))return false;
-    try{
-      const raw=localStorage.getItem(WORKSPACE_KEY);if(!raw)return false;const w=JSON.parse(raw);
-      if(!w?.sequence||!w?.structure)return false;parse(w.sequence,w.structure);
-      restoringWorkspace=true;load(w.sequence,w.structure);
-      layout=["radial","circular","arc"].includes(w.layout)?w.layout:"radial";arcPairStyle=w.arcPairStyle==="square"?"square":"arc";
-      manualOffsets=w.manualOffsets||{};zoom=Number(w.zoom)||1;panX=Number(w.panX)||0;panY=Number(w.panY)||0;
-      metadata=w.metadata||{};heatEnabled=!!w.heatEnabled;heatTheme=w.heatTheme||"viridis";heatRange=Array.isArray(w.heatRange)?w.heatRange:[0,1];
-      pairProbabilities=w.pairProbabilities||{};pairProbEnabled=!!w.pairProbEnabled;pairProbTheme=w.pairProbTheme||"viridis";
-      residueOverrides=w.residueOverrides||{};backboneOverrides=w.backboneOverrides||{};indexMode=w.indexMode||"default";indexSelection=new Set(w.indexSelection||[]);indexOverrides=w.indexOverrides||{};pinnedResidues=new Set(w.pinnedResidues||[]);
-      selectedResidues=new Set((w.selectedResidues||[]).filter(i=>Number.isInteger(i)&&i>=0&&i<seq.length));
-      selectedPairKeys=new Set((w.selectedPairKeys||[]).filter(key=>pairs.some(([a,b])=>keyOf(a,b)===key)));
-      sourceNote=String(w.sourceNote||"");
-      if(w.legendSettings)Object.keys(legendSettings).forEach(k=>Object.assign(legendSettings[k],w.legendSettings[k]||{}));
-      restoringWorkspace=false;
-      $("secondarySequence").value=seq;$("secondaryDotBracket").value=db;
-      document.querySelectorAll("[data-secondary-layout]").forEach(b=>{const active=b.dataset.secondaryLayout===layout;b.classList.toggle("active",active);b.setAttribute("aria-pressed",String(active));});
-      if($("seArcPairStyle"))$("seArcPairStyle").hidden=layout!=="arc";
-      setSourceNote(sourceNote);
-      return true;
-    }catch(_){restoringWorkspace=false;return false;}
+    if(typeof localStorage==="undefined"||typeof window==="undefined")return false;
+    const search=String(window.location?.search||"");if(!/[?&]page=(secondary|tertiary)(?:&|$)/.test(search))return false;
+    try{const raw=localStorage.getItem(WORKSPACE_KEY);if(!raw)return false;restoreWorkspaceSnapshot(JSON.parse(raw),{saveLocal:false});return true;}
+    catch(_){restoringWorkspace=false;return false;}
   }
   function pushLayoutHistory(){
     layoutHistory.push(JSON.stringify(manualOffsets));if(layoutHistory.length>60)layoutHistory.shift();layoutFuture=[];
@@ -1096,6 +1126,7 @@ const SecondaryExplorer = (() => {
   return {setup,render,parse,parseMetadata,parsePairProbabilities,radial,orientEndsBottom,parseDbnText,parseCtText,serializeDbn,serializeCt,
     getCurrentPositions(){return coordinates().map(p=>({x:p.x,y:p.y}));},
     getWorkspaceSnapshot(){return workspaceSnapshot();},
+    restoreWorkspaceSnapshot,
     loadDerived(sequence,structure,meta={}){
       const cleanSeq=String(sequence||"").toUpperCase().replace(/\s/g,""),cleanDb=String(structure||"").replace(/\s/g,"");
       parse(cleanSeq,cleanDb);
@@ -1109,6 +1140,6 @@ const SecondaryExplorer = (() => {
     followDefault(index){if(index>=0&&index<seq.length){selected=index;panel();render();}},
     followExternal(index,selectedState){if(index>=0&&index<seq.length){selected=index;if(selectedState===true)selectedResidues.add(index);else if(selectedState===false)selectedResidues.delete(index);panel();render();}},
     followPairExternal(a,b,selectedState){const key=keyOf(a,b);if(selectedState===true){selectedPairKeys.add(key);selectedPairKey=key;}else if(selectedState===false){selectedPairKeys.delete(key);if(selectedPairKey===key)selectedPairKey=[...selectedPairKeys].at(-1)||null;}selected=a;panel();render();},
-    getContext(){return {sequence:seq,structure:db,isDefault:seq===defaultSeq&&db===defaultDb,selected,selectedPairKey,selectedResidues:[...selectedResidues],selectedPairKeys:[...selectedPairKeys],sourceNote};}
+    getContext(){return getContextSnapshot();}
   };
 })();

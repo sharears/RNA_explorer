@@ -58,7 +58,7 @@ const TertiaryExplorer = (() => {
     secondaryIsDefault:true,sourceIsDefault:true,sameMoleculeConfirmed:false,
     proximityEnabled:false,proximityCutoff:12,contactEnabled:false,contactCutoff:4.0,
     measurementMode:"off",measurementPicks:[],measurements:[],measurementSerial:1,
-    split:false,exportScale:2,currentFileName:"PDB 1EHZ",currentFormat:"pdb",
+    split:false,exportScale:2,currentFileName:"PDB 1EHZ",currentFormat:"pdb",sourceText:"",
     chains:[],activeChain:null,chainNeedsChoice:false,residueIndexByKey:new Map(),
     mapping:{enabled:false,level:"pending",message:""},
     surfaceEnabled:false,surfaceOpacity:0.35,uniformColor:"#74d7b6",backgroundColor:"#07111c",orthographic:false,
@@ -440,7 +440,7 @@ const TertiaryExplorer = (() => {
     const derivedStatus=$("teDerivedStatus");if(derivedStatus){derivedStatus.hidden=true;derivedStatus.textContent="";}const openDerived=$("teOpenDerivedSecondary");if(openDerived)openDerived.hidden=true;
     model=viewer.addModel(text,format,{keepH:true});
     if(!model||!model.selectedAtoms({}).length)throw new Error("No atoms could be parsed from this structure file.");
-    state.sourceIsDefault=sourceIsDefault;state.currentFileName=fileName;state.currentFormat=format;state.sameMoleculeConfirmed=false;
+    state.sourceIsDefault=sourceIsDefault;state.currentFileName=fileName;state.currentFormat=format;state.sourceText=String(text||"");state.sameMoleculeConfirmed=false;
     extractChains();chooseBestChain();populateChainSelect();buildResidueLookup();evaluateMapping();
     state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();renderSequencePanel();renderObjectList();renderSavedViews();
     try{applyStyles(false);}catch(error){console.warn("Initial 3D styling:",error);}
@@ -1219,6 +1219,93 @@ const TertiaryExplorer = (() => {
     $("teZoomOut")?.addEventListener("click",()=>{if(viewer){viewer.zoom(.8,250);viewer.render();}});
     $("teResetView")?.addEventListener("click",resetView);$("teCenterSelected")?.addEventListener("click",centerSelected);
   }
+
+  function getWorkspaceSnapshot(){
+    const comparison=state.comparison?.model?{
+      name:state.comparison.name||"comparison",rmsd:state.comparison.rmsd,count:state.comparison.count,visible:state.comparison.visible!==false,
+      structureText:serializePdb(state.comparison.model.selectedAtoms({}))
+    }:null;
+    return {
+      version:2,currentFileName:state.currentFileName,currentFormat:state.currentFormat,sourceText:state.sourceText,sourceIsDefault:state.sourceIsDefault,
+      activeChain:state.activeChain,secondarySequence:state.secondarySequence,structure:state.structure,secondaryIsDefault:state.secondaryIsDefault,
+      sameMoleculeConfirmed:state.sameMoleculeConfirmed,derivedSecondary:state.derivedSecondary,selected:state.selected,
+      representation:state.representation,colorMode:state.colorMode,showPairs:state.showPairs,showIndices:state.showIndices,showSelectedLabel:state.showSelectedLabel,
+      indexSelection:[...state.indexSelection],metadata:state.metadata,heatEnabled:state.heatEnabled,heatTheme:state.heatTheme,heatRange:state.heatRange,
+      proximityEnabled:state.proximityEnabled,proximityCutoff:state.proximityCutoff,contactEnabled:state.contactEnabled,contactCutoff:state.contactCutoff,
+      measurementMode:state.measurementMode,measurementPicks:state.measurementPicks,measurements:state.measurements,measurementSerial:state.measurementSerial,
+      split:state.split,exportScale:state.exportScale,surfaceEnabled:state.surfaceEnabled,surfaceOpacity:state.surfaceOpacity,
+      uniformColor:state.uniformColor,backgroundColor:state.backgroundColor,orthographic:state.orthographic,visibility:state.visibility,
+      selectionIndices:[...state.selectionIndices],selectionLabels:state.selectionLabels,selectionStyle:state.selectionStyle,
+      selectedPairs:[...state.selectedPairs],pairHbondStyles:state.pairHbondStyles,hbondCutoff:state.hbondCutoff,
+      savedObjects:state.savedObjects.map(o=>({...o,indices:[...o.indices]})),objectSerial:state.objectSerial,isolateObjectId:state.isolateObjectId,
+      savedViews:state.savedViews,viewSerial:state.viewSerial,
+      clipEnabled:state.clipEnabled,clipNear:state.clipNear,clipFar:state.clipFar,
+      secondaryLayoutPositions:state.secondaryLayoutPositions,
+      viewerView:viewer?.getView?viewer.getView().slice():null,comparison
+    };
+  }
+  function syncWorkspaceControls(){
+    const setValue=(id,value)=>{const el=$(id);if(el&&value!==undefined&&value!==null)el.value=String(value);};
+    const setChecked=(id,value)=>{const el=$(id);if(el)el.checked=Boolean(value);};
+    setValue("teRepresentation",state.representation);setValue("teColorMode",state.colorMode);
+    setValue("teUniformColor",state.uniformColor);setValue("teBackgroundColor",state.backgroundColor);
+    setChecked("teOrthographic",state.orthographic);setChecked("teSplit",state.split);setChecked("teShowPairs",state.showPairs);
+    setChecked("teShowIndices",state.showIndices);setChecked("teShowSelectedLabel",state.showSelectedLabel);
+    setChecked("teShowRNA",state.visibility.rna);setChecked("teShowProtein",state.visibility.protein);setChecked("teShowSolvent",state.visibility.solvent);
+    setChecked("teShowIons",state.visibility.ions);setChecked("teShowOther",state.visibility.other);setChecked("teShowHydrogen",state.visibility.hydrogen);
+    setChecked("teSurface",state.surfaceEnabled);setValue("teSurfaceOpacity",state.surfaceOpacity);
+    setChecked("teProximity",state.proximityEnabled);setValue("teProximityCutoff",state.proximityCutoff);
+    setChecked("teContacts",state.contactEnabled);setValue("teContactCutoff",state.contactCutoff);
+    setValue("teMeasureMode",state.measurementMode);setChecked("teSelectionLabels",state.selectionLabels);
+    setChecked("teClipEnabled",state.clipEnabled);setValue("teClipNear",state.clipNear);setValue("teClipFar",state.clipFar);
+    setChecked("teCompareVisible",state.comparison.visible!==false);
+    if($("teChainSelect")&&state.activeChain!==null)$("teChainSelect").value=state.activeChain;
+    if(viewer?.setBackgroundColor)viewer.setBackgroundColor(state.backgroundColor,1);
+    if(viewer?.setCameraParameters)viewer.setCameraParameters({orthographic:state.orthographic});
+  }
+  async function restoreWorkspaceSnapshot(w){
+    if(!w||typeof w!=="object")throw new Error("Project file is missing the Tertiary workspace.");
+    if(!w.sourceText)throw new Error("Project file does not contain the 3D structure coordinates needed to restore this workspace.");
+    await ensureViewer();
+    await setModelFromText(w.sourceText,w.currentFormat==="cif"?"cif":"pdb",Boolean(w.sourceIsDefault),w.currentFileName||"Restored project structure");
+    if(w.activeChain!==undefined&&state.chains.some(chain=>chain.id===w.activeChain)){state.activeChain=w.activeChain;state.chainNeedsChoice=false;}
+    state.secondarySequence=String(w.secondarySequence||state.secondarySequence);
+    state.structure=String(w.structure||state.structure);
+    state.secondaryIsDefault=Boolean(w.secondaryIsDefault);
+    state.sameMoleculeConfirmed=Boolean(w.sameMoleculeConfirmed);
+    state.derivedSecondary=w.derivedSecondary||null;
+    const parsed=parseStructure(state.structure,state.secondarySequence.length);pairs=parsed.pairs;partner=parsed.partner;
+    state.selected=Number.isInteger(w.selected)?clamp(w.selected,0,Math.max(0,activeResidues().length-1)):0;
+    state.representation=w.representation||"sticks";state.colorMode=w.colorMode||"nucleotide";
+    state.showPairs=Boolean(w.showPairs);state.showIndices=w.showIndices!==false;state.showSelectedLabel=w.showSelectedLabel!==false;
+    state.indexSelection=new Set(w.indexSelection||[]);state.metadata=w.metadata||{};state.heatEnabled=Boolean(w.heatEnabled);
+    state.heatTheme=w.heatTheme||"viridis";state.heatRange=Array.isArray(w.heatRange)?w.heatRange:[0,1];
+    state.proximityEnabled=Boolean(w.proximityEnabled);state.proximityCutoff=Number(w.proximityCutoff)||12;
+    state.contactEnabled=Boolean(w.contactEnabled);state.contactCutoff=Number(w.contactCutoff)||4;
+    state.measurementMode=w.measurementMode||"off";state.measurementPicks=Array.isArray(w.measurementPicks)?w.measurementPicks:[];
+    state.measurements=Array.isArray(w.measurements)?w.measurements:[];state.measurementSerial=Number(w.measurementSerial)||1;
+    state.split=Boolean(w.split);state.exportScale=Number(w.exportScale)||2;state.surfaceEnabled=Boolean(w.surfaceEnabled);
+    state.surfaceOpacity=Number(w.surfaceOpacity)||.35;state.uniformColor=w.uniformColor||"#74d7b6";state.backgroundColor=w.backgroundColor||"#07111c";
+    state.orthographic=Boolean(w.orthographic);state.visibility={...state.visibility,...(w.visibility||{})};
+    state.selectionIndices=new Set(w.selectionIndices||[]);state.selectionLabels=Boolean(w.selectionLabels);state.selectionStyle={...state.selectionStyle,...(w.selectionStyle||{})};
+    state.selectedPairs=new Set(w.selectedPairs||[]);state.pairHbondStyles=w.pairHbondStyles||{};state.hbondCutoff=Number(w.hbondCutoff)||3.5;
+    state.savedObjects=(w.savedObjects||[]).map(o=>({...o,indices:new Set(o.indices||[])}));state.objectSerial=Number(w.objectSerial)||1;state.isolateObjectId=w.isolateObjectId??null;
+    state.savedViews=Array.isArray(w.savedViews)?w.savedViews:[];state.viewSerial=Number(w.viewSerial)||1;
+    state.clipEnabled=Boolean(w.clipEnabled);state.clipNear=Number.isFinite(Number(w.clipNear))?Number(w.clipNear):-40;state.clipFar=Number.isFinite(Number(w.clipFar))?Number(w.clipFar):40;
+    state.secondaryLayoutPositions=Array.isArray(w.secondaryLayoutPositions)?w.secondaryLayoutPositions:null;
+    buildResidueLookup();populateChainSelect();evaluateMapping();buildIndexChoices();setupInteractions();
+    if(w.comparison?.structureText){
+      const cmp=viewer.addModel(w.comparison.structureText,"pdb",{keepH:true});
+      state.comparison={model:cmp,name:w.comparison.name||"comparison",rmsd:Number(w.comparison.rmsd)||0,count:Number(w.comparison.count)||0,visible:w.comparison.visible!==false,status:""};
+    } else state.comparison={model:null,name:"",rmsd:null,count:0,visible:true,status:""};
+    syncWorkspaceControls();renderObjectList();renderSavedViews();updateComparisonStatus();render();
+    if(Array.isArray(w.viewerView)&&viewer?.setView){viewer.setView(w.viewerView);viewer.render();}
+    const ds=$("teDerivedStatus"),od=$("teOpenDerivedSecondary");
+    if(state.derivedSecondary&&ds){ds.hidden=false;ds.textContent="Restored project · Secondary structure derived from the saved 3D coordinates.";}
+    if(od)od.hidden=!state.derivedSecondary;
+    return getWorkspaceSnapshot();
+  }
+
   function applyMetadata(detail){
     if(!detail||detail.sequence!==state.secondarySequence){state.metadata={};state.heatEnabled=false;if(state.colorMode==="metadata")state.colorMode="nucleotide";render();return;}
     state.metadata=detail.metadata||{};state.heatEnabled=Boolean(detail.heatEnabled)&&Object.keys(state.metadata).length>0;
@@ -1256,7 +1343,7 @@ const TertiaryExplorer = (() => {
     render();
   }
 
-  return {setup,render,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,
+  return {setup,render,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,getWorkspaceSnapshot,restoreWorkspaceSnapshot,
     getDiagnostics(){return {viewerReady:!!viewer,modelReady:!!model,atomCount:model?.selectedAtoms?model.selectedAtoms({}).length:0,representation:state.representation,colorMode:state.colorMode,split:state.split,mappingEnabled:state.mapping.enabled,source:state.currentFileName,derivedSecondary:state.derivedSecondary,
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
       selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
