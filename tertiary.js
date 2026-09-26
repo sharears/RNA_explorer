@@ -118,7 +118,7 @@ const TertiaryExplorer = (() => {
     return Math.hypot(x.x-y.x,x.y-y.y,x.z-y.z);
   }
   const pairKey=(a,b)=>Math.min(a,b)+":"+Math.max(a,b);
-  const atomName=a=>String(a?.atom||"").replace(/*/g,"'").trim().toUpperCase();
+  const atomName=a=>String(a?.atom||"").replace(/\*/g,"'").trim().toUpperCase();
   function atomDistanceRaw(a,b){return Math.hypot(Number(a.x)-Number(b.x),Number(a.y)-Number(b.y),Number(a.z)-Number(b.z));}
   function pairHydrogenBonds(a,b){
     const residues=activeResidues(),ra=residues[a],rb=residues[b];if(!ra||!rb)return [];
