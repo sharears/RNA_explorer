@@ -1104,7 +1104,7 @@ const SecondaryExplorer = (() => {
       const source=String(meta.source||"3D coordinates"),pairsDetected=Number(meta.pairCount);
       setSourceNote("Derived from 3D coordinates · "+source+(Number.isFinite(pairsDetected)?" · "+pairsDetected+" base pairs":"")+". Browser geometry inference; verify with a dedicated annotation tool for publication-grade assignments.");
       const status=$("secondaryInputStatus");if(status){status.textContent=cleanSeq.length+" residues · "+pairs.length+" derived base pairs rendered.";status.classList.remove("error");}
-      saveWorkspaceLocal();return getContext();
+      saveWorkspaceLocal();return {sequence:seq,structure:db,isDefault:false,selected,selectedPairKey,selectedResidues:[...selectedResidues],selectedPairKeys:[...selectedPairKeys],sourceNote};
     },
     followDefault(index){if(index>=0&&index<seq.length){selected=index;panel();render();}},
     followExternal(index,selectedState){if(index>=0&&index<seq.length){selected=index;if(selectedState===true)selectedResidues.add(index);else if(selectedState===false)selectedResidues.delete(index);panel();render();}},
