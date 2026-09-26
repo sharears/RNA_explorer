@@ -85,6 +85,7 @@ try{
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().measurementMode==="distance");
   await page.selectOption("#teMeasureMode","off");
 
+  await page.locator("summary").filter({hasText:"Select · sequence & ranges"}).click();
   await page.click("#teSelectCurrent");
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectionCount>0);
   await page.locator("summary").filter({hasText:"Saved objects"}).click();
