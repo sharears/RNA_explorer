@@ -9,9 +9,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=selection-ux-1" />
-  <link rel="stylesheet" href="secondary.css?v=secondary-15" />
-  <link rel="stylesheet" href="tertiary.css?v=tertiary-8" />
+  <link rel="stylesheet" href="styles.css?v=search-2" />
+  <link rel="stylesheet" href="secondary.css?v=secondary-17" />
+  <link rel="stylesheet" href="tertiary.css?v=tertiary-10" />
   <link rel="stylesheet" href="chemistry-editor.css?v=chem-editor-4" />
 </head>
 <body>
@@ -40,7 +40,10 @@
         </div>
         <a class="nav-feedback" href="mailto:sharearsaon@outlook.com?subject=RNA%20Structure%20Explorer%20Feedback%20or%20Question">Feedback &amp; Questions</a>
       </nav>
-      <button class="about-button" id="aboutButton" type="button">About</button>
+      <div class="topbar-actions">
+        <button class="site-search-button" id="siteSearchButton" type="button" aria-haspopup="dialog" aria-controls="siteSearchDialog">Search</button>
+        <button class="about-button" id="aboutButton" type="button">About</button>
+      </div>
     </header>
 
     <main>
@@ -186,6 +189,7 @@
                 <button class="secondary-action" id="restoreTrnaButton" type="button">Restore tRNA</button>
               </div>
               <p class="input-status" id="secondaryInputStatus" aria-live="polite"></p>
+              <p class="input-status secondary-source-note" id="secondarySourceNote" aria-live="polite" hidden></p>
             </div>
             <div class="fact-panel residue-panel" aria-live="polite">
               <span class="fact-label">FOLLOWING</span>
@@ -260,6 +264,16 @@
     </main>
   </div>
 
+  <dialog id="siteSearchDialog" class="site-search-dialog" aria-labelledby="siteSearchTitle">
+    <button class="dialog-close" id="siteSearchClose" aria-label="Close search">×</button>
+    <p class="eyebrow">Find a tool</p>
+    <h2 id="siteSearchTitle">Search RNA Explorer</h2>
+    <label class="site-search-label" for="siteSearchInput">Search by feature or concept</label>
+    <input id="siteSearchInput" class="site-search-input" type="search" autocomplete="off" placeholder="Try “generate 2D”, “hydrogen bonds”, “PDB”, “probability”…">
+    <p class="site-search-help">Search understands common alternative terms and opens the relevant workspace and control.</p>
+    <div id="siteSearchResults" class="site-search-results" role="listbox" aria-label="Search results"></div>
+  </dialog>
+
   <dialog id="aboutDialog">
     <button class="dialog-close" id="dialogClose" aria-label="Close dialog">×</button>
     <p class="eyebrow">About the beta</p>
@@ -273,8 +287,8 @@
   <script src="chemistry-editor.js?v=chem-editor-4"></script>
   <script src="journey.js"></script>
   <script src="primary-animation.js"></script>
-  <script src="secondary.js?v=secondary-16"></script>
-  <script src="tertiary.js?v=tertiary-9"></script>
-  <script src="app.js?v=selection-ux-1"></script>
+  <script src="secondary.js?v=secondary-17"></script>
+  <script src="tertiary.js?v=tertiary-10"></script>
+  <script src="app.js?v=search-2"></script>
 </body>
 </html>
