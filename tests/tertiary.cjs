@@ -4,7 +4,7 @@ const assert = require("assert");
 const root = __dirname + "/..";
 const read = file => fs.readFileSync(root + "/" + file, "utf8");
 
-for (const file of ["app.js","export-tools.js","chemistry.js","journey.js","primary-animation.js","secondary.js","tertiary.js"]) {
+for (const file of ["app.js","export-tools.js","chemistry.js","journey.js","primary-animation.js","secondary.js","tertiary.js","project-session.js"]) {
   const source = read(file);
   assert.doesNotThrow(() => new Function(source), file + " should parse as JavaScript");
 }
@@ -21,6 +21,8 @@ assert.deepStrictEqual([...new Set(duplicates)], [], "index.html should not cont
 
 assert(html.includes('script src="tertiary.js'), "tertiary.js must be loaded");
 assert(html.includes('stylesheet" href="tertiary.css'), "tertiary.css must be loaded");
+assert(ids.includes("saveProjectButton")&&ids.includes("openProjectButton")&&ids.includes("projectFileInput"),"Global Save/Open Project controls should be present");
+assert(html.includes('script src="project-session.js'),"project-session.js must be loaded");
 
 const app = read("app.js");
 const seq = app.match(/const RNA_SEQUENCE = "([ACGU]+)"/);
@@ -38,6 +40,7 @@ assert(secondary.includes('"rna-secondary-pair-select"')&&secondary.includes("se
 assert(secondary.includes("selectedResidues=new Set()")&&secondary.includes("selectedPairKeys=new Set()"), "Secondary selections should be persistent and additive");
 assert(secondary.includes("loadDerived"), "Secondary workspace should accept structures derived from 3D coordinates");
 assert(secondary.includes('"rna-metadata-change"'), "Secondary view should broadcast residue metadata");
+assert(secondary.includes("restoreWorkspaceSnapshot")&&secondary.includes("pairChemistry"),"Secondary project restore should include editable styling and chemistry state");
 
 const tertiary = read("tertiary.js");
 [
@@ -128,6 +131,9 @@ assert(cif.includes("_atom_site.Cartn_x") && cif.includes("data_rna_explorer"), 
 assert(tertiary.includes('clickable:true,callback:()=>choosePair(a,b)'), "Visible 3D pair guides should be directly selectable and linked back to 2D");
 assert(tertiary.includes("handleAtomMeasurementClick"), "Atom-click measurement workflow should be available");
 assert(tertiary.includes("teMeasurementList")&&tertiary.includes("teMeasureClear"), "Multiple measurements can be listed and cleared");
+assert(tertiary.includes("getWorkspaceSnapshot")&&tertiary.includes("restoreWorkspaceSnapshot")&&tertiary.includes("sourceText"),"Tertiary project state should preserve coordinates and workspace state");
+const projectSession=read("project-session.js");
+for(const phrase of ["rna-explorer-project","Save Project","restoreProjectSnapshot","getProjectSnapshot"])assert(projectSession.includes(phrase),"Project session manager should include "+phrase);
 assert(tertiary.includes("getCurrentPositions")&&tertiary.includes("secondaryLayoutPositions"), "Linked 2D/3D view preserves the edited Secondary layout when available");
 assert(tertiary.includes('source=$("secondarySvg")')&&tertiary.includes("cloneNode(true)"), "Linked 2D view reuses the actual Secondary drawing when available");
 assert(tertiary.includes("loadFromRcsbId")&&tertiary.includes("files.rcsb.org/download/"), "RCSB PDB-ID import is available");
