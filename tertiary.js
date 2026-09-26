@@ -141,7 +141,7 @@ const TertiaryExplorer = (() => {
   function ensurePairHbondStyle(key,bonds){
     const group=state.pairHbondStyles[key]??={...DEFAULT_HBOND_STYLE,bonds:{}};
     group.bonds??={};
-    bonds.forEach(b=>{group.bonds[b.id]??={visible:true};});
+    bonds.forEach(b=>{group.bonds[b.id]??={};});
     return group;
   }
   function drawStyledConnector(start,end,style){
@@ -533,7 +533,7 @@ const TertiaryExplorer = (() => {
     const mode=document.createElement("select");["solid","dashed","dotted"].forEach(v=>mode.append(new Option(v[0].toUpperCase()+v.slice(1),v)));mode.value=style.lineStyle??fallback.lineStyle??"dashed";mode.addEventListener("change",()=>{style.lineStyle=mode.value;onChange();});make("Line",mode);
     const color=document.createElement("input");color.type="color";color.value=style.color??fallback.color??"#ffffff";color.addEventListener("input",()=>{style.color=color.value;onChange();});make("Color",color);
     const thick=document.createElement("input");thick.type="range";thick.min=".02";thick.max=".22";thick.step=".01";thick.value=style.thickness??fallback.thickness??.07;thick.addEventListener("input",()=>{style.thickness=Number(thick.value);onChange();});make("Thickness",thick);
-    const opacity=document.createElement("input");opacity.type="range";opacity.min=".05";opacity.max="1";opacity.step=".05";opacity.value=style.opacity??fallback.opacity??.82;opacity.addEventListener("input",()=>{style.opacity=Number(opacity.value);onChange();});make("Transparency",opacity);
+    const opacity=document.createElement("input");opacity.type="range";opacity.min=".05";opacity.max="1";opacity.step=".05";opacity.value=style.opacity??fallback.opacity??.82;opacity.addEventListener("input",()=>{style.opacity=Number(opacity.value);onChange();});make("Opacity",opacity);
     if(label){const labelBox=document.createElement("input");labelBox.type="checkbox";labelBox.checked=(style.labelVisible??fallback.labelVisible)!==false;labelBox.addEventListener("change",()=>{style.labelVisible=labelBox.checked;onChange();});make("Label",labelBox);}
     return wrap;
   }
@@ -794,7 +794,7 @@ const TertiaryExplorer = (() => {
         bonds.forEach((bond,n)=>{
           const row=document.createElement("details");row.className="te-hbond-row";
           const sum=document.createElement("summary");sum.textContent=(n+1)+". "+bond.donorName+" → "+bond.acceptorName+" · "+bond.distance.toFixed(2)+" Å";row.append(sum);
-          const individual=group.bonds[bond.id]??={visible:true};
+          const individual=group.bonds[bond.id]??={};
           row.append(styleEditor(individual,render,{label:true,fallback:group}));list.append(row);
         });
         section.append(list);
@@ -804,7 +804,7 @@ const TertiaryExplorer = (() => {
     });
   }
 
-    function updateControls(){
+  function updateControls(){
     evaluateMapping();const focusDetails=$("teFocusDetails");if(focusDetails)focusDetails.hidden=!state.secondaryIsDefault||!state.mapping.enabled;updateSourceCopy();
   }
   function render(selected){
