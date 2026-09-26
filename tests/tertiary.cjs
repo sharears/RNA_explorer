@@ -23,6 +23,7 @@ assert(html.includes('script src="tertiary.js'), "tertiary.js must be loaded");
 assert(html.includes('stylesheet" href="tertiary.css'), "tertiary.css must be loaded");
 assert(ids.includes("saveProjectButton")&&ids.includes("openProjectButton")&&ids.includes("projectFileInput"),"Global Save/Open Project controls should be present");
 assert(html.includes('script src="project-session.js'),"project-session.js must be loaded");
+assert(!read("export-tools.js").includes("session-manager.js"),"Legacy session-manager loader must stay removed so Save/Open controls cannot be duplicated");
 
 const app = read("app.js");
 const seq = app.match(/const RNA_SEQUENCE = "([ACGU]+)"/);
