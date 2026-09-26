@@ -133,7 +133,7 @@ assert(tertiary.includes("handleAtomMeasurementClick"), "Atom-click measurement 
 assert(tertiary.includes("teMeasurementList")&&tertiary.includes("teMeasureClear"), "Multiple measurements can be listed and cleared");
 assert(tertiary.includes("getWorkspaceSnapshot")&&tertiary.includes("restoreWorkspaceSnapshot")&&tertiary.includes("sourceText"),"Tertiary project state should preserve coordinates and workspace state");
 const projectSession=read("project-session.js");
-for(const phrase of ["rna-explorer-project","Save Project","restoreProjectSnapshot","getProjectSnapshot"])assert(projectSession.includes(phrase),"Project session manager should include "+phrase);
+for(const phrase of ["rna-explorer-project","restoreProjectSnapshot","getProjectSnapshot","downloadProject","openFile"])assert(projectSession.includes(phrase),"Project session manager should include "+phrase);
 assert(tertiary.includes("getCurrentPositions")&&tertiary.includes("secondaryLayoutPositions"), "Linked 2D/3D view preserves the edited Secondary layout when available");
 assert(tertiary.includes('source=$("secondarySvg")')&&tertiary.includes("cloneNode(true)"), "Linked 2D view reuses the actual Secondary drawing when available");
 assert(tertiary.includes("loadFromRcsbId")&&tertiary.includes("files.rcsb.org/download/"), "RCSB PDB-ID import is available");
