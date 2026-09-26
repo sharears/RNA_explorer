@@ -108,7 +108,7 @@ const SessionManager = (() => {
     if(!snapshot?.source)return;
     if(snapshot.source.uploaded?.text){
       const upload=snapshot.source.uploaded;
-      const input=document.querySelector('#tertiaryControls input[type="file"]');
+      const input=$("teStructureFile");
       if(input){
         const file=new File([upload.text],upload.name||("restored."+(upload.format||"pdb")),{type:"text/plain"});
         const dt=new DataTransfer();dt.items.add(file);input.files=dt.files;input.dispatchEvent(new Event("change",{bubbles:true}));
@@ -133,22 +133,25 @@ const SessionManager = (() => {
     if(!snapshot)return;
     await waitForTertiaryReady();
     await loadTertiarySource(snapshot);
-    await delay(500);
-    if(snapshot.activeChain&&$("teChainSelect")){$("teChainSelect").value=snapshot.activeChain;$("teChainSelect").dispatchEvent(new Event("change",{bubbles:true}));await delay(100);}
+    await delay(650);
+    if(snapshot.activeChain&&$("teChainSelect")){$("teChainSelect").value=snapshot.activeChain;$("teChainSelect").dispatchEvent(new Event("change",{bubbles:true}));await delay(120);}
+    if(snapshot.derivedSecondary&&$("teGenerateSecondary")){$("teGenerateSecondary").click();await delay(160);}
     (snapshot.controlDetails||[]).forEach(item=>{const details=$("tertiaryControls")?.querySelectorAll("details")?.[item.index];if(details)details.open=Boolean(item.open);});
     (snapshot.controls||[]).forEach(item=>dispatchControl($(item.id),item));
-    await delay(100);
+    await delay(120);
     const buttons=[...document.querySelectorAll("#teSequencePanel .te-seq-residue")];
     (snapshot.selectedResidues||[]).forEach(i=>{const b=buttons[i];if(b&&!b.classList.contains("chosen"))b.click();});
     if(Number.isInteger(snapshot.activeIndex)&&buttons[snapshot.activeIndex]&&!buttons[snapshot.activeIndex].classList.contains("active")){
       buttons[snapshot.activeIndex].click();
       if(!(snapshot.selectedResidues||[]).includes(snapshot.activeIndex))buttons[snapshot.activeIndex].click();
     }
-    if(snapshot.split&&$("teSplit")&&!$("teSplit").checked){$("teSplit").click();await delay(100);}
-    for(const key of snapshot.selectedPairKeys||[]){
+    const pairKeys=snapshot.selectedPairKeys||[];
+    if(pairKeys.length&&$("teSplit")&&!$("teSplit").checked){$("teSplit").click();await delay(120);}
+    for(const key of pairKeys){
       const node=document.querySelector('#tertiaryMiniSvg [data-pair="'+CSS.escape(key)+'"]');
       if(node&&!node.classList.contains("te-linked-pair-selected"))node.dispatchEvent(new MouseEvent("click",{bubbles:true}));
     }
+    if(!snapshot.split&&$("teSplit")?.checked)$("teSplit").click();
   }
 
   async function restorePending(){
@@ -162,7 +165,7 @@ const SessionManager = (() => {
 
   function trackUploads(){
     document.addEventListener("change",async event=>{
-      const input=event.target;if(!(input instanceof HTMLInputElement)||input.type!=="file"||!input.closest("#tertiaryControls"))return;
+      const input=event.target;if(!(input instanceof HTMLInputElement)||input.id!=="teStructureFile")return;
       const file=input.files?.[0];if(!file||!/\.(pdb|ent|cif|mmcif)$/i.test(file.name))return;
       try{lastStructureUpload={name:file.name,format:/\.(cif|mmcif)$/i.test(file.name)?"cif":"pdb",text:await file.text()};}catch(_){}
     },true);
