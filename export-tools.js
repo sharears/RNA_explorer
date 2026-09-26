@@ -100,3 +100,13 @@ const ExportTools = (() => {
   }
   return {safeName,downloadBlob,downloadText,preparedSvg,serializeSvg,svgToPngData,exportSvgElement,exportRasterPdf,ensureJsPDF};
 })();
+
+// Load the project/session manager on every RNA Explorer page without adding
+// another blocking script tag to index.html. Cache-bust while the beta evolves.
+if(typeof document!=="undefined"&&!document.querySelector('script[data-rna-session-manager]')){
+  const script=document.createElement("script");
+  script.src="session-manager.js?v=1";
+  script.dataset.rnaSessionManager="true";
+  script.defer=true;
+  document.head.append(script);
+}
