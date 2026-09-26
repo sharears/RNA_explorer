@@ -18,6 +18,8 @@ try{
   await page.waitForFunction(()=>!document.querySelector("#seHeatLegend")?.hidden,{timeout:10000});
   await page.click("#sePairProbExample");
   await page.waitForFunction(()=>!document.querySelector("#sePairProbLegend")?.hidden,{timeout:10000});
+  await page.locator("summary").filter({hasText:"Reactivity color bar"}).click();
+  await page.locator("summary").filter({hasText:"Base-pair probability color bar"}).click();
 
   for(const prefix of ["seHeatLegend","sePairLegend"]){
     for(const suffix of ["Title","TitleFontSize","TitleStyle","TitleColor","BoxMode","BackgroundColor","BackgroundOpacity","BorderVisible","BorderColor","BorderThickness"]){
