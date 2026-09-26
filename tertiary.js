@@ -341,7 +341,7 @@ const TertiaryExplorer = (() => {
   }
   function resetModelState(){
     hoverLabel=null;initialView=null;state.selected=0;state.measurementPicks=[];state.measurements=[];state.measurementMode="off";
-    state.selectionIndices.clear();state.savedObjects=[];state.isolateObjectId=null;state.savedViews=[];clearComparison(false);
+    state.selectionIndices.clear();state.selectedPairs.clear();state.pairHbondStyles={};state.savedObjects=[];state.isolateObjectId=null;state.savedViews=[];clearComparison(false);
   }
   async function setModelFromText(text,format,sourceIsDefault,fileName){
     if(!viewer)throw new Error("3D viewer is not ready.");
@@ -421,12 +421,33 @@ const TertiaryExplorer = (() => {
   }
   function addPairs(){
     if(!viewer||!state.showPairs||!state.mapping.enabled)return;
-    const residues=activeResidues(),selectedMate=partner[state.selected];
+    const residues=activeResidues();
     pairs.forEach(([a,b])=>{
       if(!isVisibleIndex(a)||!isVisibleIndex(b))return;
       const x=residues[a]?.coord,y=residues[b]?.coord;if(!x||!y)return;
-      const active=(a===state.selected&&b===selectedMate)||(b===state.selected&&a===selectedMate);
-      viewer.addCylinder({start:x,end:y,radius:active?.17:.065,color:active?"#74d7b6":"#71879a",opacity:active?.95:.55,fromCap:1,toCap:1});
+      viewer.addCylinder({start:x,end:y,radius:.045,color:"#71879a",opacity:.32,fromCap:1,toCap:1});
+    });
+  }
+  function selectedPairResidues(){
+    const out=new Set();state.selectedPairs.forEach(key=>{const [a,b]=key.split(":").map(Number);out.add(a);out.add(b);});return out;
+  }
+  function addSelectedPairHighlights(){
+    const residues=activeResidues(),indices=selectedPairResidues();
+    indices.forEach(i=>{if(residues[i]&&isVisibleIndex(i))model.addStyle(selectorForResidue(residues[i]),{stick:{radius:.28,color:"#74d7b6"},sphere:{radius:.29,color:"#74d7b6",opacity:.28}});});
+  }
+  function addSelectedPairHydrogenBonds(){
+    if(!viewer||!state.mapping.enabled)return;
+    state.selectedPairs.forEach(key=>{
+      const [a,b]=key.split(":").map(Number);if(!isVisibleIndex(a)||!isVisibleIndex(b))return;
+      const bonds=pairHydrogenBonds(a,b),group=ensurePairHbondStyle(key,bonds);
+      bonds.forEach(bond=>{
+        const style={...group,...group.bonds[bond.id]};if(style.visible===false)return;
+        drawStyledConnector(bond.donor,bond.acceptor,style);
+        if(style.labelVisible){
+          const mid={x:(bond.donor.x+bond.acceptor.x)/2,y:(bond.donor.y+bond.acceptor.y)/2,z:(bond.donor.z+bond.acceptor.z)/2};
+          viewer.addLabel(bond.distance.toFixed(2)+" Å",{position:mid,fontSize:11,fontColor:"#f7fbff",backgroundColor:"#08111e",backgroundOpacity:.8,inFront:true});
+        }
+      });
     });
   }
   function addIndices(){
@@ -499,28 +520,41 @@ const TertiaryExplorer = (() => {
     state.measurementPicks.push(atomSnapshot(atom));
     if(state.measurementPicks.length>=required){
       const points=state.measurementPicks.slice(0,required),value=measurementValue(type,points);
-      if(Number.isFinite(value))state.measurements.push({id:state.measurementSerial++,type,points,value});
+      if(Number.isFinite(value))state.measurements.push({id:state.measurementSerial++,type,points,value,style:{...DEFAULT_LINE_STYLE}});
       state.measurementPicks=[];
     }
     render();
   }
   function measurementCentroid(points){return points.reduce((o,p)=>({x:o.x+p.x/points.length,y:o.y+p.y/points.length,z:o.z+p.z/points.length}),{x:0,y:0,z:0});}
+  function styleEditor(style,onChange,{label=true}={}){
+    const wrap=document.createElement("div");wrap.className="te-style-editor";
+    const make=(caption,input)=>{const l=document.createElement("label");l.append(document.createTextNode(caption),input);wrap.append(l);return input;};
+    const visible=document.createElement("input");visible.type="checkbox";visible.checked=style.visible!==false;visible.addEventListener("change",()=>{style.visible=visible.checked;onChange();});make("Show",visible);
+    const mode=document.createElement("select");["solid","dashed","dotted"].forEach(v=>mode.append(new Option(v[0].toUpperCase()+v.slice(1),v)));mode.value=style.lineStyle||"dashed";mode.addEventListener("change",()=>{style.lineStyle=mode.value;onChange();});make("Line",mode);
+    const color=document.createElement("input");color.type="color";color.value=style.color||"#ffffff";color.addEventListener("input",()=>{style.color=color.value;onChange();});make("Color",color);
+    const thick=document.createElement("input");thick.type="range";thick.min=".02";thick.max=".22";thick.step=".01";thick.value=style.thickness??.07;thick.addEventListener("input",()=>{style.thickness=Number(thick.value);onChange();});make("Thickness",thick);
+    const opacity=document.createElement("input");opacity.type="range";opacity.min=".05";opacity.max="1";opacity.step=".05";opacity.value=style.opacity??.82;opacity.addEventListener("input",()=>{style.opacity=Number(opacity.value);onChange();});make("Transparency",opacity);
+    if(label){const labelBox=document.createElement("input");labelBox.type="checkbox";labelBox.checked=style.labelVisible!==false;labelBox.addEventListener("change",()=>{style.labelVisible=labelBox.checked;onChange();});make("Label",labelBox);}
+    return wrap;
+  }
   function renderMeasurementList(){
     const box=$("teMeasurementList");if(!box)return;box.replaceChildren();
     if(!state.measurements.length){box.textContent="No saved measurements.";return;}
     state.measurements.forEach(m=>{
+      m.style??={...DEFAULT_LINE_STYLE};
       const row=document.createElement("div");row.className="te-measurement-row";
       const text=document.createElement("span");text.textContent=m.type[0].toUpperCase()+m.type.slice(1)+" "+m.value.toFixed(2)+" "+measurementUnit(m.type)+" · "+m.points.map(atomLabel).join(" → ");
       const del=document.createElement("button");del.type="button";del.textContent="Delete";del.addEventListener("click",()=>{state.measurements=state.measurements.filter(x=>x.id!==m.id);render();});
-      row.append(text,del);box.append(row);
+      row.append(text,del,styleEditor(m.style,render));box.append(row);
     });
   }
   function addMeasurements(){
     const status=$("teMeasureStatus"),type=state.measurementMode,required=requiredPicks(type);
     state.measurements.forEach(m=>{
-      m.points.forEach(p=>viewer.addSphere({center:p,radius:.22,color:"#ffffff",opacity:.9}));
-      for(let i=0;i<m.points.length-1;i++)viewer.addCylinder({start:m.points[i],end:m.points[i+1],radius:.07,color:"#ffffff",opacity:.82,fromCap:1,toCap:1});
-      const c=measurementCentroid(m.points);viewer.addLabel(m.value.toFixed(2)+" "+measurementUnit(m.type),{position:c,fontSize:13,fontColor:"#fff",backgroundColor:"#08111e",backgroundOpacity:.88,borderColor:"#6f8798",borderThickness:1,inFront:true});
+      m.style??={...DEFAULT_LINE_STYLE};if(m.style.visible===false)return;
+      m.points.forEach(p=>viewer.addSphere({center:p,radius:.22,color:m.style.color||"#ffffff",opacity:m.style.opacity??.9}));
+      for(let i=0;i<m.points.length-1;i++)drawStyledConnector(m.points[i],m.points[i+1],m.style);
+      if(m.style.labelVisible!==false){const c=measurementCentroid(m.points);viewer.addLabel(m.value.toFixed(2)+" "+measurementUnit(m.type),{position:c,fontSize:13,fontColor:"#fff",backgroundColor:"#08111e",backgroundOpacity:.88,borderColor:m.style.color||"#6f8798",borderThickness:1,inFront:true});}
     });
     state.measurementPicks.forEach(p=>viewer.addSphere({center:p,radius:.3,color:"#f2c66d",opacity:.75}));
     renderMeasurementList();if(!status)return;
@@ -530,18 +564,19 @@ const TertiaryExplorer = (() => {
   }
 
   function addSelectionHighlights(){
-    const residues=activeResidues();
+    const residues=activeResidues(),st=state.selectionStyle;
     state.selectionIndices.forEach(i=>{
       if(!isVisibleIndex(i)||!residues[i])return;
-      model.addStyle(selectorForResidue(residues[i]),{stick:{radius:.24,color:"#f2c66d"},sphere:{radius:.28,color:"#f2c66d",opacity:.28}});
-      if(state.selectionLabels&&residues[i].coord)viewer.addLabel(baseAt(i)+(i+1),{position:residues[i].coord,fontSize:11,fontColor:"#07111c",backgroundColor:"#f2c66d",backgroundOpacity:.9,inFront:true});
+      model.addStyle(selectorForResidue(residues[i]),{stick:{radius:st.thickness,color:st.color,opacity:st.opacity},sphere:{radius:Math.max(.22,st.thickness*1.18),color:st.color,opacity:st.opacity}});
+      if(state.selectionLabels&&residues[i].coord)viewer.addLabel(baseAt(i)+(i+1),{position:residues[i].coord,fontSize:11,fontColor:"#07111c",backgroundColor:st.color,backgroundOpacity:.9,inFront:true});
     });
   }
   function addObjectHighlights(){
     const residues=activeResidues();
     state.savedObjects.filter(o=>o.visible&&state.isolateObjectId==null).forEach((o,oi)=>{
-      const color=CHAIN_COLORS[(oi+2)%CHAIN_COLORS.length];
-      o.indices.forEach(i=>{if(residues[i])model.addStyle(selectorForResidue(residues[i]),{stick:{radius:.2,color},sphere:{radius:.25,color,opacity:.18}});});
+      o.style??={color:CHAIN_COLORS[(oi+2)%CHAIN_COLORS.length],thickness:.2,opacity:.25};
+      const st=o.style;
+      o.indices.forEach(i=>{if(residues[i])model.addStyle(selectorForResidue(residues[i]),{stick:{radius:st.thickness,color:st.color,opacity:st.opacity},sphere:{radius:Math.max(.22,st.thickness*1.2),color:st.color,opacity:st.opacity}});});
     });
   }
   function updateSurface(){
