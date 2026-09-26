@@ -467,7 +467,7 @@ function initialize() {
   setupNavigation();
   setupHomePaths();
   setupSiteSearch();
-  ProjectSession.setup();
+  if(typeof ProjectSession!=="undefined")ProjectSession.setup();
   setupChemicalJourney();
   MoleculeEditor.setup();
   renderPrimary();
