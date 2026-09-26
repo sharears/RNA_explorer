@@ -5,7 +5,8 @@ const browser=await chromium.launch({headless:true});
 const page=await browser.newPage({viewport:{width:1440,height:1000}});
 const errors=[];
 page.on("pageerror",err=>errors.push(String(err)));
-page.on("console",msg=>{if(msg.type()==="error")errors.push("console: "+msg.text());});
+page.on("console",msg=>{if(msg.type()==="error"&&!/Failed to load resource/i.test(msg.text()))errors.push("console: "+msg.text());});
+page.on("response",res=>{if(res.status()>=400)errors.push("http "+res.status()+" "+res.url());});
 
 try{
   await page.goto(base,{waitUntil:"domcontentloaded",timeout:30000});
