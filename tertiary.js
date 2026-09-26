@@ -26,11 +26,19 @@ const TertiaryExplorer = (() => {
   const IONS=new Set(["NA","K","MG","CA","ZN","CL","MN","FE","CO","CU","NI","SR","CS","BA","CD","HG","PB","BR","IOD","F"]);
   const AMINO=new Set(["ALA","ARG","ASN","ASP","CYS","GLN","GLU","GLY","HIS","ILE","LEU","LYS","MET","PHE","PRO","SER","THR","TRP","TYR","VAL","SEC","PYL"]);
   const BACKBONE_ATOMS=["P","OP1","OP2","O1P","O2P","O5'","O5*","C5'","C5*","C4'","C4*","C3'","C3*","O3'","O3*"];
+  const BASE_HBOND_ROLES={
+    A:{donors:new Set(["N6"]),acceptors:new Set(["N1","N3","N7"])},
+    G:{donors:new Set(["N1","N2"]),acceptors:new Set(["O6","N3","N7"])},
+    C:{donors:new Set(["N4"]),acceptors:new Set(["N3","O2"])},
+    U:{donors:new Set(["N3"]),acceptors:new Set(["O2","O4"])}
+  };
+  const DEFAULT_LINE_STYLE={lineStyle:"dashed",color:"#ffffff",thickness:.07,opacity:.82,visible:true,labelVisible:true};
+  const DEFAULT_HBOND_STYLE={lineStyle:"dashed",color:"#74d7b6",thickness:.055,opacity:.95,visible:true,labelVisible:false};
 
   const state={
     defaultSequence:"",defaultStructure:"",secondarySequence:"",structure:"",
     colors:{},names:{},onSelect:()=>{},selected:0,
-    representation:"sticks",colorMode:"nucleotide",showPairs:true,showIndices:true,showSelectedLabel:true,
+    representation:"sticks",colorMode:"nucleotide",showPairs:false,showIndices:true,showSelectedLabel:true,
     indexSelection:new Set(),metadata:{},heatEnabled:false,heatTheme:"viridis",heatRange:[0,1],
     secondaryIsDefault:true,sourceIsDefault:true,sameMoleculeConfirmed:false,
     proximityEnabled:false,proximityCutoff:12,contactEnabled:false,contactCutoff:4.0,
@@ -40,7 +48,8 @@ const TertiaryExplorer = (() => {
     mapping:{enabled:false,level:"pending",message:""},
     surfaceEnabled:false,surfaceOpacity:0.35,uniformColor:"#74d7b6",backgroundColor:"#07111c",orthographic:false,
     visibility:{rna:true,protein:true,solvent:false,ions:true,other:true,hydrogen:false},
-    selectionIndices:new Set(),selectionLabels:false,
+    selectionIndices:new Set(),selectionLabels:false,selectionStyle:{color:"#f2c66d",thickness:.24,opacity:.32},
+    selectedPairs:new Set(),pairHbondStyles:{},hbondCutoff:3.5,
     savedObjects:[],objectSerial:1,isolateObjectId:null,
     savedViews:[],viewSerial:1,
     comparison:{model:null,name:"",rmsd:null,count:0,visible:true,status:""},
@@ -108,6 +117,47 @@ const TertiaryExplorer = (() => {
     const x=coordFor(a),y=coordFor(b);if(!x||!y)return NaN;
     return Math.hypot(x.x-y.x,x.y-y.y,x.z-y.z);
   }
+  const pairKey=(a,b)=>Math.min(a,b)+":"+Math.max(a,b);
+  const atomName=a=>String(a?.atom||"").replace(/\*/g,"'").trim().toUpperCase();
+  function atomDistanceRaw(a,b){return Math.hypot(Number(a.x)-Number(b.x),Number(a.y)-Number(b.y),Number(a.z)-Number(b.z));}
+  function pairHydrogenBonds(a,b){
+    const residues=activeResidues(),ra=residues[a],rb=residues[b];if(!ra||!rb)return [];
+    const rolesA=BASE_HBOND_ROLES[baseAt(a)],rolesB=BASE_HBOND_ROLES[baseAt(b)];if(!rolesA||!rolesB)return [];
+    const candidates=[],seen=new Set();
+    const collect=(donorRes,donorRoles,acceptorRes,acceptorRoles)=>{
+      donorRes.atoms.forEach(d=>{
+        const dn=atomName(d);if(!donorRoles.donors.has(dn))return;
+        acceptorRes.atoms.forEach(ac=>{
+          const an=atomName(ac);if(!acceptorRoles.acceptors.has(an))return;
+          const distance=atomDistanceRaw(d,ac);if(distance>state.hbondCutoff||distance<1.5)return;
+          const id=String(d.serial??dn)+"-"+String(ac.serial??an);if(seen.has(id))return;seen.add(id);
+          candidates.push({id,donor:d,acceptor:ac,distance,donorName:dn,acceptorName:an});
+        });
+      });
+    };
+    collect(ra,rolesA,rb,rolesB);collect(rb,rolesB,ra,rolesA);
+    return candidates.sort((x,y)=>x.distance-y.distance);
+  }
+  function ensurePairHbondStyle(key,bonds){
+    const group=state.pairHbondStyles[key]??={...DEFAULT_HBOND_STYLE,bonds:{}};
+    group.bonds??={};
+    bonds.forEach(b=>{group.bonds[b.id]??={};});
+    return group;
+  }
+  function drawStyledConnector(start,end,style){
+    if(!viewer||style.visible===false)return;
+    const radius=Math.max(.012,Number(style.thickness)||.05),opacity=clamp(Number(style.opacity)||0,0,1),color=style.color||"#ffffff";
+    const mode=style.lineStyle||"solid",dx=end.x-start.x,dy=end.y-start.y,dz=end.z-start.z;
+    const point=t=>({x:start.x+dx*t,y:start.y+dy*t,z:start.z+dz*t});
+    if(mode==="solid"){viewer.addCylinder({start,end,radius,color,opacity,fromCap:1,toCap:1});return;}
+    if(mode==="dotted"){
+      for(let i=1;i<10;i++)viewer.addSphere({center:point(i/10),radius:radius*1.65,color,opacity});
+      return;
+    }
+    const n=11;
+    for(let i=0;i<n;i+=2)viewer.addCylinder({start:point(i/n),end:point(Math.min(1,(i+1)/n)),radius,color,opacity,fromCap:1,toCap:1});
+  }
+
   function baseAt(i){
     if(state.mapping.enabled&&state.secondarySequence[i])return state.secondarySequence[i];
     return activeResidues()[i]?.base||"?";
@@ -291,7 +341,7 @@ const TertiaryExplorer = (() => {
   }
   function resetModelState(){
     hoverLabel=null;initialView=null;state.selected=0;state.measurementPicks=[];state.measurements=[];state.measurementMode="off";
-    state.selectionIndices.clear();state.savedObjects=[];state.isolateObjectId=null;state.savedViews=[];clearComparison(false);
+    state.selectionIndices.clear();state.selectedPairs.clear();state.pairHbondStyles={};state.savedObjects=[];state.isolateObjectId=null;state.savedViews=[];clearComparison(false);
   }
   async function setModelFromText(text,format,sourceIsDefault,fileName){
     if(!viewer)throw new Error("3D viewer is not ready.");
@@ -371,12 +421,33 @@ const TertiaryExplorer = (() => {
   }
   function addPairs(){
     if(!viewer||!state.showPairs||!state.mapping.enabled)return;
-    const residues=activeResidues(),selectedMate=partner[state.selected];
+    const residues=activeResidues();
     pairs.forEach(([a,b])=>{
       if(!isVisibleIndex(a)||!isVisibleIndex(b))return;
       const x=residues[a]?.coord,y=residues[b]?.coord;if(!x||!y)return;
-      const active=(a===state.selected&&b===selectedMate)||(b===state.selected&&a===selectedMate);
-      viewer.addCylinder({start:x,end:y,radius:active?.17:.065,color:active?"#74d7b6":"#71879a",opacity:active?.95:.55,fromCap:1,toCap:1});
+      viewer.addCylinder({start:x,end:y,radius:.045,color:"#71879a",opacity:.32,fromCap:1,toCap:1});
+    });
+  }
+  function selectedPairResidues(){
+    const out=new Set();state.selectedPairs.forEach(key=>{const [a,b]=key.split(":").map(Number);out.add(a);out.add(b);});return out;
+  }
+  function addSelectedPairHighlights(){
+    const residues=activeResidues(),indices=selectedPairResidues();
+    indices.forEach(i=>{if(residues[i]&&isVisibleIndex(i))model.addStyle(selectorForResidue(residues[i]),{stick:{radius:.28,color:"#74d7b6"},sphere:{radius:.29,color:"#74d7b6",opacity:.28}});});
+  }
+  function addSelectedPairHydrogenBonds(){
+    if(!viewer||!state.mapping.enabled)return;
+    state.selectedPairs.forEach(key=>{
+      const [a,b]=key.split(":").map(Number);if(!isVisibleIndex(a)||!isVisibleIndex(b))return;
+      const bonds=pairHydrogenBonds(a,b),group=ensurePairHbondStyle(key,bonds);
+      bonds.forEach(bond=>{
+        const style={...group,...group.bonds[bond.id]};if(style.visible===false)return;
+        drawStyledConnector(bond.donor,bond.acceptor,style);
+        if(style.labelVisible){
+          const mid={x:(bond.donor.x+bond.acceptor.x)/2,y:(bond.donor.y+bond.acceptor.y)/2,z:(bond.donor.z+bond.acceptor.z)/2};
+          viewer.addLabel(bond.distance.toFixed(2)+" Å",{position:mid,fontSize:11,fontColor:"#f7fbff",backgroundColor:"#08111e",backgroundOpacity:.8,inFront:true});
+        }
+      });
     });
   }
   function addIndices(){
@@ -389,7 +460,7 @@ const TertiaryExplorer = (() => {
   }
   function addSelectedLabel(){
     if(!state.showSelectedLabel)return;
-    const r=activeResidues()[state.selected];if(!r?.coord||!isVisibleIndex(state.selected))return;
+    const r=activeResidues()[state.selected];if(!r?.coord||!isVisibleIndex(state.selected)||(!state.selectionIndices.has(state.selected)&&!selectedPairResidues().has(state.selected)))return;
     viewer.addLabel(baseAt(state.selected)+(state.selected+1)+(r.chain?" · "+r.chain:""),{position:r.coord,fontSize:13,fontColor:"#07111c",backgroundColor:"#ffffff",backgroundOpacity:.92,borderColor:"#d7e2e8",borderThickness:1,inFront:true});
   }
   function nearby(i){
@@ -449,28 +520,41 @@ const TertiaryExplorer = (() => {
     state.measurementPicks.push(atomSnapshot(atom));
     if(state.measurementPicks.length>=required){
       const points=state.measurementPicks.slice(0,required),value=measurementValue(type,points);
-      if(Number.isFinite(value))state.measurements.push({id:state.measurementSerial++,type,points,value});
+      if(Number.isFinite(value))state.measurements.push({id:state.measurementSerial++,type,points,value,style:{...DEFAULT_LINE_STYLE}});
       state.measurementPicks=[];
     }
     render();
   }
   function measurementCentroid(points){return points.reduce((o,p)=>({x:o.x+p.x/points.length,y:o.y+p.y/points.length,z:o.z+p.z/points.length}),{x:0,y:0,z:0});}
+  function styleEditor(style,onChange,{label=true,fallback={}}={}){
+    const wrap=document.createElement("div");wrap.className="te-style-editor";
+    const make=(caption,input)=>{const l=document.createElement("label");l.append(document.createTextNode(caption),input);wrap.append(l);return input;};
+    const visible=document.createElement("input");visible.type="checkbox";visible.checked=(style.visible??fallback.visible)!==false;visible.addEventListener("change",()=>{style.visible=visible.checked;onChange();});make("Show",visible);
+    const mode=document.createElement("select");["solid","dashed","dotted"].forEach(v=>mode.append(new Option(v[0].toUpperCase()+v.slice(1),v)));mode.value=style.lineStyle??fallback.lineStyle??"dashed";mode.addEventListener("change",()=>{style.lineStyle=mode.value;onChange();});make("Line",mode);
+    const color=document.createElement("input");color.type="color";color.value=style.color??fallback.color??"#ffffff";color.addEventListener("input",()=>{style.color=color.value;onChange();});make("Color",color);
+    const thick=document.createElement("input");thick.type="range";thick.min=".02";thick.max=".22";thick.step=".01";thick.value=style.thickness??fallback.thickness??.07;thick.addEventListener("input",()=>{style.thickness=Number(thick.value);onChange();});make("Thickness",thick);
+    const opacity=document.createElement("input");opacity.type="range";opacity.min=".05";opacity.max="1";opacity.step=".05";opacity.value=style.opacity??fallback.opacity??.82;opacity.addEventListener("input",()=>{style.opacity=Number(opacity.value);onChange();});make("Opacity",opacity);
+    if(label){const labelBox=document.createElement("input");labelBox.type="checkbox";labelBox.checked=(style.labelVisible??fallback.labelVisible)!==false;labelBox.addEventListener("change",()=>{style.labelVisible=labelBox.checked;onChange();});make("Label",labelBox);}
+    return wrap;
+  }
   function renderMeasurementList(){
     const box=$("teMeasurementList");if(!box)return;box.replaceChildren();
     if(!state.measurements.length){box.textContent="No saved measurements.";return;}
     state.measurements.forEach(m=>{
+      m.style??={...DEFAULT_LINE_STYLE};
       const row=document.createElement("div");row.className="te-measurement-row";
       const text=document.createElement("span");text.textContent=m.type[0].toUpperCase()+m.type.slice(1)+" "+m.value.toFixed(2)+" "+measurementUnit(m.type)+" · "+m.points.map(atomLabel).join(" → ");
       const del=document.createElement("button");del.type="button";del.textContent="Delete";del.addEventListener("click",()=>{state.measurements=state.measurements.filter(x=>x.id!==m.id);render();});
-      row.append(text,del);box.append(row);
+      row.append(text,del,styleEditor(m.style,render));box.append(row);
     });
   }
   function addMeasurements(){
     const status=$("teMeasureStatus"),type=state.measurementMode,required=requiredPicks(type);
     state.measurements.forEach(m=>{
-      m.points.forEach(p=>viewer.addSphere({center:p,radius:.22,color:"#ffffff",opacity:.9}));
-      for(let i=0;i<m.points.length-1;i++)viewer.addCylinder({start:m.points[i],end:m.points[i+1],radius:.07,color:"#ffffff",opacity:.82,fromCap:1,toCap:1});
-      const c=measurementCentroid(m.points);viewer.addLabel(m.value.toFixed(2)+" "+measurementUnit(m.type),{position:c,fontSize:13,fontColor:"#fff",backgroundColor:"#08111e",backgroundOpacity:.88,borderColor:"#6f8798",borderThickness:1,inFront:true});
+      m.style??={...DEFAULT_LINE_STYLE};if(m.style.visible===false)return;
+      m.points.forEach(p=>viewer.addSphere({center:p,radius:.22,color:m.style.color||"#ffffff",opacity:m.style.opacity??.9}));
+      for(let i=0;i<m.points.length-1;i++)drawStyledConnector(m.points[i],m.points[i+1],m.style);
+      if(m.style.labelVisible!==false){const c=measurementCentroid(m.points);viewer.addLabel(m.value.toFixed(2)+" "+measurementUnit(m.type),{position:c,fontSize:13,fontColor:"#fff",backgroundColor:"#08111e",backgroundOpacity:.88,borderColor:m.style.color||"#6f8798",borderThickness:1,inFront:true});}
     });
     state.measurementPicks.forEach(p=>viewer.addSphere({center:p,radius:.3,color:"#f2c66d",opacity:.75}));
     renderMeasurementList();if(!status)return;
@@ -480,18 +564,19 @@ const TertiaryExplorer = (() => {
   }
 
   function addSelectionHighlights(){
-    const residues=activeResidues();
+    const residues=activeResidues(),st=state.selectionStyle;
     state.selectionIndices.forEach(i=>{
       if(!isVisibleIndex(i)||!residues[i])return;
-      model.addStyle(selectorForResidue(residues[i]),{stick:{radius:.24,color:"#f2c66d"},sphere:{radius:.28,color:"#f2c66d",opacity:.28}});
-      if(state.selectionLabels&&residues[i].coord)viewer.addLabel(baseAt(i)+(i+1),{position:residues[i].coord,fontSize:11,fontColor:"#07111c",backgroundColor:"#f2c66d",backgroundOpacity:.9,inFront:true});
+      model.addStyle(selectorForResidue(residues[i]),{stick:{radius:st.thickness,color:st.color,opacity:st.opacity},sphere:{radius:Math.max(.22,st.thickness*1.18),color:st.color,opacity:st.opacity}});
+      if(state.selectionLabels&&residues[i].coord)viewer.addLabel(baseAt(i)+(i+1),{position:residues[i].coord,fontSize:11,fontColor:"#07111c",backgroundColor:st.color,backgroundOpacity:.9,inFront:true});
     });
   }
   function addObjectHighlights(){
     const residues=activeResidues();
     state.savedObjects.filter(o=>o.visible&&state.isolateObjectId==null).forEach((o,oi)=>{
-      const color=CHAIN_COLORS[(oi+2)%CHAIN_COLORS.length];
-      o.indices.forEach(i=>{if(residues[i])model.addStyle(selectorForResidue(residues[i]),{stick:{radius:.2,color},sphere:{radius:.25,color,opacity:.18}});});
+      o.style??={color:CHAIN_COLORS[(oi+2)%CHAIN_COLORS.length],thickness:.2,opacity:.25};
+      const st=o.style;
+      o.indices.forEach(i=>{if(residues[i])model.addStyle(selectorForResidue(residues[i]),{stick:{radius:st.thickness,color:st.color,opacity:st.opacity},sphere:{radius:Math.max(.22,st.thickness*1.2),color:st.color,opacity:st.opacity}});});
     });
   }
   function updateSurface(){
@@ -519,23 +604,28 @@ const TertiaryExplorer = (() => {
     if(state.visibility.rna)residues.forEach((r,i)=>{if(isVisibleIndex(i))safe("residue style "+(i+1),()=>applyResidueRepresentation(r,i));});
     safe("component styles",applyCategoryStyles);
     if(state.comparison.model&&state.comparison.visible)safe("comparison style",()=>state.comparison.model.setStyle({},{line:{linewidth:2,color:"#f0a36f",opacity:.8}}));
-    if(state.mapping.enabled){
-      const mate=partner[state.selected];
-      if(mate>=0&&residues[mate]&&isVisibleIndex(mate))safe("paired highlight",()=>model.addStyle(selectorForResidue(residues[mate]),{stick:{radius:.25,color:"#74d7b6"},sphere:{radius:.28,color:"#74d7b6",opacity:.38}}));
-    }
-    if(residues[state.selected]&&isVisibleIndex(state.selected))safe("selected highlight",()=>model.addStyle(selectorForResidue(residues[state.selected]),{stick:{radius:.34,color:"#ffffff"},sphere:{radius:.34,color:"#ffffff",opacity:.42}}));
-    safe("selection highlights",addSelectionHighlights);safe("object highlights",addObjectHighlights);safe("pair connectors",addPairs);
+    safe("selection highlights",addSelectionHighlights);safe("selected pair highlights",addSelectedPairHighlights);safe("object highlights",addObjectHighlights);
+    safe("optional pair guides",addPairs);safe("selected pair hydrogen bonds",addSelectedPairHydrogenBonds);
     safe("indices",addIndices);safe("selected label",addSelectedLabel);safe("proximity",addProximity);safe("contacts",addContacts);
     safe("measurements",addMeasurements);safe("surface",updateSurface);safe("clipping",applyClipping);
     if(renderNow)safe("render",()=>viewer.render());
   }
 
-  function chooseResidue(index){
+  function chooseResidue(index,{toggle=true,notify=true}={}){
     state.selected=clamp(index,0,Math.max(0,activeResidues().length-1));
-    if(state.mapping.enabled){
+    if(toggle){
+      if(state.selectionIndices.has(state.selected))state.selectionIndices.delete(state.selected);
+      else state.selectionIndices.add(state.selected);
+    }
+    if(notify&&state.mapping.enabled){
       if(isCuratedDefaultPair())state.onSelect(state.selected);
       else if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.followExternal)SecondaryExplorer.followExternal(state.selected);
     }
+    render();
+  }
+  function choosePair(a,b,{toggle=true}={}){
+    const key=pairKey(a,b);state.selected=a;
+    if(toggle){if(state.selectedPairs.has(key))state.selectedPairs.delete(key);else state.selectedPairs.add(key);}
     render();
   }
   function updateSourceCopy(){
@@ -568,6 +658,15 @@ const TertiaryExplorer = (() => {
     const shell=$("tertiarySplitShell");if(shell)shell.classList.toggle("linked",!panel.hidden);
     if(panel.hidden){scheduleViewerResize(true);return;}
     root.replaceChildren();
+    const markLinkedSelection=()=>{
+      const pairResidues=selectedPairResidues();
+      root.querySelectorAll("[data-residue-index]").forEach(node=>{
+        const i=Number(node.getAttribute("data-residue-index"));
+        node.classList.toggle("te-linked-selected",state.selectionIndices.has(i));
+        node.classList.toggle("te-linked-pair-residue",pairResidues.has(i));
+      });
+      root.querySelectorAll("[data-pair]").forEach(node=>node.classList.toggle("te-linked-pair-selected",state.selectedPairs.has(node.getAttribute("data-pair"))));
+    };
     const source=$("secondarySvg");
     let context=null;try{context=typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.getContext?SecondaryExplorer.getContext():null;}catch(_){}
     if(source&&source.children.length&&context?.sequence===state.secondarySequence&&context?.structure===state.structure){
@@ -577,9 +676,13 @@ const TertiaryExplorer = (() => {
       root.querySelectorAll("[tabindex]").forEach(el=>el.removeAttribute("tabindex"));
       root.querySelectorAll("[data-residue-index]").forEach(node=>{
         const i=Number(node.getAttribute("data-residue-index"));node.style.cursor="pointer";
-        node.addEventListener("click",()=>chooseResidue(i));
+        node.addEventListener("click",event=>{event.stopPropagation();chooseResidue(i);});
       });
-      scheduleViewerResize(true);return;
+      root.querySelectorAll("[data-pair]").forEach(node=>{
+        const [a,b]=String(node.getAttribute("data-pair")).split(":").map(Number);node.style.cursor="pointer";
+        node.addEventListener("click",event=>{event.stopPropagation();choosePair(a,b);});
+      });
+      markLinkedSelection();scheduleViewerResize(true);return;
     }
     let pos=Array.isArray(state.secondaryLayoutPositions)&&state.secondaryLayoutPositions.length===state.secondarySequence.length
       ?state.secondaryLayoutPositions.map(p=>({x:Number(p.x),y:Number(p.y)})):null;
@@ -595,13 +698,20 @@ const TertiaryExplorer = (() => {
     const minX=Math.min(...pos.map(p=>p.x)),maxX=Math.max(...pos.map(p=>p.x)),minY=Math.min(...pos.map(p=>p.y)),maxY=Math.max(...pos.map(p=>p.y));
     const pad=34,scale=Math.min((340-2*pad)/Math.max(1,maxX-minX),(430-2*pad)/Math.max(1,maxY-minY));
     const map=pos.map(p=>({x:pad+(p.x-minX)*scale,y:pad+(p.y-minY)*scale}));root.setAttribute("viewBox","0 0 340 430");
-    pairs.forEach(([a,b])=>root.append(make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,class:"te-mini-pair"+(a===state.selected||b===state.selected?" selected":"")})));
+    pairs.forEach(([a,b])=>{
+      const key=pairKey(a,b),g=make("g",{"data-pair":key,class:"te-mini-pair-group"+(state.selectedPairs.has(key)?" te-linked-pair-selected":"")});
+      g.append(make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,class:"te-mini-pair"}));
+      const hit=make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,stroke:"transparent","stroke-width":14,"pointer-events":"stroke"});
+      g.append(hit);g.addEventListener("click",event=>{event.stopPropagation();choosePair(a,b);});root.append(g);
+    });
     root.append(make("polyline",{points:map.map(p=>p.x+","+p.y).join(" "),class:"te-mini-backbone"}));
+    const pairResidues=selectedPairResidues();
     map.forEach((p,i)=>{
-      const g=make("g",{class:"te-mini-node"+(i===state.selected?" selected":"")+(partner[state.selected]===i?" paired-selected":""),transform:"translate("+p.x+" "+p.y+")",role:"button","data-residue-index":i,"aria-label":state.secondarySequence[i]+(i+1)});
+      const cls="te-mini-node"+(state.selectionIndices.has(i)?" te-linked-selected":"")+(pairResidues.has(i)?" te-linked-pair-residue":"");
+      const g=make("g",{class:cls,transform:"translate("+p.x+" "+p.y+")",role:"button","data-residue-index":i,"aria-label":state.secondarySequence[i]+(i+1)});
       g.append(make("circle",{r:11,fill:residueColor(i,activeResidues()[i]),stroke:"#d5e2e9","stroke-width":1}));
       const label=make("text",{x:0,y:1,fill:"#07111c","font-size":10,"font-family":"monospace","text-anchor":"middle","dominant-baseline":"central"});label.textContent=state.secondarySequence[i];g.append(label);
-      g.addEventListener("click",()=>chooseResidue(i));root.append(g);
+      g.addEventListener("click",event=>{event.stopPropagation();chooseResidue(i);});root.append(g);
     });
     scheduleViewerResize(true);
   }
@@ -617,14 +727,15 @@ const TertiaryExplorer = (() => {
   function renderSequencePanel(){
     const box=$("teSequencePanel");if(!box)return;box.replaceChildren();
     activeResidues().forEach((r,i)=>{
-      const b=document.createElement("button");b.type="button";b.className="te-seq-residue"+(i===state.selected?" active":"")+(state.selectionIndices.has(i)?" chosen":"");
+      const b=document.createElement("button");b.type="button";b.className="te-seq-residue"+(i===state.selected?" active":"")+(state.selectionIndices.has(i)?" chosen":"")+(selectedPairResidues().has(i)?" paired-chosen":"");
       b.textContent=baseAt(i)+(i+1);b.title=(r.resn||baseAt(i))+(r.chain?" · chain "+r.chain:"");b.addEventListener("click",()=>chooseResidue(i));box.append(b);
     });
   }
   function renderObjectList(){
     const box=$("teObjectList");if(!box)return;box.replaceChildren();
     if(!state.savedObjects.length){box.textContent="No saved objects.";return;}
-    state.savedObjects.forEach(o=>{
+    state.savedObjects.forEach((o,oi)=>{
+      o.style??={color:CHAIN_COLORS[(oi+2)%CHAIN_COLORS.length],thickness:.2,opacity:.25};
       const row=document.createElement("div");row.className="te-object-row";
       const name=document.createElement("input");name.value=o.name;name.setAttribute("aria-label","Object name");
       name.addEventListener("change",()=>{o.name=name.value.trim()||o.name;});
@@ -633,7 +744,7 @@ const TertiaryExplorer = (() => {
       const pdb=document.createElement("button");pdb.type="button";pdb.textContent="PDB";pdb.addEventListener("click",()=>downloadStructure("pdb",o.indices,o.name));
       const cif=document.createElement("button");cif.type="button";cif.textContent="mmCIF";cif.addEventListener("click",()=>downloadStructure("cif",o.indices,o.name));
       const del=document.createElement("button");del.type="button";del.textContent="Delete";del.addEventListener("click",()=>{state.savedObjects=state.savedObjects.filter(x=>x.id!==o.id);if(state.isolateObjectId===o.id)state.isolateObjectId=null;renderObjectList();refreshExportObjectOptions();render();});
-      row.append(name,show,isolate,pdb,cif,del);box.append(row);
+      row.append(name,show,isolate,pdb,cif,del,styleEditor(o.style,render,{label:false}));box.append(row);
     });
   }
   function renderSavedViews(){
@@ -647,12 +758,58 @@ const TertiaryExplorer = (() => {
       row.append(label,restore,del);box.append(row);
     });
   }
+  function renderContextPanel(){
+    const box=$("teContextPanel");if(!box)return;box.replaceChildren();
+    const title=document.createElement("div");title.className="te-context-title";
+    const residueCount=state.selectionIndices.size,pairCount=state.selectedPairs.size;
+    title.innerHTML="<strong>Current selection</strong><span>"+residueCount+" residue"+(residueCount===1?"":"s")+" · "+pairCount+" base pair"+(pairCount===1?"":"s")+"</span>";
+    box.append(title);
+    if(!residueCount&&!pairCount){
+      const empty=document.createElement("p");empty.textContent="Click residues or base pairs in the linked 2D view, sequence, or 3D structure. Selections stay active until you click them again or clear them.";box.append(empty);return;
+    }
+    if(residueCount){
+      const section=document.createElement("details");section.open=true;section.innerHTML="<summary>Selected residue appearance</summary>";
+      const grid=document.createElement("div");grid.className="te-context-grid";
+      const color=document.createElement("input");color.type="color";color.value=state.selectionStyle.color;color.addEventListener("input",()=>{state.selectionStyle.color=color.value;render();});
+      const thick=document.createElement("input");thick.type="range";thick.min=".08";thick.max=".5";thick.step=".01";thick.value=state.selectionStyle.thickness;thick.addEventListener("input",()=>{state.selectionStyle.thickness=Number(thick.value);render();});
+      const opacity=document.createElement("input");opacity.type="range";opacity.min=".05";opacity.max="1";opacity.step=".05";opacity.value=state.selectionStyle.opacity;opacity.addEventListener("input",()=>{state.selectionStyle.opacity=Number(opacity.value);render();});
+      [["Color",color],["Thickness",thick],["Opacity",opacity]].forEach(([label,input])=>{const l=document.createElement("label");l.append(document.createTextNode(label),input);grid.append(l);});
+      const actions=document.createElement("div");actions.className="te-button-row";
+      const focus=document.createElement("button");focus.type="button";focus.textContent="Center / zoom";focus.addEventListener("click",focusSelection);
+      const clear=document.createElement("button");clear.type="button";clear.textContent="Clear residues";clear.addEventListener("click",()=>{state.selectionIndices.clear();render();});
+      actions.append(focus,clear);section.append(grid,actions);box.append(section);
+    }
+    state.selectedPairs.forEach(key=>{
+      const [a,b]=key.split(":").map(Number),bonds=pairHydrogenBonds(a,b),group=ensurePairHbondStyle(key,bonds);
+      const section=document.createElement("details");section.open=true;section.className="te-hbond-pair";
+      const summary=document.createElement("summary");summary.textContent=baseAt(a)+(a+1)+" — "+baseAt(b)+(b+1)+" · "+bonds.length+" H-bond"+(bonds.length===1?"":"s")+" detected";section.append(summary);
+      const note=document.createElement("p");note.className="te-tool-note";
+      note.textContent=bonds.length
+        ?"Hydrogen bonds shown here pass the base donor/acceptor heavy-atom distance screen (≤ "+state.hbondCutoff.toFixed(1)+" Å)."
+        :"The 2D structure marks this pair, but no donor–acceptor heavy-atom contact currently meets the ≤ "+state.hbondCutoff.toFixed(1)+" Å screen in the 3D coordinates.";
+      section.append(note);
+      if(bonds.length){
+        const groupHead=document.createElement("strong");groupHead.textContent="Style all H-bonds in this pair";section.append(groupHead,styleEditor(group,render,{label:true}));
+        const list=document.createElement("div");list.className="te-hbond-list";
+        bonds.forEach((bond,n)=>{
+          const row=document.createElement("details");row.className="te-hbond-row";
+          const sum=document.createElement("summary");sum.textContent=(n+1)+". "+bond.donorName+" → "+bond.acceptorName+" · "+bond.distance.toFixed(2)+" Å";row.append(sum);
+          const individual=group.bonds[bond.id]??={};
+          row.append(styleEditor(individual,render,{label:true,fallback:group}));list.append(row);
+        });
+        section.append(list);
+      }
+      const remove=document.createElement("button");remove.type="button";remove.textContent="Remove this base-pair selection";remove.addEventListener("click",()=>{state.selectedPairs.delete(key);render();});section.append(remove);
+      box.append(section);
+    });
+  }
+
   function updateControls(){
     evaluateMapping();const focusDetails=$("teFocusDetails");if(focusDetails)focusDetails.hidden=!state.secondaryIsDefault||!state.mapping.enabled;updateSourceCopy();
   }
   function render(selected){
     if(selected!==undefined)state.selected=clamp(selected,0,Math.max(0,(state.mapping.enabled?state.secondarySequence.length:activeResidues().length)-1));
-    miniSecondary();heatLegend();regionLegend();updateCopy();updateControls();renderSequencePanel();renderObjectList();renderSavedViews();
+    miniSecondary();heatLegend();regionLegend();updateCopy();updateControls();renderSequencePanel();renderContextPanel();renderObjectList();renderSavedViews();
     const scene=$("scene-tertiary");if(!scene||scene.hidden)return;
     ensureViewer().then(()=>{scheduleViewerResize(true);applyStyles();}).catch(error=>console.error("Tertiary render:",error));
   }
@@ -688,7 +845,7 @@ const TertiaryExplorer = (() => {
   function createObject(){
     const indices=state.selectionIndices.size?new Set(state.selectionIndices):new Set([state.selected]);
     const name=prompt("Object name","object_"+state.objectSerial);if(name===null)return;
-    state.savedObjects.push({id:state.objectSerial,name:name.trim()||("object_"+state.objectSerial),indices,visible:true});state.objectSerial++;renderObjectList();refreshExportObjectOptions();render();
+    state.savedObjects.push({id:state.objectSerial,name:name.trim()||("object_"+state.objectSerial),indices,visible:true,style:{color:CHAIN_COLORS[(state.objectSerial+1)%CHAIN_COLORS.length],thickness:.2,opacity:.25}});state.objectSerial++;renderObjectList();refreshExportObjectOptions();render();
   }
 
   function atomLinePdb(atom,serial){
@@ -838,6 +995,7 @@ const TertiaryExplorer = (() => {
       '<label>RNA chain<select id="teChainSelect"></select></label>'+
       '<label class="te-check"><input id="teSameMolecule" type="checkbox"> I confirm that the Secondary and 3D inputs describe the same RNA molecule</label>'+
       '<p id="teMappingStatus" class="te-mapping-status" role="status"></p></details>'+
+      '<section id="teContextPanel" class="te-context-panel" aria-live="polite"></section>'+
       '<details open><summary>Display</summary>'+
       '<label>Representation<select id="teRepresentation"><option value="sticks">PyMOL-style sticks</option><option value="ballstick">Ball &amp; stick</option><option value="wire">Wire</option><option value="spheres">Spheres</option><option value="backbone">RNA backbone</option><option value="cartoon">Cartoon</option></select></label>'+
       '<label>Color by<select id="teColorMode"><option value="nucleotide">Nucleotide / residue type</option><option value="chain">Chain</option><option value="element">Element</option><option value="uniform">Uniform custom color</option><option value="region">Secondary element</option><option value="metadata" disabled>Residue information</option></select></label>'+
@@ -845,13 +1003,14 @@ const TertiaryExplorer = (() => {
       '<label>Background color<input id="teBackgroundColor" type="color" value="#07111c"></label>'+
       '<label class="te-check"><input id="teOrthographic" type="checkbox"> Orthographic projection</label>'+
       '<button type="button" id="teFullscreen">Full-screen viewer</button>'+
-      '<label class="te-check"><input id="teShowPairs" type="checkbox" checked> Show mapped secondary-structure pair connections</label>'+
+      '<label class="te-check"><input id="teSplit" type="checkbox"> 2D + 3D linked view</label>'+
+      '<label class="te-check"><input id="teShowPairs" type="checkbox"> Show all mapped pair guides (advanced)</label>'+
       '<label class="te-check"><input id="teShowIndices" type="checkbox" checked> Show residue indices</label>'+
       '<label class="te-check"><input id="teShowSelectedLabel" type="checkbox" checked> Label selected residue</label>'+
       '<div class="te-visibility-grid"><label class="te-check"><input id="teShowRNA" type="checkbox" checked> RNA</label><label class="te-check"><input id="teShowProtein" type="checkbox" checked> Protein</label><label class="te-check"><input id="teShowSolvent" type="checkbox"> Solvent</label><label class="te-check"><input id="teShowIons" type="checkbox" checked> Ions</label><label class="te-check"><input id="teShowOther" type="checkbox" checked> Other ligands</label><label class="te-check"><input id="teShowHydrogen" type="checkbox"> Hydrogens</label></div>'+
       '<label class="te-check"><input id="teSurface" type="checkbox"> Molecular surface</label>'+
       '<label>Surface transparency<input id="teSurfaceOpacity" type="range" min="0.05" max="0.9" step="0.05" value="0.35"></label></details>'+
-      '<details open><summary>Sequence-linked selection</summary><p class="te-tool-note">Click a residue here or in 3D; selection is shared with the Secondary view when mapping is active.</p><div id="teSequencePanel" class="te-sequence-panel"></div>'+
+      '<details><summary>Select · sequence &amp; ranges</summary><p class="te-tool-note">Selections are additive. Click a selected residue again to remove it.</p><div id="teSequencePanel" class="te-sequence-panel"></div>'+
       '<div class="te-inline-grid"><label>From residue<input id="teSelectStart" type="number" min="1" value="1"></label><label>To residue<input id="teSelectEnd" type="number" min="1" value="10"></label></div>'+
       '<div class="te-button-row"><button type="button" id="teSelectRange">Select range</button><button type="button" id="teSelectCurrent">Add current</button><button type="button" id="teSelectSubtract">Subtract current</button><button type="button" id="teSelectChain">Select RNA chain</button><button type="button" id="teSelectInvert">Invert</button><button type="button" id="teSelectClear">Clear selection</button></div>'+
       '<label>Nucleotide type<select id="teSelectBase"><option>A</option><option>C</option><option>G</option><option>U</option></select></label><button type="button" id="teSelectBaseButton">Select nucleotide type</button>'+
@@ -859,11 +1018,11 @@ const TertiaryExplorer = (() => {
       '<div class="te-button-row"><button type="button" id="teFocusSelection">Center / zoom selection</button><label class="te-check"><input id="teSelectionLabels" type="checkbox"> Label selection</label></div></details>'+
       '<details><summary>Saved objects</summary><p class="te-tool-note">Create a named object from the current selection, then show, hide, isolate, or export it.</p><button type="button" id="teCreateObject">Create object from selection</button><div id="teObjectList">No saved objects.</div></details>'+
       '<details><summary>Residue index</summary><p>Default labels: 1, every 5 residues, and the final residue.</p><details class="te-index-dropdown"><summary>Choose indices</summary><div id="teIndexChoices"></div></details><div class="te-button-row"><button type="button" id="teIndexDefault">Default</button><button type="button" id="teIndexAll">All</button><button type="button" id="teIndexNone">None</button></div></details>'+
-      '<details open><summary>Analyze</summary>'+
+      '<details><summary>Analyze · measurements &amp; contacts</summary>'+
       '<label class="te-check"><input id="teProximity" type="checkbox"> Highlight 3D proximity</label><label>Proximity cutoff (Å)<input id="teProximityCutoff" type="number" min="6" max="30" step="0.5" value="12"></label><p id="teProximityStatus">Highlights C4′ spatial neighbors that are not immediate sequence neighbors.</p>'+
       '<label class="te-check"><input id="teContacts" type="checkbox"> Show close atom contacts / possible H-bond contacts</label><label>Contact cutoff (Å)<input id="teContactCutoff" type="number" min="2.5" max="8" step="0.1" value="4.0"></label><p id="teContactStatus">Shows close atom contacts; N/O pairs ≤3.5 Å are flagged as possible hydrogen-bond contacts.</p><div id="teContactList" class="te-contact-list"></div>'+
       '<fieldset class="te-measure-tools"><legend>Atom measurements</legend><label>Measurement<select id="teMeasureMode"><option value="off">Off</option><option value="distance">Distance · 2 atoms</option><option value="angle">Angle · 3 atoms</option><option value="dihedral">Dihedral · 4 atoms</option></select></label><div class="te-button-row"><button type="button" id="teMeasureUndo">Undo pick</button><button type="button" id="teMeasureClear">Clear all</button></div><p id="teMeasureStatus">Choose distance, angle, or dihedral, then click atoms in the 3D structure.</p><div id="teMeasurementList" class="te-measurement-list">No saved measurements.</div></fieldset>'+
-      '<label class="te-check"><input id="teSplit" type="checkbox"> 2D + 3D linked view</label></details>'+
+      '</details>'+
       '<details><summary>Clipping</summary><label class="te-check"><input id="teClipEnabled" type="checkbox"> Enable clipping slab</label><div class="te-inline-grid"><label>Near<input id="teClipNear" type="range" min="-100" max="0" step="1" value="-40"></label><label>Far<input id="teClipFar" type="range" min="0" max="100" step="1" value="40"></label></div><p class="te-tool-note">Clipping changes only what is visible; it does not delete atoms.</p></details>'+
       '<details><summary>Compare / align structures</summary><label>Alignment scope<select id="teAlignScope"><option value="full">Whole active RNA chain</option><option value="selection">Current residue selection</option></select></label><label>Comparison PDB / mmCIF<input id="teAlignFile" type="file" accept=".pdb,.ent,.cif,.mmcif"></label><label class="te-check"><input id="teCompareVisible" type="checkbox" checked> Show aligned comparison</label><button type="button" id="teClearAlignment">Clear comparison</button><p id="teAlignmentStatus">Upload a second PDB/mmCIF structure to superimpose it on the active RNA chain.</p></details>'+
       '<details><summary>Saved camera views</summary><button type="button" id="teSaveView">Save current view</button><div id="teSavedViews">No saved views.</div></details>'+
@@ -901,7 +1060,7 @@ const TertiaryExplorer = (() => {
     $("teIndexDefault").addEventListener("click",()=>{state.indexSelection=defaultIndices();buildIndexChoices();render();});
     $("teIndexAll").addEventListener("click",()=>{const n=state.mapping.enabled?state.secondarySequence.length:activeResidues().length;state.indexSelection=new Set(Array.from({length:n},(_,i)=>i));buildIndexChoices();render();});
     $("teIndexNone").addEventListener("click",()=>{state.indexSelection.clear();buildIndexChoices();render();});
-    $("teSelectRange").addEventListener("click",selectRange);$("teSelectCurrent").addEventListener("click",addCurrentToSelection);$("teSelectSubtract").addEventListener("click",subtractCurrentFromSelection);$("teSelectChain").addEventListener("click",selectActiveChain);$("teSelectInvert").addEventListener("click",invertSelection);$("teSelectClear").addEventListener("click",()=>{state.selectionIndices.clear();render();});
+    $("teSelectRange").addEventListener("click",selectRange);$("teSelectCurrent").addEventListener("click",addCurrentToSelection);$("teSelectSubtract").addEventListener("click",subtractCurrentFromSelection);$("teSelectChain").addEventListener("click",selectActiveChain);$("teSelectInvert").addEventListener("click",invertSelection);$("teSelectClear").addEventListener("click",()=>{state.selectionIndices.clear();state.selectedPairs.clear();render();});
     $("teSelectBaseButton").addEventListener("click",selectBase);$("teSelectNearButton").addEventListener("click",selectNearby);$("teFocusSelection").addEventListener("click",focusSelection);
     $("teSelectionLabels").addEventListener("change",e=>{state.selectionLabels=e.target.checked;render();});$("teCreateObject").addEventListener("click",createObject);
     $("teClipEnabled").addEventListener("change",e=>{state.clipEnabled=e.target.checked;render();});$("teClipNear").addEventListener("input",e=>{state.clipNear=Number(e.target.value);render();});$("teClipFar").addEventListener("input",e=>{state.clipFar=Number(e.target.value);render();});
@@ -990,6 +1149,7 @@ const TertiaryExplorer = (() => {
     window.addEventListener("rna-secondary-context",e=>handleSecondaryContext(e.detail));
     window.addEventListener("rna-secondary-layout",e=>handleSecondaryLayout(e.detail));
     window.addEventListener("rna-secondary-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){state.selected=clamp(e.detail.index,0,state.secondarySequence.length-1);render();}});
+    window.addEventListener("rna-secondary-pair-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){const key=pairKey(e.detail.a,e.detail.b);if(e.detail.selected)state.selectedPairs.add(key);else state.selectedPairs.delete(key);render();}});
     window.addEventListener("resize",()=>scheduleViewerResize(true));
     if(typeof ResizeObserver!=="undefined"){const viewport=$("tertiaryViewport");if(viewport)new ResizeObserver(()=>scheduleViewerResize(true)).observe(viewport);}
     try{const p=typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.getCurrentPositions?SecondaryExplorer.getCurrentPositions():null;if(Array.isArray(p)&&p.length===state.secondarySequence.length)state.secondaryLayoutPositions=p.map(x=>({x:Number(x.x),y:Number(x.y)}));}catch(_){}
@@ -1000,6 +1160,7 @@ const TertiaryExplorer = (() => {
     getDiagnostics(){return {viewerReady:!!viewer,modelReady:!!model,atomCount:model?.selectedAtoms?model.selectedAtoms({}).length:0,representation:state.representation,colorMode:state.colorMode,split:state.split,mappingEnabled:state.mapping.enabled,source:state.currentFileName,
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
       selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
-      comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count};}
+      comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count,selectedPairCount:state.selectedPairs.size,
+      selectedPairKeys:[...state.selectedPairs],hbondCounts:Object.fromEntries([...state.selectedPairs].map(key=>{const [a,b]=key.split(":").map(Number);return [key,pairHydrogenBonds(a,b).length];}))};}
   };
 })();

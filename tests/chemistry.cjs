@@ -46,9 +46,10 @@ assert.ok(document.getElementById('sePairChemButton'),'Selected Secondary pair c
 assert.ok(document.getElementById('sePairProbFile'),'Secondary has pair-probability upload');
 assert.ok(document.getElementById('seLayerReactivity'),'Secondary has an independent reactivity layer toggle');
 assert.ok(document.getElementById('seLayerPairProb'),'Secondary has an independent base-pair probability layer toggle');
-assert.ok(document.getElementById('homeLearnButton'),'Homepage has a Learn RNA path');
-assert.ok(document.getElementById('homeAnalyzeButton'),'Homepage has an Analyze your own RNA path');
-assert.ok(document.getElementById('homeUpload3DButton'),'Homepage has a direct 3D upload path');
+assert.ok(document.querySelector('.home-cover-actions a[href="?page=journey"]'),'Homepage has a Learn RNA guided-journey path');
+assert.ok(document.getElementById('homeAnalyzeToggle'),'Homepage has an Analyze an RNA toggle');
+assert.ok(document.querySelector('#homeAnalyzeFork a[href="?page=secondary"]'),'Homepage Analyze fork has a 2D path');
+assert.ok(document.querySelector('#homeAnalyzeFork a[href="?page=tertiary"]'),'Homepage Analyze fork has a 3D path');
 assert.equal([...document.querySelectorAll('.scene-number')].every(el=>/\/ 06$/.test(el.textContent)),true,'All visible scene counters use six total steps');
 run('showScene(3)');
 assert.equal(document.querySelectorAll('.growth-residue').length,1);

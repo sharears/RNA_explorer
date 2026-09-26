@@ -260,3 +260,14 @@
 .se-export-dialog #seExportDialogStatus{min-height:1.3em;color:var(--muted);font-size:.78rem}
 .se-toolbar{flex-wrap:wrap}
 .se-toolbar input[type="number"]{width:76px}
+
+
+/* Progressive Secondary controls + explicit pair selection */
+.se-data-layers>summary{
+  cursor:pointer;color:var(--mint);font-weight:700;list-style-position:inside;
+}
+.se-pair.selected path:not([stroke="transparent"]){
+  stroke:#ffffff!important;stroke-width:3.5!important;
+  filter:drop-shadow(0 0 5px rgba(255,255,255,.55));
+}
+.se-controls>details>summary{cursor:pointer}

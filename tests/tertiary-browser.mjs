@@ -36,6 +36,23 @@ try{
   const letters=await page.locator("#tertiaryMiniSvg text").count();
   if(letters<20)throw new Error("Linked 2D panel is not rendering residue letters; text count="+letters);
 
+  const miniResidues=page.locator('#tertiaryMiniSvg [data-residue-index]');
+  await miniResidues.nth(0).click();
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectionCount===1);
+  await miniResidues.nth(1).click();
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectionCount===2);
+  await miniResidues.nth(0).click();
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectionCount===1);
+
+  const miniPair=page.locator('#tertiaryMiniSvg [data-pair]').first();
+  await miniPair.click();
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectedPairCount===1);
+  d=await page.evaluate(()=>TertiaryExplorer.getDiagnostics());
+  const selectedKey=d.selectedPairKeys[0];
+  if(!(selectedKey in d.hbondCounts))throw new Error("Selected pair did not report a 3D H-bond count.");
+  const contextText=(await page.locator("#teContextPanel").textContent())||"";
+  if(!/H-bond|no donor–acceptor/i.test(contextText))throw new Error("Selected pair context did not report H-bond geometry status.");
+
   await split.uncheck();
   await page.waitForSelector("#tertiaryMiniPanel",{state:"hidden",timeout:10000});
   if(!(await page.locator("#tertiaryMolecularViewer canvas").isVisible()))throw new Error("3D viewer disappeared after disabling linked view.");
@@ -50,6 +67,7 @@ try{
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().surfaceEnabled===true);
   await page.locator("#teSurface").uncheck();
 
+  await page.locator("summary").filter({hasText:"Analyze · measurements & contacts"}).click();
   await page.locator("#teContacts").check();
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().contactEnabled===true);
   await page.locator("#teContacts").uncheck();
@@ -67,6 +85,7 @@ try{
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().measurementMode==="distance");
   await page.selectOption("#teMeasureMode","off");
 
+  await page.locator("summary").filter({hasText:"Select · sequence & ranges"}).click();
   await page.click("#teSelectCurrent");
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectionCount>0);
   await page.locator("summary").filter({hasText:"Saved objects"}).click();

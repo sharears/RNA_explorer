@@ -8,7 +8,7 @@ const SecondaryExplorer = (() => {
     pairColor:"#e8bb69", pairWidth:2, pairOpacity:1, circleColor:"#c5d6e2",
     circleWidth:1, letterColor:"#ffffff", letterSize:16, font:"monospace",
     fontStyle:"normal", mode:"uniform", legend:true};
-  let seq="", db="", defaultSeq="", defaultDb="", pairs=[], partner=[], selected=0;
+  let seq="", db="", defaultSeq="", defaultDb="", pairs=[], partner=[], selected=0, selectedPairKey=null;
   let layout="radial", overrides={}, annotations={}, onDefaultSelect=()=>{};
   let residueOverrides={}, backboneOverrides={}, selectedBackbone=0, zoom=1;
   let panX=0,panY=0,indexMode="default",indexSelection=new Set(),indexOverrides={};
@@ -371,7 +371,7 @@ const SecondaryExplorer = (() => {
     const s=effective(key), p=pos[a],q=pos[b];
     const probability=pairProbabilities[key];
     const pairColor=pairProbEnabled&&probability!=null&&!overrides[key]?.pairColor?probabilityColor(probability):s.pairColor;
-    const g=svg("g",{"data-pair":key,class:"se-pair",opacity:s.pairOpacity});
+    const g=svg("g",{"data-pair":key,class:"se-pair"+(selectedPairKey===key?" selected":""),opacity:s.pairOpacity});
     const code=annotations[key];
     const identity=seq[a]+seq[b];
     const count=s.mode==="typed"?(/GC|CG/.test(identity)?3:/AU|UA/.test(identity)?2:1):1;
@@ -406,14 +406,20 @@ const SecondaryExplorer = (() => {
       g.append(hit);
       g.setAttribute("tabindex","0");g.setAttribute("role","button");
       g.setAttribute("aria-label",`Base pair ${a+1}–${b+1}${probability!=null?", probability "+probability.toFixed(3):""}${code?", "+code:""}`);
-      const choose=()=>select(a);
+      const choose=()=>selectPair(a,b);
       g.addEventListener("click",choose);
       g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();choose();}});
     }
     parent.append(g);
   }
-  function select(index,notify=true) {
-    selected=Math.max(0,Math.min(seq.length-1,index));selectedBackbone=Math.min(selected,Math.max(0,seq.length-2));panel();render();
+  function selectPair(a,b,notify=true){
+    const key=keyOf(a,b);selectedPairKey=selectedPairKey===key?null:key;selected=a;selectedBackbone=Math.min(selected,Math.max(0,seq.length-2));panel();render();
+    if(notify&&typeof window!=="undefined"&&typeof CustomEvent!=="undefined"){
+      window.dispatchEvent(new CustomEvent("rna-secondary-pair-select",{detail:{a,b,key,selected:selectedPairKey===key,sequence:seq,structure:db}}));
+    }
+  }
+    function select(index,notify=true) {
+    selected=Math.max(0,Math.min(seq.length-1,index));selectedPairKey=null;selectedBackbone=Math.min(selected,Math.max(0,seq.length-2));panel();render();
     if(notify){
       window.dispatchEvent(new CustomEvent("rna-secondary-select",{detail:{index:selected,sequence:seq,isDefault:seq===defaultSeq&&db===defaultDb}}));
       if(seq===defaultSeq&&db===defaultDb) onDefaultSelect(selected);
@@ -581,14 +587,14 @@ const SecondaryExplorer = (() => {
   function reorganizeControls(controls){
     const old=[...controls.children].filter(el=>el.tagName==="DETAILS");
     function group(name){
-      const el=document.createElement("details");el.open=name==="Residue ID";
+      const el=document.createElement("details");el.open=name==="Display · Residues";
       el.innerHTML='<summary>'+name+'</summary><details open><summary>Selected</summary></details><details><summary>All</summary></details>';
       controls.insertBefore(el,old[0]);return [el.children[1],el.children[2]];
     }
-    const [bs,ba]=group("Backbone"),[rs,ra]=group("Residue ID"),[ps,pa]=group("Base pairs"),[ixs,ixa]=group("Residue index");
-    const layerBox=document.createElement("fieldset");
+    const [bs,ba]=group("Display · Backbone"),[rs,ra]=group("Display · Residues"),[ps,pa]=group("Analyze · Base pairs"),[ixs,ixa]=group("Display · Residue index");
+    const layerBox=document.createElement("details");
     layerBox.className="se-data-layers";
-    layerBox.innerHTML='<legend>Data layers</legend><p>Load reactivity/residue information, base-pair probabilities, or both. Loaded data stay available while you turn each visual layer on or off independently.</p><label><input id="seLayerReactivity" type="checkbox" disabled> Show reactivity colors</label><label><input id="seLayerPairProb" type="checkbox" disabled> Show base-pair probability colors</label><p id="seLayerStatus" role="status">Reactivity: not loaded · Pair probability: not loaded</p>';
+    layerBox.innerHTML='<summary>Analyze · Data layers</summary><p>Load reactivity/residue information, base-pair probabilities, or both. Loaded data stay available while you turn each visual layer on or off independently.</p><label><input id="seLayerReactivity" type="checkbox" disabled> Show reactivity colors</label><label><input id="seLayerPairProb" type="checkbox" disabled> Show base-pair probability colors</label><p id="seLayerStatus" role="status">Reactivity: not loaded · Pair probability: not loaded</p>';
     controls.insertBefore(layerBox,controls.firstElementChild);
     setupIndexControls(ixs,ixa);
     backFields.forEach(([k])=>ba.append($("se-"+k).closest("label")));
@@ -1072,6 +1078,6 @@ const SecondaryExplorer = (() => {
 
     followDefault(index){if(seq===defaultSeq&&db===defaultDb&&selected!==index)select(index,false);},
     followExternal(index){if(index>=0&&index<seq.length&&selected!==index)select(index,false);},
-    getContext(){return {sequence:seq,structure:db,isDefault:seq===defaultSeq&&db===defaultDb,selected};}
+    getContext(){return {sequence:seq,structure:db,isDefault:seq===defaultSeq&&db===defaultDb,selected,selectedPairKey};}
   };
 })();

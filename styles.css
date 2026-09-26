@@ -491,3 +491,29 @@ body[data-page-mode="home"] .home-path-card{
   .home-thought-bubble{top:5%;right:4%;width:46%;padding:12px 13px;font-size:.72rem}
   .home-cover-art figcaption{display:none}
 }
+
+
+/* Simplified homepage Analyze fork */
+.home-cover-actions{align-items:center}
+.home-cover-secondary{font:750 .92rem "Manrope",sans-serif;cursor:pointer}
+.home-cover-secondary[aria-expanded="true"]{border-color:var(--mint);color:var(--mint);background:rgba(116,215,182,.08)}
+.home-analyze-fork{
+  display:flex;gap:8px;align-items:stretch;
+  animation:home-fork-in .18s ease both;
+}
+.home-analyze-fork[hidden]{display:none!important}
+.home-analyze-fork a{
+  min-width:112px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;
+  text-decoration:none;background:rgba(255,255,255,.035);color:var(--text);
+  display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center;
+}
+.home-analyze-fork a:hover,.home-analyze-fork a:focus-visible{border-color:var(--mint);color:var(--mint);outline:none}
+.home-analyze-fork strong{font:800 1.05rem "DM Mono",monospace;color:var(--mint)}
+.home-analyze-fork span{font-size:.72rem;line-height:1.2}
+body[data-page-mode="home"] .home-cover{margin-bottom:84px}
+@keyframes home-fork-in{from{opacity:0;transform:translateX(-5px)}to{opacity:1;transform:none}}
+@media(max-width:620px){
+  .home-cover-actions{align-items:stretch}
+  .home-analyze-fork{width:100%}
+  .home-analyze-fork a{flex:1;min-width:0}
+}

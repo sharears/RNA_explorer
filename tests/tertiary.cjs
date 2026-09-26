@@ -34,6 +34,7 @@ assert.strictEqual(coords.length, 76, "The C4-prime trace should contain one coo
 
 const secondary = read("secondary.js");
 assert(secondary.includes('"rna-secondary-context"'), "Secondary view should broadcast mapping context");
+assert(secondary.includes('"rna-secondary-pair-select"')&&secondary.includes("selectPair"), "Secondary base pairs should dispatch explicit pair selection events");
 assert(secondary.includes('"rna-metadata-change"'), "Secondary view should broadcast residue metadata");
 
 const tertiary = read("tertiary.js");
@@ -45,8 +46,14 @@ const tertiary = read("tertiary.js");
   "Color by",
   "Chain",
   "Element",
-  "Show mapped secondary-structure pair connections",
+  "Show all mapped pair guides (advanced)",
   "Highlight 3D proximity",
+  "Current selection",
+  "Style all H-bonds in this pair",
+  "Remove this base-pair selection",
+  "rna-secondary-pair-select",
+  "BASE_HBOND_ROLES",
+  "drawStyledConnector",
   "possible H-bond contacts",
   "Distance · 2 atoms",
   "Angle · 3 atoms",
@@ -54,7 +61,7 @@ const tertiary = read("tertiary.js");
   "2D + 3D linked view",
   "Secondary element",
   "Residue information",
-  "Sequence-linked selection",
+  "Select · sequence &amp; ranges",
   "Select range",
   "Select around current residue",
   "Create object from selection",
