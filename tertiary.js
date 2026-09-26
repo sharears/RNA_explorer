@@ -460,7 +460,7 @@ const TertiaryExplorer = (() => {
   }
   function addSelectedLabel(){
     if(!state.showSelectedLabel)return;
-    const r=activeResidues()[state.selected];if(!r?.coord||!isVisibleIndex(state.selected))return;
+    const r=activeResidues()[state.selected];if(!r?.coord||!isVisibleIndex(state.selected)||(!state.selectionIndices.has(state.selected)&&!selectedPairResidues().has(state.selected)))return;
     viewer.addLabel(baseAt(state.selected)+(state.selected+1)+(r.chain?" · "+r.chain:""),{position:r.coord,fontSize:13,fontColor:"#07111c",backgroundColor:"#ffffff",backgroundOpacity:.92,borderColor:"#d7e2e8",borderThickness:1,inFront:true});
   }
   function nearby(i){
@@ -604,23 +604,28 @@ const TertiaryExplorer = (() => {
     if(state.visibility.rna)residues.forEach((r,i)=>{if(isVisibleIndex(i))safe("residue style "+(i+1),()=>applyResidueRepresentation(r,i));});
     safe("component styles",applyCategoryStyles);
     if(state.comparison.model&&state.comparison.visible)safe("comparison style",()=>state.comparison.model.setStyle({},{line:{linewidth:2,color:"#f0a36f",opacity:.8}}));
-    if(state.mapping.enabled){
-      const mate=partner[state.selected];
-      if(mate>=0&&residues[mate]&&isVisibleIndex(mate))safe("paired highlight",()=>model.addStyle(selectorForResidue(residues[mate]),{stick:{radius:.25,color:"#74d7b6"},sphere:{radius:.28,color:"#74d7b6",opacity:.38}}));
-    }
-    if(residues[state.selected]&&isVisibleIndex(state.selected))safe("selected highlight",()=>model.addStyle(selectorForResidue(residues[state.selected]),{stick:{radius:.34,color:"#ffffff"},sphere:{radius:.34,color:"#ffffff",opacity:.42}}));
-    safe("selection highlights",addSelectionHighlights);safe("object highlights",addObjectHighlights);safe("pair connectors",addPairs);
+    safe("selection highlights",addSelectionHighlights);safe("selected pair highlights",addSelectedPairHighlights);safe("object highlights",addObjectHighlights);
+    safe("optional pair guides",addPairs);safe("selected pair hydrogen bonds",addSelectedPairHydrogenBonds);
     safe("indices",addIndices);safe("selected label",addSelectedLabel);safe("proximity",addProximity);safe("contacts",addContacts);
     safe("measurements",addMeasurements);safe("surface",updateSurface);safe("clipping",applyClipping);
     if(renderNow)safe("render",()=>viewer.render());
   }
 
-  function chooseResidue(index){
+  function chooseResidue(index,{toggle=true,notify=true}={}){
     state.selected=clamp(index,0,Math.max(0,activeResidues().length-1));
-    if(state.mapping.enabled){
+    if(toggle){
+      if(state.selectionIndices.has(state.selected))state.selectionIndices.delete(state.selected);
+      else state.selectionIndices.add(state.selected);
+    }
+    if(notify&&state.mapping.enabled){
       if(isCuratedDefaultPair())state.onSelect(state.selected);
       else if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.followExternal)SecondaryExplorer.followExternal(state.selected);
     }
+    render();
+  }
+  function choosePair(a,b,{toggle=true}={}){
+    const key=pairKey(a,b);state.selected=a;
+    if(toggle){if(state.selectedPairs.has(key))state.selectedPairs.delete(key);else state.selectedPairs.add(key);}
     render();
   }
   function updateSourceCopy(){
