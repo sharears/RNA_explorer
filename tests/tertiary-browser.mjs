@@ -39,14 +39,25 @@ try{
   const miniResidues=page.locator('#tertiaryMiniSvg [data-residue-index]');
   await miniResidues.nth(0).click();
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectionCount===1);
+  let secondaryContext=await page.evaluate(()=>SecondaryExplorer.getContext());
+  if(!secondaryContext.selectedResidues.includes(0))throw new Error("3D → 2D residue selection did not stay synchronized.");
   await miniResidues.nth(1).click();
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectionCount===2);
   await miniResidues.nth(0).click();
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectionCount===1);
 
+  await page.locator('#secondarySvg [data-residue-index]').nth(2).dispatchEvent("click");
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectionCount===2);
+  secondaryContext=await page.evaluate(()=>SecondaryExplorer.getContext());
+  if(secondaryContext.selectedResidues.length<2)throw new Error("2D additive residue selections were not preserved.");
+
   const miniPair=page.locator('#tertiaryMiniSvg [data-pair]').first();
   await miniPair.click();
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectedPairCount===1);
+  await page.locator('#secondarySvg [data-pair]').nth(1).dispatchEvent("click");
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().selectedPairCount===2);
+  secondaryContext=await page.evaluate(()=>SecondaryExplorer.getContext());
+  if(secondaryContext.selectedPairKeys.length<2)throw new Error("2D additive base-pair selections were not preserved.");
   d=await page.evaluate(()=>TertiaryExplorer.getDiagnostics());
   const selectedKey=d.selectedPairKeys[0];
   if(!(selectedKey in d.hbondCounts))throw new Error("Selected pair did not report a 3D H-bond count.");
