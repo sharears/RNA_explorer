@@ -141,7 +141,7 @@ const TertiaryExplorer = (() => {
   function ensurePairHbondStyle(key,bonds){
     const group=state.pairHbondStyles[key]??={...DEFAULT_HBOND_STYLE,bonds:{}};
     group.bonds??={};
-    bonds.forEach(b=>{group.bonds[b.id]??={...DEFAULT_HBOND_STYLE};});
+    bonds.forEach(b=>{group.bonds[b.id]??={visible:true};});
     return group;
   }
   function drawStyledConnector(start,end,style){
@@ -526,15 +526,15 @@ const TertiaryExplorer = (() => {
     render();
   }
   function measurementCentroid(points){return points.reduce((o,p)=>({x:o.x+p.x/points.length,y:o.y+p.y/points.length,z:o.z+p.z/points.length}),{x:0,y:0,z:0});}
-  function styleEditor(style,onChange,{label=true}={}){
+  function styleEditor(style,onChange,{label=true,fallback={}}={}){
     const wrap=document.createElement("div");wrap.className="te-style-editor";
     const make=(caption,input)=>{const l=document.createElement("label");l.append(document.createTextNode(caption),input);wrap.append(l);return input;};
-    const visible=document.createElement("input");visible.type="checkbox";visible.checked=style.visible!==false;visible.addEventListener("change",()=>{style.visible=visible.checked;onChange();});make("Show",visible);
-    const mode=document.createElement("select");["solid","dashed","dotted"].forEach(v=>mode.append(new Option(v[0].toUpperCase()+v.slice(1),v)));mode.value=style.lineStyle||"dashed";mode.addEventListener("change",()=>{style.lineStyle=mode.value;onChange();});make("Line",mode);
-    const color=document.createElement("input");color.type="color";color.value=style.color||"#ffffff";color.addEventListener("input",()=>{style.color=color.value;onChange();});make("Color",color);
-    const thick=document.createElement("input");thick.type="range";thick.min=".02";thick.max=".22";thick.step=".01";thick.value=style.thickness??.07;thick.addEventListener("input",()=>{style.thickness=Number(thick.value);onChange();});make("Thickness",thick);
-    const opacity=document.createElement("input");opacity.type="range";opacity.min=".05";opacity.max="1";opacity.step=".05";opacity.value=style.opacity??.82;opacity.addEventListener("input",()=>{style.opacity=Number(opacity.value);onChange();});make("Transparency",opacity);
-    if(label){const labelBox=document.createElement("input");labelBox.type="checkbox";labelBox.checked=style.labelVisible!==false;labelBox.addEventListener("change",()=>{style.labelVisible=labelBox.checked;onChange();});make("Label",labelBox);}
+    const visible=document.createElement("input");visible.type="checkbox";visible.checked=(style.visible??fallback.visible)!==false;visible.addEventListener("change",()=>{style.visible=visible.checked;onChange();});make("Show",visible);
+    const mode=document.createElement("select");["solid","dashed","dotted"].forEach(v=>mode.append(new Option(v[0].toUpperCase()+v.slice(1),v)));mode.value=style.lineStyle??fallback.lineStyle??"dashed";mode.addEventListener("change",()=>{style.lineStyle=mode.value;onChange();});make("Line",mode);
+    const color=document.createElement("input");color.type="color";color.value=style.color??fallback.color??"#ffffff";color.addEventListener("input",()=>{style.color=color.value;onChange();});make("Color",color);
+    const thick=document.createElement("input");thick.type="range";thick.min=".02";thick.max=".22";thick.step=".01";thick.value=style.thickness??fallback.thickness??.07;thick.addEventListener("input",()=>{style.thickness=Number(thick.value);onChange();});make("Thickness",thick);
+    const opacity=document.createElement("input");opacity.type="range";opacity.min=".05";opacity.max="1";opacity.step=".05";opacity.value=style.opacity??fallback.opacity??.82;opacity.addEventListener("input",()=>{style.opacity=Number(opacity.value);onChange();});make("Transparency",opacity);
+    if(label){const labelBox=document.createElement("input");labelBox.type="checkbox";labelBox.checked=(style.labelVisible??fallback.labelVisible)!==false;labelBox.addEventListener("change",()=>{style.labelVisible=labelBox.checked;onChange();});make("Label",labelBox);}
     return wrap;
   }
   function renderMeasurementList(){
@@ -758,12 +758,58 @@ const TertiaryExplorer = (() => {
       row.append(label,restore,del);box.append(row);
     });
   }
-  function updateControls(){
+  function renderContextPanel(){
+    const box=$("teContextPanel");if(!box)return;box.replaceChildren();
+    const title=document.createElement("div");title.className="te-context-title";
+    const residueCount=state.selectionIndices.size,pairCount=state.selectedPairs.size;
+    title.innerHTML="<strong>Current selection</strong><span>"+residueCount+" residue"+(residueCount===1?"":"s")+" · "+pairCount+" base pair"+(pairCount===1?"":"s")+"</span>";
+    box.append(title);
+    if(!residueCount&&!pairCount){
+      const empty=document.createElement("p");empty.textContent="Click residues or base pairs in the linked 2D view, sequence, or 3D structure. Selections stay active until you click them again or clear them.";box.append(empty);return;
+    }
+    if(residueCount){
+      const section=document.createElement("details");section.open=true;section.innerHTML="<summary>Selected residue appearance</summary>";
+      const grid=document.createElement("div");grid.className="te-context-grid";
+      const color=document.createElement("input");color.type="color";color.value=state.selectionStyle.color;color.addEventListener("input",()=>{state.selectionStyle.color=color.value;render();});
+      const thick=document.createElement("input");thick.type="range";thick.min=".08";thick.max=".5";thick.step=".01";thick.value=state.selectionStyle.thickness;thick.addEventListener("input",()=>{state.selectionStyle.thickness=Number(thick.value);render();});
+      const opacity=document.createElement("input");opacity.type="range";opacity.min=".05";opacity.max="1";opacity.step=".05";opacity.value=state.selectionStyle.opacity;opacity.addEventListener("input",()=>{state.selectionStyle.opacity=Number(opacity.value);render();});
+      [["Color",color],["Thickness",thick],["Opacity",opacity]].forEach(([label,input])=>{const l=document.createElement("label");l.append(document.createTextNode(label),input);grid.append(l);});
+      const actions=document.createElement("div");actions.className="te-button-row";
+      const focus=document.createElement("button");focus.type="button";focus.textContent="Center / zoom";focus.addEventListener("click",focusSelection);
+      const clear=document.createElement("button");clear.type="button";clear.textContent="Clear residues";clear.addEventListener("click",()=>{state.selectionIndices.clear();render();});
+      actions.append(focus,clear);section.append(grid,actions);box.append(section);
+    }
+    state.selectedPairs.forEach(key=>{
+      const [a,b]=key.split(":").map(Number),bonds=pairHydrogenBonds(a,b),group=ensurePairHbondStyle(key,bonds);
+      const section=document.createElement("details");section.open=true;section.className="te-hbond-pair";
+      const summary=document.createElement("summary");summary.textContent=baseAt(a)+(a+1)+" — "+baseAt(b)+(b+1)+" · "+bonds.length+" H-bond"+(bonds.length===1?"":"s")+" detected";section.append(summary);
+      const note=document.createElement("p");note.className="te-tool-note";
+      note.textContent=bonds.length
+        ?"Hydrogen bonds shown here pass the base donor/acceptor heavy-atom distance screen (≤ "+state.hbondCutoff.toFixed(1)+" Å)."
+        :"The 2D structure marks this pair, but no donor–acceptor heavy-atom contact currently meets the ≤ "+state.hbondCutoff.toFixed(1)+" Å screen in the 3D coordinates.";
+      section.append(note);
+      if(bonds.length){
+        const groupHead=document.createElement("strong");groupHead.textContent="Style all H-bonds in this pair";section.append(groupHead,styleEditor(group,render,{label:true}));
+        const list=document.createElement("div");list.className="te-hbond-list";
+        bonds.forEach((bond,n)=>{
+          const row=document.createElement("details");row.className="te-hbond-row";
+          const sum=document.createElement("summary");sum.textContent=(n+1)+". "+bond.donorName+" → "+bond.acceptorName+" · "+bond.distance.toFixed(2)+" Å";row.append(sum);
+          const individual=group.bonds[bond.id]??={visible:true};
+          row.append(styleEditor(individual,render,{label:true,fallback:group}));list.append(row);
+        });
+        section.append(list);
+      }
+      const remove=document.createElement("button");remove.type="button";remove.textContent="Remove this base-pair selection";remove.addEventListener("click",()=>{state.selectedPairs.delete(key);render();});section.append(remove);
+      box.append(section);
+    });
+  }
+
+    function updateControls(){
     evaluateMapping();const focusDetails=$("teFocusDetails");if(focusDetails)focusDetails.hidden=!state.secondaryIsDefault||!state.mapping.enabled;updateSourceCopy();
   }
   function render(selected){
     if(selected!==undefined)state.selected=clamp(selected,0,Math.max(0,(state.mapping.enabled?state.secondarySequence.length:activeResidues().length)-1));
-    miniSecondary();heatLegend();regionLegend();updateCopy();updateControls();renderSequencePanel();renderObjectList();renderSavedViews();
+    miniSecondary();heatLegend();regionLegend();updateCopy();updateControls();renderSequencePanel();renderContextPanel();renderObjectList();renderSavedViews();
     const scene=$("scene-tertiary");if(!scene||scene.hidden)return;
     ensureViewer().then(()=>{scheduleViewerResize(true);applyStyles();}).catch(error=>console.error("Tertiary render:",error));
   }
@@ -949,6 +995,7 @@ const TertiaryExplorer = (() => {
       '<label>RNA chain<select id="teChainSelect"></select></label>'+
       '<label class="te-check"><input id="teSameMolecule" type="checkbox"> I confirm that the Secondary and 3D inputs describe the same RNA molecule</label>'+
       '<p id="teMappingStatus" class="te-mapping-status" role="status"></p></details>'+
+      '<section id="teContextPanel" class="te-context-panel" aria-live="polite"></section>'+
       '<details open><summary>Display</summary>'+
       '<label>Representation<select id="teRepresentation"><option value="sticks">PyMOL-style sticks</option><option value="ballstick">Ball &amp; stick</option><option value="wire">Wire</option><option value="spheres">Spheres</option><option value="backbone">RNA backbone</option><option value="cartoon">Cartoon</option></select></label>'+
       '<label>Color by<select id="teColorMode"><option value="nucleotide">Nucleotide / residue type</option><option value="chain">Chain</option><option value="element">Element</option><option value="uniform">Uniform custom color</option><option value="region">Secondary element</option><option value="metadata" disabled>Residue information</option></select></label>'+
@@ -956,13 +1003,14 @@ const TertiaryExplorer = (() => {
       '<label>Background color<input id="teBackgroundColor" type="color" value="#07111c"></label>'+
       '<label class="te-check"><input id="teOrthographic" type="checkbox"> Orthographic projection</label>'+
       '<button type="button" id="teFullscreen">Full-screen viewer</button>'+
-      '<label class="te-check"><input id="teShowPairs" type="checkbox" checked> Show mapped secondary-structure pair connections</label>'+
+      '<label class="te-check"><input id="teSplit" type="checkbox"> 2D + 3D linked view</label>'+
+      '<label class="te-check"><input id="teShowPairs" type="checkbox"> Show all mapped pair guides (advanced)</label>'+
       '<label class="te-check"><input id="teShowIndices" type="checkbox" checked> Show residue indices</label>'+
       '<label class="te-check"><input id="teShowSelectedLabel" type="checkbox" checked> Label selected residue</label>'+
       '<div class="te-visibility-grid"><label class="te-check"><input id="teShowRNA" type="checkbox" checked> RNA</label><label class="te-check"><input id="teShowProtein" type="checkbox" checked> Protein</label><label class="te-check"><input id="teShowSolvent" type="checkbox"> Solvent</label><label class="te-check"><input id="teShowIons" type="checkbox" checked> Ions</label><label class="te-check"><input id="teShowOther" type="checkbox" checked> Other ligands</label><label class="te-check"><input id="teShowHydrogen" type="checkbox"> Hydrogens</label></div>'+
       '<label class="te-check"><input id="teSurface" type="checkbox"> Molecular surface</label>'+
       '<label>Surface transparency<input id="teSurfaceOpacity" type="range" min="0.05" max="0.9" step="0.05" value="0.35"></label></details>'+
-      '<details open><summary>Sequence-linked selection</summary><p class="te-tool-note">Click a residue here or in 3D; selection is shared with the Secondary view when mapping is active.</p><div id="teSequencePanel" class="te-sequence-panel"></div>'+
+      '<details><summary>Select · sequence &amp; ranges</summary><p class="te-tool-note">Selections are additive. Click a selected residue again to remove it.</p><div id="teSequencePanel" class="te-sequence-panel"></div>'+
       '<div class="te-inline-grid"><label>From residue<input id="teSelectStart" type="number" min="1" value="1"></label><label>To residue<input id="teSelectEnd" type="number" min="1" value="10"></label></div>'+
       '<div class="te-button-row"><button type="button" id="teSelectRange">Select range</button><button type="button" id="teSelectCurrent">Add current</button><button type="button" id="teSelectSubtract">Subtract current</button><button type="button" id="teSelectChain">Select RNA chain</button><button type="button" id="teSelectInvert">Invert</button><button type="button" id="teSelectClear">Clear selection</button></div>'+
       '<label>Nucleotide type<select id="teSelectBase"><option>A</option><option>C</option><option>G</option><option>U</option></select></label><button type="button" id="teSelectBaseButton">Select nucleotide type</button>'+
@@ -970,11 +1018,11 @@ const TertiaryExplorer = (() => {
       '<div class="te-button-row"><button type="button" id="teFocusSelection">Center / zoom selection</button><label class="te-check"><input id="teSelectionLabels" type="checkbox"> Label selection</label></div></details>'+
       '<details><summary>Saved objects</summary><p class="te-tool-note">Create a named object from the current selection, then show, hide, isolate, or export it.</p><button type="button" id="teCreateObject">Create object from selection</button><div id="teObjectList">No saved objects.</div></details>'+
       '<details><summary>Residue index</summary><p>Default labels: 1, every 5 residues, and the final residue.</p><details class="te-index-dropdown"><summary>Choose indices</summary><div id="teIndexChoices"></div></details><div class="te-button-row"><button type="button" id="teIndexDefault">Default</button><button type="button" id="teIndexAll">All</button><button type="button" id="teIndexNone">None</button></div></details>'+
-      '<details open><summary>Analyze</summary>'+
+      '<details><summary>Analyze · measurements &amp; contacts</summary>'+
       '<label class="te-check"><input id="teProximity" type="checkbox"> Highlight 3D proximity</label><label>Proximity cutoff (Å)<input id="teProximityCutoff" type="number" min="6" max="30" step="0.5" value="12"></label><p id="teProximityStatus">Highlights C4′ spatial neighbors that are not immediate sequence neighbors.</p>'+
       '<label class="te-check"><input id="teContacts" type="checkbox"> Show close atom contacts / possible H-bond contacts</label><label>Contact cutoff (Å)<input id="teContactCutoff" type="number" min="2.5" max="8" step="0.1" value="4.0"></label><p id="teContactStatus">Shows close atom contacts; N/O pairs ≤3.5 Å are flagged as possible hydrogen-bond contacts.</p><div id="teContactList" class="te-contact-list"></div>'+
       '<fieldset class="te-measure-tools"><legend>Atom measurements</legend><label>Measurement<select id="teMeasureMode"><option value="off">Off</option><option value="distance">Distance · 2 atoms</option><option value="angle">Angle · 3 atoms</option><option value="dihedral">Dihedral · 4 atoms</option></select></label><div class="te-button-row"><button type="button" id="teMeasureUndo">Undo pick</button><button type="button" id="teMeasureClear">Clear all</button></div><p id="teMeasureStatus">Choose distance, angle, or dihedral, then click atoms in the 3D structure.</p><div id="teMeasurementList" class="te-measurement-list">No saved measurements.</div></fieldset>'+
-      '<label class="te-check"><input id="teSplit" type="checkbox"> 2D + 3D linked view</label></details>'+
+      '</details>'+
       '<details><summary>Clipping</summary><label class="te-check"><input id="teClipEnabled" type="checkbox"> Enable clipping slab</label><div class="te-inline-grid"><label>Near<input id="teClipNear" type="range" min="-100" max="0" step="1" value="-40"></label><label>Far<input id="teClipFar" type="range" min="0" max="100" step="1" value="40"></label></div><p class="te-tool-note">Clipping changes only what is visible; it does not delete atoms.</p></details>'+
       '<details><summary>Compare / align structures</summary><label>Alignment scope<select id="teAlignScope"><option value="full">Whole active RNA chain</option><option value="selection">Current residue selection</option></select></label><label>Comparison PDB / mmCIF<input id="teAlignFile" type="file" accept=".pdb,.ent,.cif,.mmcif"></label><label class="te-check"><input id="teCompareVisible" type="checkbox" checked> Show aligned comparison</label><button type="button" id="teClearAlignment">Clear comparison</button><p id="teAlignmentStatus">Upload a second PDB/mmCIF structure to superimpose it on the active RNA chain.</p></details>'+
       '<details><summary>Saved camera views</summary><button type="button" id="teSaveView">Save current view</button><div id="teSavedViews">No saved views.</div></details>'+
@@ -1012,7 +1060,7 @@ const TertiaryExplorer = (() => {
     $("teIndexDefault").addEventListener("click",()=>{state.indexSelection=defaultIndices();buildIndexChoices();render();});
     $("teIndexAll").addEventListener("click",()=>{const n=state.mapping.enabled?state.secondarySequence.length:activeResidues().length;state.indexSelection=new Set(Array.from({length:n},(_,i)=>i));buildIndexChoices();render();});
     $("teIndexNone").addEventListener("click",()=>{state.indexSelection.clear();buildIndexChoices();render();});
-    $("teSelectRange").addEventListener("click",selectRange);$("teSelectCurrent").addEventListener("click",addCurrentToSelection);$("teSelectSubtract").addEventListener("click",subtractCurrentFromSelection);$("teSelectChain").addEventListener("click",selectActiveChain);$("teSelectInvert").addEventListener("click",invertSelection);$("teSelectClear").addEventListener("click",()=>{state.selectionIndices.clear();render();});
+    $("teSelectRange").addEventListener("click",selectRange);$("teSelectCurrent").addEventListener("click",addCurrentToSelection);$("teSelectSubtract").addEventListener("click",subtractCurrentFromSelection);$("teSelectChain").addEventListener("click",selectActiveChain);$("teSelectInvert").addEventListener("click",invertSelection);$("teSelectClear").addEventListener("click",()=>{state.selectionIndices.clear();state.selectedPairs.clear();render();});
     $("teSelectBaseButton").addEventListener("click",selectBase);$("teSelectNearButton").addEventListener("click",selectNearby);$("teFocusSelection").addEventListener("click",focusSelection);
     $("teSelectionLabels").addEventListener("change",e=>{state.selectionLabels=e.target.checked;render();});$("teCreateObject").addEventListener("click",createObject);
     $("teClipEnabled").addEventListener("change",e=>{state.clipEnabled=e.target.checked;render();});$("teClipNear").addEventListener("input",e=>{state.clipNear=Number(e.target.value);render();});$("teClipFar").addEventListener("input",e=>{state.clipFar=Number(e.target.value);render();});
@@ -1101,6 +1149,7 @@ const TertiaryExplorer = (() => {
     window.addEventListener("rna-secondary-context",e=>handleSecondaryContext(e.detail));
     window.addEventListener("rna-secondary-layout",e=>handleSecondaryLayout(e.detail));
     window.addEventListener("rna-secondary-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){state.selected=clamp(e.detail.index,0,state.secondarySequence.length-1);render();}});
+    window.addEventListener("rna-secondary-pair-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){const key=pairKey(e.detail.a,e.detail.b);if(e.detail.selected)state.selectedPairs.add(key);else state.selectedPairs.delete(key);render();}});
     window.addEventListener("resize",()=>scheduleViewerResize(true));
     if(typeof ResizeObserver!=="undefined"){const viewport=$("tertiaryViewport");if(viewport)new ResizeObserver(()=>scheduleViewerResize(true)).observe(viewport);}
     try{const p=typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.getCurrentPositions?SecondaryExplorer.getCurrentPositions():null;if(Array.isArray(p)&&p.length===state.secondarySequence.length)state.secondaryLayoutPositions=p.map(x=>({x:Number(x.x),y:Number(x.y)}));}catch(_){}
@@ -1111,6 +1160,7 @@ const TertiaryExplorer = (() => {
     getDiagnostics(){return {viewerReady:!!viewer,modelReady:!!model,atomCount:model?.selectedAtoms?model.selectedAtoms({}).length:0,representation:state.representation,colorMode:state.colorMode,split:state.split,mappingEnabled:state.mapping.enabled,source:state.currentFileName,
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
       selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
-      comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count};}
+      comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count,selectedPairCount:state.selectedPairs.size,
+      selectedPairKeys:[...state.selectedPairs],hbondCounts:Object.fromEntries([...state.selectedPairs].map(key=>{const [a,b]=key.split(":").map(Number);return [key,pairHydrogenBonds(a,b).length];}))};}
   };
 })();
