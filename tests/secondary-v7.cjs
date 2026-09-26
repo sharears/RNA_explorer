@@ -78,5 +78,7 @@ assert(source.includes("seImageDpi"),"Secondary image export exposes a DPI targe
 assert(source.includes("WORKSPACE_KEY")&&source.includes("saveWorkspaceLocal"),"Secondary workspace can autosave locally without an account");
 assert(source.includes("restoreWorkspaceSnapshot")&&source.includes("pairChemistry")&&source.includes("annotations"),"Secondary project files preserve editable workspace state");
 assert(source.includes("rna-secondary-layout")&&source.includes("getCurrentPositions"),"Secondary broadcasts its edited layout for linked 2D/3D display");
+for(const id of ["seHeatLegendTitle","seHeatLegendTitleFontSize","seHeatLegendTitleStyle","seHeatLegendTitleColor","seHeatLegendBoxMode","seHeatLegendBackgroundColor","seHeatLegendBackgroundOpacity","seHeatLegendBorderVisible","seHeatLegendBorderColor","seHeatLegendBorderThickness","sePairLegendTitle","sePairLegendTitleFontSize","sePairLegendTitleStyle","sePairLegendTitleColor","sePairLegendBoxMode","sePairLegendBackgroundColor","sePairLegendBackgroundOpacity","sePairLegendBorderVisible","sePairLegendBorderColor","sePairLegendBorderThickness"])assert(source.includes(id),"Both data color bars should expose editable title/container control: "+id);
+assert(source.includes("legend-none")&&source.includes("legend-transparent"),"Color bars should support transparent and no-box modes");
 
 console.log("PASS: secondary Sept-24 logic and rendering-unit checks (not a browser integration test).");
