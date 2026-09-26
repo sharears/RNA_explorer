@@ -24,4 +24,5 @@ for(const phrase of ["Export image…","chemExportFormat","chemExportScale","che
   assert(source.includes(phrase),"Chemistry editor export exposes "+phrase);
 }
 assert(source.includes("ExportTools.exportSvgElement"),"Chemistry editor uses the shared image exporter");
+assert(source.includes("getSessionSnapshot")&&source.includes("restoreSessionSnapshot"),"Chemistry edits can round-trip through RNA Explorer project files");
 console.log("PASS: molecular editor templates, editing tools, and rigid multi-atom selection.");
