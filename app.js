@@ -129,7 +129,15 @@ function setupNavigation() {
 }
 
 function setupHomePaths() {
-  // Home cards are real links so every destination gets its own URL/page load.
+  const analyze=document.getElementById("homeAnalyzeToggle"),fork=document.getElementById("homeAnalyzeFork");
+  if(analyze&&fork){
+    analyze.addEventListener("click",()=>{
+      const open=analyze.getAttribute("aria-expanded")==="true";
+      analyze.setAttribute("aria-expanded",String(!open));fork.hidden=open;
+      if(!open)fork.querySelector("a")?.focus({preventScroll:true});
+    });
+  }
+  // Workspace navigation menus use the same progressive-disclosure pattern.
   document.querySelectorAll(".nav-menu > button").forEach(button=>{
     button.addEventListener("click",()=>{
       const open=button.getAttribute("aria-expanded")==="true";
