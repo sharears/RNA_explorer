@@ -658,6 +658,15 @@ const TertiaryExplorer = (() => {
     const shell=$("tertiarySplitShell");if(shell)shell.classList.toggle("linked",!panel.hidden);
     if(panel.hidden){scheduleViewerResize(true);return;}
     root.replaceChildren();
+    const markLinkedSelection=()=>{
+      const pairResidues=selectedPairResidues();
+      root.querySelectorAll("[data-residue-index]").forEach(node=>{
+        const i=Number(node.getAttribute("data-residue-index"));
+        node.classList.toggle("te-linked-selected",state.selectionIndices.has(i));
+        node.classList.toggle("te-linked-pair-residue",pairResidues.has(i));
+      });
+      root.querySelectorAll("[data-pair]").forEach(node=>node.classList.toggle("te-linked-pair-selected",state.selectedPairs.has(node.getAttribute("data-pair"))));
+    };
     const source=$("secondarySvg");
     let context=null;try{context=typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.getContext?SecondaryExplorer.getContext():null;}catch(_){}
     if(source&&source.children.length&&context?.sequence===state.secondarySequence&&context?.structure===state.structure){
@@ -667,9 +676,13 @@ const TertiaryExplorer = (() => {
       root.querySelectorAll("[tabindex]").forEach(el=>el.removeAttribute("tabindex"));
       root.querySelectorAll("[data-residue-index]").forEach(node=>{
         const i=Number(node.getAttribute("data-residue-index"));node.style.cursor="pointer";
-        node.addEventListener("click",()=>chooseResidue(i));
+        node.addEventListener("click",event=>{event.stopPropagation();chooseResidue(i);});
       });
-      scheduleViewerResize(true);return;
+      root.querySelectorAll("[data-pair]").forEach(node=>{
+        const [a,b]=String(node.getAttribute("data-pair")).split(":").map(Number);node.style.cursor="pointer";
+        node.addEventListener("click",event=>{event.stopPropagation();choosePair(a,b);});
+      });
+      markLinkedSelection();scheduleViewerResize(true);return;
     }
     let pos=Array.isArray(state.secondaryLayoutPositions)&&state.secondaryLayoutPositions.length===state.secondarySequence.length
       ?state.secondaryLayoutPositions.map(p=>({x:Number(p.x),y:Number(p.y)})):null;
@@ -685,13 +698,20 @@ const TertiaryExplorer = (() => {
     const minX=Math.min(...pos.map(p=>p.x)),maxX=Math.max(...pos.map(p=>p.x)),minY=Math.min(...pos.map(p=>p.y)),maxY=Math.max(...pos.map(p=>p.y));
     const pad=34,scale=Math.min((340-2*pad)/Math.max(1,maxX-minX),(430-2*pad)/Math.max(1,maxY-minY));
     const map=pos.map(p=>({x:pad+(p.x-minX)*scale,y:pad+(p.y-minY)*scale}));root.setAttribute("viewBox","0 0 340 430");
-    pairs.forEach(([a,b])=>root.append(make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,class:"te-mini-pair"+(a===state.selected||b===state.selected?" selected":"")})));
+    pairs.forEach(([a,b])=>{
+      const key=pairKey(a,b),g=make("g",{"data-pair":key,class:"te-mini-pair-group"+(state.selectedPairs.has(key)?" te-linked-pair-selected":"")});
+      g.append(make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,class:"te-mini-pair"}));
+      const hit=make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,stroke:"transparent","stroke-width":14,"pointer-events":"stroke"});
+      g.append(hit);g.addEventListener("click",event=>{event.stopPropagation();choosePair(a,b);});root.append(g);
+    });
     root.append(make("polyline",{points:map.map(p=>p.x+","+p.y).join(" "),class:"te-mini-backbone"}));
+    const pairResidues=selectedPairResidues();
     map.forEach((p,i)=>{
-      const g=make("g",{class:"te-mini-node"+(i===state.selected?" selected":"")+(partner[state.selected]===i?" paired-selected":""),transform:"translate("+p.x+" "+p.y+")",role:"button","data-residue-index":i,"aria-label":state.secondarySequence[i]+(i+1)});
+      const cls="te-mini-node"+(state.selectionIndices.has(i)?" te-linked-selected":"")+(pairResidues.has(i)?" te-linked-pair-residue":"");
+      const g=make("g",{class:cls,transform:"translate("+p.x+" "+p.y+")",role:"button","data-residue-index":i,"aria-label":state.secondarySequence[i]+(i+1)});
       g.append(make("circle",{r:11,fill:residueColor(i,activeResidues()[i]),stroke:"#d5e2e9","stroke-width":1}));
       const label=make("text",{x:0,y:1,fill:"#07111c","font-size":10,"font-family":"monospace","text-anchor":"middle","dominant-baseline":"central"});label.textContent=state.secondarySequence[i];g.append(label);
-      g.addEventListener("click",()=>chooseResidue(i));root.append(g);
+      g.addEventListener("click",event=>{event.stopPropagation();chooseResidue(i);});root.append(g);
     });
     scheduleViewerResize(true);
   }
@@ -707,14 +727,15 @@ const TertiaryExplorer = (() => {
   function renderSequencePanel(){
     const box=$("teSequencePanel");if(!box)return;box.replaceChildren();
     activeResidues().forEach((r,i)=>{
-      const b=document.createElement("button");b.type="button";b.className="te-seq-residue"+(i===state.selected?" active":"")+(state.selectionIndices.has(i)?" chosen":"");
+      const b=document.createElement("button");b.type="button";b.className="te-seq-residue"+(i===state.selected?" active":"")+(state.selectionIndices.has(i)?" chosen":"")+(selectedPairResidues().has(i)?" paired-chosen":"");
       b.textContent=baseAt(i)+(i+1);b.title=(r.resn||baseAt(i))+(r.chain?" · chain "+r.chain:"");b.addEventListener("click",()=>chooseResidue(i));box.append(b);
     });
   }
   function renderObjectList(){
     const box=$("teObjectList");if(!box)return;box.replaceChildren();
     if(!state.savedObjects.length){box.textContent="No saved objects.";return;}
-    state.savedObjects.forEach(o=>{
+    state.savedObjects.forEach((o,oi)=>{
+      o.style??={color:CHAIN_COLORS[(oi+2)%CHAIN_COLORS.length],thickness:.2,opacity:.25};
       const row=document.createElement("div");row.className="te-object-row";
       const name=document.createElement("input");name.value=o.name;name.setAttribute("aria-label","Object name");
       name.addEventListener("change",()=>{o.name=name.value.trim()||o.name;});
@@ -723,7 +744,7 @@ const TertiaryExplorer = (() => {
       const pdb=document.createElement("button");pdb.type="button";pdb.textContent="PDB";pdb.addEventListener("click",()=>downloadStructure("pdb",o.indices,o.name));
       const cif=document.createElement("button");cif.type="button";cif.textContent="mmCIF";cif.addEventListener("click",()=>downloadStructure("cif",o.indices,o.name));
       const del=document.createElement("button");del.type="button";del.textContent="Delete";del.addEventListener("click",()=>{state.savedObjects=state.savedObjects.filter(x=>x.id!==o.id);if(state.isolateObjectId===o.id)state.isolateObjectId=null;renderObjectList();refreshExportObjectOptions();render();});
-      row.append(name,show,isolate,pdb,cif,del);box.append(row);
+      row.append(name,show,isolate,pdb,cif,del,styleEditor(o.style,render,{label:false}));box.append(row);
     });
   }
   function renderSavedViews(){
@@ -778,7 +799,7 @@ const TertiaryExplorer = (() => {
   function createObject(){
     const indices=state.selectionIndices.size?new Set(state.selectionIndices):new Set([state.selected]);
     const name=prompt("Object name","object_"+state.objectSerial);if(name===null)return;
-    state.savedObjects.push({id:state.objectSerial,name:name.trim()||("object_"+state.objectSerial),indices,visible:true});state.objectSerial++;renderObjectList();refreshExportObjectOptions();render();
+    state.savedObjects.push({id:state.objectSerial,name:name.trim()||("object_"+state.objectSerial),indices,visible:true,style:{color:CHAIN_COLORS[(state.objectSerial+1)%CHAIN_COLORS.length],thickness:.2,opacity:.25}});state.objectSerial++;renderObjectList();refreshExportObjectOptions();render();
   }
 
   function atomLinePdb(atom,serial){
