@@ -415,7 +415,7 @@ const SecondaryExplorer = (() => {
     if(!preview) {
       const hit=svg("path",{d:path,fill:"none",stroke:"transparent","stroke-width":18,"pointer-events":"stroke"});
       g.append(hit);
-      g.setAttribute("tabindex","0");g.setAttribute("role","button");
+      g.setAttribute("tabindex","0");g.setAttribute("role","button");g.setAttribute("aria-pressed",String(selectedPairKeys.has(key)));
       g.setAttribute("aria-label",`Base pair ${a+1}–${b+1}${probability!=null?", probability "+probability.toFixed(3):""}${code?", "+code:""}`);
       const choose=()=>selectPair(a,b);
       g.addEventListener("click",choose);
@@ -512,7 +512,7 @@ const SecondaryExplorer = (() => {
     pairs.forEach(([a,b])=>pairGraphic(root,a,b,pos,keyOf(a,b)));
     pos.forEach((p,i)=>{
       const s=residueStyle(i);
-      const g=svg("g",{transform:`translate(${p.x} ${p.y})`,class:"se-node"+(pinnedResidues.has(i)?" pinned":""),tabindex:0,role:"button","data-residue-index":i,"aria-label":`${seq[i]}${i+1}, ${partner[i]<0?"unpaired":"paired with "+(partner[i]+1)}`});
+      const g=svg("g",{transform:`translate(${p.x} ${p.y})`,class:"se-node"+(pinnedResidues.has(i)?" pinned":"")+(selectedResidues.has(i)?" multi-selected":""),tabindex:0,role:"button","aria-pressed":String(selectedResidues.has(i)),"data-residue-index":i,"aria-label":`${seq[i]}${i+1}, ${partner[i]<0?"unpaired":"paired with "+(partner[i]+1)}`});
       const persistent=selectedResidues.has(i),current=i===selected,pairedFocus=i===partner[selected];
       if(persistent||current||pairedFocus) g.append(svg("circle",{"data-export-remove":"",r:persistent?22:20,fill:"none",stroke:persistent?"#f5e9c8":"#ffffff","stroke-width":persistent?3:1.5,"stroke-dasharray":persistent||current?"none":"3 3"}));
       g.append(svg("circle",{r:16,fill:s.fillColor,stroke:s.circleColor,"stroke-width":s.circleWidth}));
@@ -1038,7 +1038,7 @@ const SecondaryExplorer = (() => {
       const file=e.target.files[0];if(!file)return;
       try{
         const text=await file.text(),parsed=file.name.toLowerCase().endsWith(".ct")?parseCtText(text):parseDbnText(text);
-        $("secondarySequence").value=parsed.sequence;$("secondaryDotBracket").value=parsed.structure;load(parsed.sequence,parsed.structure);status("Imported "+file.name+" · "+parsed.sequence.length+" residues.");
+        setSourceNote("");$("secondarySequence").value=parsed.sequence;$("secondaryDotBracket").value=parsed.structure;load(parsed.sequence,parsed.structure);status("Imported "+file.name+" · "+parsed.sequence.length+" residues.");
       }catch(error){status("Import failed: "+error.message,true);}
       e.target.value="";
     });
