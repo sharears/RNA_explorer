@@ -1108,7 +1108,7 @@ const SecondaryExplorer = (() => {
     },
     followDefault(index){if(index>=0&&index<seq.length){selected=index;panel();render();}},
     followExternal(index,selectedState){if(index>=0&&index<seq.length){selected=index;if(selectedState===true)selectedResidues.add(index);else if(selectedState===false)selectedResidues.delete(index);panel();render();}},
-    followPairExternal(a,b,selectedState){const key=keyOf(a,b);if(selectedState===true)selectedPairKeys.add(key);else if(selectedState===false)selectedPairKeys.delete(key);selectedPairKey=selectedState===false&&selectedPairKey===key?([...selectedPairKeys].at(-1)||null):key;selected=a;panel();render();},
+    followPairExternal(a,b,selectedState){const key=keyOf(a,b);if(selectedState===true){selectedPairKeys.add(key);selectedPairKey=key;}else if(selectedState===false){selectedPairKeys.delete(key);if(selectedPairKey===key)selectedPairKey=[...selectedPairKeys].at(-1)||null;}selected=a;panel();render();},
     getContext(){return {sequence:seq,structure:db,isDefault:seq===defaultSeq&&db===defaultDb,selected,selectedPairKey,selectedResidues:[...selectedResidues],selectedPairKeys:[...selectedPairKeys],sourceNote};}
   };
 })();
