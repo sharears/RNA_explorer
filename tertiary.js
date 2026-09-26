@@ -26,11 +26,19 @@ const TertiaryExplorer = (() => {
   const IONS=new Set(["NA","K","MG","CA","ZN","CL","MN","FE","CO","CU","NI","SR","CS","BA","CD","HG","PB","BR","IOD","F"]);
   const AMINO=new Set(["ALA","ARG","ASN","ASP","CYS","GLN","GLU","GLY","HIS","ILE","LEU","LYS","MET","PHE","PRO","SER","THR","TRP","TYR","VAL","SEC","PYL"]);
   const BACKBONE_ATOMS=["P","OP1","OP2","O1P","O2P","O5'","O5*","C5'","C5*","C4'","C4*","C3'","C3*","O3'","O3*"];
+  const BASE_HBOND_ROLES={
+    A:{donors:new Set(["N6"]),acceptors:new Set(["N1","N3","N7"])},
+    G:{donors:new Set(["N1","N2"]),acceptors:new Set(["O6","N3","N7"])},
+    C:{donors:new Set(["N4"]),acceptors:new Set(["N3","O2"])},
+    U:{donors:new Set(["N3"]),acceptors:new Set(["O2","O4"])}
+  };
+  const DEFAULT_LINE_STYLE={lineStyle:"dashed",color:"#ffffff",thickness:.07,opacity:.82,visible:true,labelVisible:true};
+  const DEFAULT_HBOND_STYLE={lineStyle:"dashed",color:"#74d7b6",thickness:.055,opacity:.95,visible:true,labelVisible:false};
 
   const state={
     defaultSequence:"",defaultStructure:"",secondarySequence:"",structure:"",
     colors:{},names:{},onSelect:()=>{},selected:0,
-    representation:"sticks",colorMode:"nucleotide",showPairs:true,showIndices:true,showSelectedLabel:true,
+    representation:"sticks",colorMode:"nucleotide",showPairs:false,showIndices:true,showSelectedLabel:true,
     indexSelection:new Set(),metadata:{},heatEnabled:false,heatTheme:"viridis",heatRange:[0,1],
     secondaryIsDefault:true,sourceIsDefault:true,sameMoleculeConfirmed:false,
     proximityEnabled:false,proximityCutoff:12,contactEnabled:false,contactCutoff:4.0,
@@ -40,7 +48,8 @@ const TertiaryExplorer = (() => {
     mapping:{enabled:false,level:"pending",message:""},
     surfaceEnabled:false,surfaceOpacity:0.35,uniformColor:"#74d7b6",backgroundColor:"#07111c",orthographic:false,
     visibility:{rna:true,protein:true,solvent:false,ions:true,other:true,hydrogen:false},
-    selectionIndices:new Set(),selectionLabels:false,
+    selectionIndices:new Set(),selectionLabels:false,selectionStyle:{color:"#f2c66d",thickness:.24,opacity:.32},
+    selectedPairs:new Set(),pairHbondStyles:{},hbondCutoff:3.5,
     savedObjects:[],objectSerial:1,isolateObjectId:null,
     savedViews:[],viewSerial:1,
     comparison:{model:null,name:"",rmsd:null,count:0,visible:true,status:""},
@@ -108,6 +117,47 @@ const TertiaryExplorer = (() => {
     const x=coordFor(a),y=coordFor(b);if(!x||!y)return NaN;
     return Math.hypot(x.x-y.x,x.y-y.y,x.z-y.z);
   }
+  const pairKey=(a,b)=>Math.min(a,b)+":"+Math.max(a,b);
+  const atomName=a=>String(a?.atom||"").replace(/*/g,"'").trim().toUpperCase();
+  function atomDistanceRaw(a,b){return Math.hypot(Number(a.x)-Number(b.x),Number(a.y)-Number(b.y),Number(a.z)-Number(b.z));}
+  function pairHydrogenBonds(a,b){
+    const residues=activeResidues(),ra=residues[a],rb=residues[b];if(!ra||!rb)return [];
+    const rolesA=BASE_HBOND_ROLES[baseAt(a)],rolesB=BASE_HBOND_ROLES[baseAt(b)];if(!rolesA||!rolesB)return [];
+    const candidates=[],seen=new Set();
+    const collect=(donorRes,donorRoles,acceptorRes,acceptorRoles)=>{
+      donorRes.atoms.forEach(d=>{
+        const dn=atomName(d);if(!donorRoles.donors.has(dn))return;
+        acceptorRes.atoms.forEach(ac=>{
+          const an=atomName(ac);if(!acceptorRoles.acceptors.has(an))return;
+          const distance=atomDistanceRaw(d,ac);if(distance>state.hbondCutoff||distance<1.5)return;
+          const id=String(d.serial??dn)+"-"+String(ac.serial??an);if(seen.has(id))return;seen.add(id);
+          candidates.push({id,donor:d,acceptor:ac,distance,donorName:dn,acceptorName:an});
+        });
+      });
+    };
+    collect(ra,rolesA,rb,rolesB);collect(rb,rolesB,ra,rolesA);
+    return candidates.sort((x,y)=>x.distance-y.distance);
+  }
+  function ensurePairHbondStyle(key,bonds){
+    const group=state.pairHbondStyles[key]??={...DEFAULT_HBOND_STYLE,bonds:{}};
+    group.bonds??={};
+    bonds.forEach(b=>{group.bonds[b.id]??={...DEFAULT_HBOND_STYLE};});
+    return group;
+  }
+  function drawStyledConnector(start,end,style){
+    if(!viewer||style.visible===false)return;
+    const radius=Math.max(.012,Number(style.thickness)||.05),opacity=clamp(Number(style.opacity)||0,0,1),color=style.color||"#ffffff";
+    const mode=style.lineStyle||"solid",dx=end.x-start.x,dy=end.y-start.y,dz=end.z-start.z;
+    const point=t=>({x:start.x+dx*t,y:start.y+dy*t,z:start.z+dz*t});
+    if(mode==="solid"){viewer.addCylinder({start,end,radius,color,opacity,fromCap:1,toCap:1});return;}
+    if(mode==="dotted"){
+      for(let i=1;i<10;i++)viewer.addSphere({center:point(i/10),radius:radius*1.65,color,opacity});
+      return;
+    }
+    const n=11;
+    for(let i=0;i<n;i+=2)viewer.addCylinder({start:point(i/n),end:point(Math.min(1,(i+1)/n)),radius,color,opacity,fromCap:1,toCap:1});
+  }
+
   function baseAt(i){
     if(state.mapping.enabled&&state.secondarySequence[i])return state.secondarySequence[i];
     return activeResidues()[i]?.base||"?";
