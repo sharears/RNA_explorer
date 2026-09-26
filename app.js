@@ -26,7 +26,9 @@ const SITE_SEARCH_ITEMS = [
   {label:"Molecular surface",description:"Toggle and adjust the molecular surface",page:"tertiary",scene:"tertiary",target:"#teSurface",keywords:"surface transparency"},
   {label:"Measurements and contacts",description:"Distances, angles, dihedrals, contacts, and proximity",page:"tertiary",scene:"tertiary",target:"#teMeasureMode",keywords:"measure distance angle dihedral contacts proximity analyze"},
   {label:"Compare / align structures",description:"Superimpose another structure and calculate RMSD",page:"tertiary",scene:"tertiary",target:"#teAlignFile",keywords:"compare align superimpose rmsd structures"},
-  {label:"Tertiary structure export",description:"Export 3D images or coordinate files",page:"tertiary",scene:"tertiary",target:"#teOpenExport",keywords:"export png svg pdf pdb mmcif structure image"}
+  {label:"Tertiary structure export",description:"Export 3D images or coordinate files",page:"tertiary",scene:"tertiary",target:"#teOpenExport",keywords:"export png svg pdf pdb mmcif structure image"},
+  {label:"Save Project",description:"Download the current RNA Explorer session so you can continue later",page:"secondary",scene:"secondary",target:"#saveProjectButton",keywords:"save project session workspace progress backup json resume"},
+  {label:"Open Project",description:"Restore a previously saved RNA Explorer session",page:"secondary",scene:"secondary",target:"#openProjectButton",keywords:"open import project session workspace progress restore resume json"}
 ];
 const NS = "http://www.w3.org/2000/svg";
 
@@ -465,6 +467,7 @@ function initialize() {
   setupNavigation();
   setupHomePaths();
   setupSiteSearch();
+  ProjectSession.setup();
   setupChemicalJourney();
   MoleculeEditor.setup();
   renderPrimary();
