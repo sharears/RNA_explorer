@@ -23,7 +23,14 @@ try{
     throw new Error("Thought bubble copy is missing or changed: "+thought);
 
   const cards=await page.locator(".home-path-card").count();
-  if(cards!==2)throw new Error("Homepage should retain exactly two Learn/Analyze path cards; found "+cards);
+  if(cards!==0)throw new Error("Redundant homepage Learn/Analyze cards should be removed; found "+cards);
+  const learnHref=await page.locator('.home-cover-actions a[href="?page=journey"]').getAttribute("href");
+  if(learnHref!=="?page=journey")throw new Error("Learn RNA structure should open the guided journey.");
+  const analyze=page.locator("#homeAnalyzeToggle"),fork=page.locator("#homeAnalyzeFork");
+  await analyze.click();
+  if(await fork.isHidden())throw new Error("Analyze an RNA should reveal the 2D/3D fork.");
+  const destinations=await fork.locator("a").evaluateAll(nodes=>nodes.map(n=>n.getAttribute("href")));
+  if(!destinations.includes("?page=secondary")||!destinations.includes("?page=tertiary"))throw new Error("Analyze fork must contain both 2D and 3D workspace links.");
 
   const serious=errors.filter(x=>!/favicon|ResizeObserver loop/i.test(x));
   if(serious.length)throw new Error("Homepage browser runtime errors:\n"+serious.join("\n"));
