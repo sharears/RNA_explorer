@@ -196,6 +196,13 @@
 .te-mapping-status[data-level="warning"] { border-color:#c89b4a; color:#f0cf8b; }
 .te-mapping-status[data-level="pending"] { border-color:#5d7fa3; color:#a9c2de; }
 .te-mapping-status[data-level="error"] { border-color:#b55d6a; color:#e9a6af; }
+
+.te-derived-status{
+  margin:9px 0 4px;padding:10px 11px;border:1px solid rgba(116,215,182,.28);
+  border-radius:8px;background:rgba(116,215,182,.07);color:#d9efe7;line-height:1.55
+}
+#teGenerateSecondary{border-color:rgba(116,215,182,.48);color:var(--mint)}
+#teGenerateSecondary:hover{background:rgba(116,215,182,.09)}
 .te-resolution-control {
   display:inline-flex !important;
   align-items:center !important;
