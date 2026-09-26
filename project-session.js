@@ -72,6 +72,7 @@ const ProjectSession = (() => {
     if(message&&kind!=="working")setTimeout(()=>{if(el.textContent===message)el.hidden=true;},6000);
   }
   function setup(){
+    document.querySelectorAll("#projectSaveButton,#projectOpenButton,#projectOpenInput").forEach(el=>el.remove());
     const save=$("saveProjectButton"),open=$("openProjectButton"),input=$("projectFileInput");
     if(!save||!open||!input)return;
     save.addEventListener("click",()=>{try{downloadProject();}catch(error){setStatus("Could not save project: "+error.message,"error");}});

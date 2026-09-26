@@ -259,6 +259,25 @@ function setupSiteSearch() {
   window.addEventListener("popstate",applyPageMode);
 }
 
+function arrangeTopbar(page){
+  const inner=document.getElementById("innerNav"),actions=document.getElementById("topbarActions");
+  const save=document.getElementById("saveProjectButton"),open=document.getElementById("openProjectButton"),search=document.getElementById("siteSearchButton");
+  const learn=document.getElementById("learnNavMenu"),feedback=document.getElementById("workspaceFeedbackLink");
+  if(!inner||!actions||!save||!open||!search)return;
+  if(page==="home"){
+    actions.hidden=false;
+    actions.append(save,open,search);
+    inner.hidden=true;
+    return;
+  }
+  inner.hidden=false;actions.hidden=true;
+  if(learn){
+    inner.insertBefore(save,learn);
+    inner.insertBefore(open,learn);
+  }
+  if(feedback)feedback.after(search);else inner.append(search);
+}
+
 function applyPageMode() {
   const search=String(window.location&&window.location.search||"");
   const match=search.match(/[?&]page=([^&]+)/);
@@ -266,8 +285,7 @@ function applyPageMode() {
   const valid=["home","journey","example","secondary","tertiary"];
   const page=valid.includes(mode)?mode:"home";
   document.body.dataset.pageMode=page;
-  const inner=document.getElementById("innerNav");
-  if(inner)inner.hidden=page==="home";
+  arrangeTopbar(page);
 
   if(page==="home"){
     showScene(0);
@@ -400,9 +418,10 @@ function setupTertiaryControls() {
 }
 
 function setupDialog() {
-  const dialog = document.getElementById("aboutDialog");
-  document.getElementById("aboutButton").addEventListener("click", () => dialog.showModal());
-  document.getElementById("dialogClose").addEventListener("click", () => dialog.close());
+  const dialog=document.getElementById("aboutDialog"),open=document.getElementById("aboutButton"),close=document.getElementById("dialogClose");
+  if(!dialog||!open||!close)return;
+  open.addEventListener("click",()=>dialog.showModal());
+  close.addEventListener("click",()=>dialog.close());
   dialog.addEventListener("click", event => {
     const bounds = dialog.getBoundingClientRect();
     if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close();

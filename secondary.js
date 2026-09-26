@@ -21,8 +21,16 @@ const SecondaryExplorer = (() => {
   let layoutHistory=[],layoutFuture=[],restoringWorkspace=false;
   const WORKSPACE_KEY="rna-explorer-secondary-workspace-v1";
   const legendSettings={
-    heat:{visible:true,orientation:"horizontal",thickness:16,tickThickness:1,tickCount:3,tickValues:"",font:"monospace",fontSize:12,fontColor:"#bacbd7",x:18,y:88},
-    pair:{visible:true,orientation:"horizontal",thickness:16,tickThickness:1,tickCount:3,tickValues:"",font:"monospace",fontSize:12,fontColor:"#bacbd7",x:18,y:188}
+    heat:{
+      visible:true,orientation:"horizontal",thickness:16,tickThickness:1,tickCount:3,tickValues:"",font:"monospace",fontSize:12,fontColor:"#bacbd7",x:18,y:88,
+      title:"Reactivity / residue information",titleFontSize:13,titleStyle:"bold",titleColor:"#f5e9c8",
+      boxMode:"box",backgroundColor:"#08111e",backgroundOpacity:.92,borderVisible:true,borderColor:"#c5d6e2",borderThickness:1
+    },
+    pair:{
+      visible:true,orientation:"horizontal",thickness:16,tickThickness:1,tickCount:3,tickValues:"",font:"monospace",fontSize:12,fontColor:"#bacbd7",x:18,y:188,
+      title:"Base-pair probability",titleFontSize:13,titleStyle:"bold",titleColor:"#f5e9c8",
+      boxMode:"box",backgroundColor:"#08111e",backgroundOpacity:.92,borderVisible:true,borderColor:"#c5d6e2",borderThickness:1
+    }
   };
   const defaults={...settings};
   const palettes={
@@ -186,6 +194,7 @@ const SecondaryExplorer = (() => {
     if($("seLegendToggle")){$("seLegendToggle").textContent=settings.legend?"Hide base-pair legend":"Show base-pair legend";$("seLegendToggle").setAttribute("aria-pressed",String(settings.legend));}
     if($("seDragMode"))$("seDragMode").value=dragMode;
     if($("seFlexDrag"))$("seFlexDrag").checked=flexDrag;
+    syncLegendControls();
     if($("secondarySequence"))$("secondarySequence").value=seq;
     if($("secondaryDotBracket"))$("secondaryDotBracket").value=db;
     setSourceNote(sourceNote);
@@ -666,24 +675,44 @@ const SecondaryExplorer = (() => {
     layerBox.insertAdjacentHTML("beforeend",
       '<details class="se-legend-settings"><summary>Reactivity color bar</summary>'+
       '<label><input id="seHeatLegendVisible" type="checkbox" checked> Show color bar</label>'+
+      '<label>Title text<input id="seHeatLegendTitle" type="text" value="Reactivity / residue information"></label>'+
+      '<label>Title font size<input id="seHeatLegendTitleFontSize" type="number" min="8" max="48" step="1" value="13"></label>'+
+      '<label>Title style<select id="seHeatLegendTitleStyle"><option value="normal">Normal</option><option value="bold" selected>Bold</option><option value="italic">Italic</option></select></label>'+
+      '<label>Title font color<input id="seHeatLegendTitleColor" type="color" value="#f5e9c8"></label>'+
       '<label>Orientation<select id="seHeatLegendOrientation"><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label>'+
       '<label>Automatic tick count<input id="seHeatLegendTicks" type="number" min="2" max="12" step="1" value="3"></label>'+
       '<label>Custom tick values<input id="seHeatLegendValues" type="text" placeholder="e.g. 0, 0.5, 1, 1.5, 2"></label>'+
       '<label>Bar thickness<input id="seHeatLegendThickness" type="number" min="4" max="60" step="1" value="16"></label>'+
       '<label>Tick thickness<input id="seHeatLegendTickThickness" type="number" min="0.5" max="6" step="0.5" value="1"></label>'+
-      '<label>Font family<select id="seHeatLegendFont"><option>monospace</option><option>Arial</option><option>Calibri</option><option>Times New Roman</option></select></label>'+
-      '<label>Font size<input id="seHeatLegendFontSize" type="number" min="8" max="36" step="1" value="12"></label>'+
-      '<label>Font color<input id="seHeatLegendFontColor" type="color" value="#bacbd7"></label></details>'+
+      '<label>Tick font family<select id="seHeatLegendFont"><option>monospace</option><option>Arial</option><option>Calibri</option><option>Times New Roman</option></select></label>'+
+      '<label>Tick font size<input id="seHeatLegendFontSize" type="number" min="8" max="36" step="1" value="12"></label>'+
+      '<label>Tick font color<input id="seHeatLegendFontColor" type="color" value="#bacbd7"></label>'+
+      '<label>Box style<select id="seHeatLegendBoxMode"><option value="box">Box</option><option value="transparent">Transparent background</option><option value="none">No box</option></select></label>'+
+      '<label>Box background color<input id="seHeatLegendBackgroundColor" type="color" value="#08111e"></label>'+
+      '<label>Box background opacity<input id="seHeatLegendBackgroundOpacity" type="number" min="0" max="1" step="0.05" value="0.92"></label>'+
+      '<label><input id="seHeatLegendBorderVisible" type="checkbox" checked> Show box border</label>'+
+      '<label>Border color<input id="seHeatLegendBorderColor" type="color" value="#c5d6e2"></label>'+
+      '<label>Border thickness<input id="seHeatLegendBorderThickness" type="number" min="0.5" max="8" step="0.5" value="1"></label></details>'+
       '<details class="se-legend-settings"><summary>Base-pair probability color bar</summary>'+
       '<label><input id="sePairLegendVisible" type="checkbox" checked> Show color bar</label>'+
+      '<label>Title text<input id="sePairLegendTitle" type="text" value="Base-pair probability"></label>'+
+      '<label>Title font size<input id="sePairLegendTitleFontSize" type="number" min="8" max="48" step="1" value="13"></label>'+
+      '<label>Title style<select id="sePairLegendTitleStyle"><option value="normal">Normal</option><option value="bold" selected>Bold</option><option value="italic">Italic</option></select></label>'+
+      '<label>Title font color<input id="sePairLegendTitleColor" type="color" value="#f5e9c8"></label>'+
       '<label>Orientation<select id="sePairLegendOrientation"><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label>'+
       '<label>Automatic tick count<input id="sePairLegendTicks" type="number" min="2" max="12" step="1" value="3"></label>'+
       '<label>Custom tick values<input id="sePairLegendValues" type="text" placeholder="e.g. 0, 0.2, 0.5, 0.8, 1"></label>'+
       '<label>Bar thickness<input id="sePairLegendThickness" type="number" min="4" max="60" step="1" value="16"></label>'+
       '<label>Tick thickness<input id="sePairLegendTickThickness" type="number" min="0.5" max="6" step="0.5" value="1"></label>'+
-      '<label>Font family<select id="sePairLegendFont"><option>monospace</option><option>Arial</option><option>Calibri</option><option>Times New Roman</option></select></label>'+
-      '<label>Font size<input id="sePairLegendFontSize" type="number" min="8" max="36" step="1" value="12"></label>'+
-      '<label>Font color<input id="sePairLegendFontColor" type="color" value="#bacbd7"></label></details>');
+      '<label>Tick font family<select id="sePairLegendFont"><option>monospace</option><option>Arial</option><option>Calibri</option><option>Times New Roman</option></select></label>'+
+      '<label>Tick font size<input id="sePairLegendFontSize" type="number" min="8" max="36" step="1" value="12"></label>'+
+      '<label>Tick font color<input id="sePairLegendFontColor" type="color" value="#bacbd7"></label>'+
+      '<label>Box style<select id="sePairLegendBoxMode"><option value="box">Box</option><option value="transparent">Transparent background</option><option value="none">No box</option></select></label>'+
+      '<label>Box background color<input id="sePairLegendBackgroundColor" type="color" value="#08111e"></label>'+
+      '<label>Box background opacity<input id="sePairLegendBackgroundOpacity" type="number" min="0" max="1" step="0.05" value="0.92"></label>'+
+      '<label><input id="sePairLegendBorderVisible" type="checkbox" checked> Show box border</label>'+
+      '<label>Border color<input id="sePairLegendBorderColor" type="color" value="#c5d6e2"></label>'+
+      '<label>Border thickness<input id="sePairLegendBorderThickness" type="number" min="0.5" max="8" step="0.5" value="1"></label></details>');
     old.forEach(el=>el.remove());
     $("seMetadataFile").closest("fieldset").insertAdjacentHTML("afterbegin",'<button type="button" id="seExample">Load example reactivity CSV</button><p><a href="data/rna_residue_reactivity.csv" download>Download example CSV</a> · Values supplied for the default tRNA.</p>');
     $("sePairProbFile").closest("fieldset").insertAdjacentHTML("afterbegin",'<button type="button" id="sePairProbExample">Load example base-pair probabilities</button><p><a href="data/rna_base_pair_probability_example.csv" download>Download example probability CSV</a> · Synthetic demonstration data for the default tRNA.</p>');
@@ -773,7 +802,10 @@ const SecondaryExplorer = (() => {
         ["Visible","visible",el=>el.checked],["Orientation","orientation",el=>el.value],
         ["Ticks","tickCount",el=>Number(el.value)],["Values","tickValues",el=>el.value],
         ["Thickness","thickness",el=>Number(el.value)],["TickThickness","tickThickness",el=>Number(el.value)],
-        ["Font","font",el=>el.value],["FontSize","fontSize",el=>Number(el.value)],["FontColor","fontColor",el=>el.value]
+        ["Font","font",el=>el.value],["FontSize","fontSize",el=>Number(el.value)],["FontColor","fontColor",el=>el.value],
+        ["Title","title",el=>el.value],["TitleFontSize","titleFontSize",el=>Number(el.value)],["TitleStyle","titleStyle",el=>el.value],["TitleColor","titleColor",el=>el.value],
+        ["BoxMode","boxMode",el=>el.value],["BackgroundColor","backgroundColor",el=>el.value],["BackgroundOpacity","backgroundOpacity",el=>Number(el.value)],
+        ["BorderVisible","borderVisible",el=>el.checked],["BorderColor","borderColor",el=>el.value],["BorderThickness","borderThickness",el=>Number(el.value)]
       ];
       pairs.forEach(([suffix,key,read])=>$(prefix+suffix)?.addEventListener("input",e=>{if(e.target.checkValidity?.()===false)return;cfg[key]=read(e.target);render();}));
       $(prefix+"Visible")?.addEventListener("change",e=>{cfg.visible=e.target.checked;render();});
@@ -781,6 +813,7 @@ const SecondaryExplorer = (() => {
     }
     bindLegendControls("heat","seHeatLegend");
     bindLegendControls("pair","sePairLegend");
+    syncLegendControls();
     $("seExample").addEventListener("click",async()=>{
       const ticket=++metadataTicket;$("seMetadataStatus").textContent="Loading example…";
       try{
@@ -845,6 +878,22 @@ const SecondaryExplorer = (() => {
     $("seResidueList").value=String(selected);
     $("seIndexMode").textContent="Showing: "+(indexMode==="default"?"1, every 5, and last":indexMode==="all"?"all indices":indexSelection.size+" selected indices");
   }
+  function syncLegendControls(){
+    [["heat","seHeatLegend"],["pair","sePairLegend"]].forEach(([kind,prefix])=>{
+      const cfg=legendSettings[kind];
+      const values={
+        Visible:cfg.visible,Orientation:cfg.orientation,Ticks:cfg.tickCount,Values:cfg.tickValues,Thickness:cfg.thickness,TickThickness:cfg.tickThickness,
+        Font:cfg.font,FontSize:cfg.fontSize,FontColor:cfg.fontColor,Title:cfg.title,TitleFontSize:cfg.titleFontSize,TitleStyle:cfg.titleStyle,TitleColor:cfg.titleColor,
+        BoxMode:cfg.boxMode,BackgroundColor:cfg.backgroundColor,BackgroundOpacity:cfg.backgroundOpacity,BorderVisible:cfg.borderVisible,BorderColor:cfg.borderColor,BorderThickness:cfg.borderThickness
+      };
+      Object.entries(values).forEach(([suffix,value])=>{const el=$(prefix+suffix);if(!el)return;if("checked" in el&&typeof value==="boolean")el.checked=value;else el.value=String(value??"");});
+    });
+  }
+  function hexToRgba(hex,opacity){
+    const value=String(hex||"#08111e").replace("#",""),full=value.length===3?value.split("").map(v=>v+v).join(""):value;
+    const n=parseInt(full,16);if(!Number.isFinite(n))return "rgba(8,17,30,"+opacity+")";
+    return "rgba("+((n>>16)&255)+","+((n>>8)&255)+","+(n&255)+","+Math.max(0,Math.min(1,Number(opacity)))+")";
+  }
   function legendTickValues(cfg,min,max){
     const custom=String(cfg.tickValues||"").split(",").map(v=>Number(v.trim())).filter(Number.isFinite);
     if(custom.length>=2)return custom;
@@ -871,11 +920,16 @@ const SecondaryExplorer = (() => {
   }
   function renderScaleLegend(box,key,title,stops,min,max,active){
     const cfg=legendSettings[key];box.hidden=!active||!cfg.visible;box.replaceChildren();if(box.hidden)return;
-    box.className="se-data-legend "+cfg.orientation;box.style.left=cfg.x+"px";box.style.top=cfg.y+"px";
+    box.className="se-data-legend "+cfg.orientation+" legend-"+(cfg.boxMode||"box");box.style.left=cfg.x+"px";box.style.top=cfg.y+"px";
     const cssVar=(name,value)=>box.style.setProperty?box.style.setProperty(name,value):box.style[name]=value;
     cssVar("--legend-thickness",cfg.thickness+"px");cssVar("--tick-thickness",cfg.tickThickness+"px");
     cssVar("--legend-font",cfg.font);cssVar("--legend-font-size",cfg.fontSize+"px");cssVar("--legend-font-color",cfg.fontColor);
-    const head=document.createElement("div");head.className="se-legend-drag-handle";head.innerHTML="<strong>"+title+"</strong><span>drag</span>";
+    cssVar("--legend-title-size",(Number(cfg.titleFontSize)||13)+"px");cssVar("--legend-title-color",cfg.titleColor||"#f5e9c8");
+    cssVar("--legend-title-style",cfg.titleStyle==="italic"?"italic":"normal");cssVar("--legend-title-weight",cfg.titleStyle==="bold"?"750":"500");
+    box.style.background=cfg.boxMode==="box"?hexToRgba(cfg.backgroundColor,cfg.backgroundOpacity):"transparent";
+    box.style.border=cfg.boxMode==="none"||!cfg.borderVisible?"none":(Number(cfg.borderThickness)||1)+"px solid "+(cfg.borderColor||"#c5d6e2");
+    const head=document.createElement("div");head.className="se-legend-drag-handle";
+    const heading=document.createElement("strong"),drag=document.createElement("span");heading.textContent=String(cfg.title||title);drag.textContent="drag";head.append(heading,drag);
     const body=document.createElement("div");body.className="se-legend-body";
     const bar=document.createElement("div");bar.className="se-heat-bar";bar.style.background="linear-gradient("+(cfg.orientation==="vertical"?"to top":"to right")+","+stops.join(",")+")";
     const ticks=document.createElement("div");ticks.className="se-legend-ticks";
