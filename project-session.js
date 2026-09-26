@@ -14,6 +14,7 @@ const ProjectSession = (() => {
     return base+"-session.rnaexplorer.json";
   }
   function getProjectSnapshot(){
+    const tertiaryRaw=typeof TertiaryExplorer!=="undefined"&&TertiaryExplorer.getWorkspaceSnapshot?TertiaryExplorer.getWorkspaceSnapshot():null;
     return {
       schema:SCHEMA,
       version:VERSION,
@@ -21,7 +22,7 @@ const ProjectSession = (() => {
       savedAt:new Date().toISOString(),
       page:currentPage(),
       secondary:typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.getWorkspaceSnapshot?SecondaryExplorer.getWorkspaceSnapshot():null,
-      tertiary:typeof TertiaryExplorer!=="undefined"&&TertiaryExplorer.getWorkspaceSnapshot?TertiaryExplorer.getWorkspaceSnapshot():null,
+      tertiary:tertiaryRaw?.sourceText?tertiaryRaw:null,
       chemistry:typeof MoleculeEditor!=="undefined"&&MoleculeEditor.getSessionSnapshot?MoleculeEditor.getSessionSnapshot():null
     };
   }
