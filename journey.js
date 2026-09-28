@@ -24,7 +24,7 @@ function reactionView(kind) {
   button.disabled = journey.active === kind;
   button.textContent = journey.active === kind ? 'Joining the components…' : done ? 'Replay connection' : isSugar ? 'Form nucleoside' : 'Form nucleotide';
   const bondText=document.getElementById(kind+'Bond');
-  bondText.textContent=done ? (isSugar?`New bond: C1′–${nitrogen} · N-glycosidic`:'New bond: 5′-O–P · phosphoester') : 'Follow the amber H and OH as they form H₂O.';
+  bondText.textContent=done ? (isSugar?`New bond: C1′–${nitrogen} · N-glycosidic. We will revisit rotation around this connection when we explore the 3D glycosidic torsion χ.`:'New bond: 5′-O–P · phosphoester') : 'Follow the amber H and OH as they form H₂O.';
   document.getElementById(kind+'Diagram').querySelectorAll('[data-bond]').forEach(el=>{
     const explain=()=>{bondText.textContent=el.dataset.bond;};
     el.addEventListener('click',explain);

@@ -10,6 +10,8 @@ try{
   await page.goto(base,{waitUntil:"domcontentloaded",timeout:30000});
   await page.locator('.scale-step[data-scene="tertiary"]').click();
   await page.waitForSelector("#scene-tertiary:not([hidden])",{timeout:10000});
+  await page.waitForSelector("#guidedTertiaryTransition",{state:"visible",timeout:10000});
+  await page.locator("#gpsContinueTertiary").click();
   await page.waitForSelector("#tertiaryLearning",{state:"visible",timeout:10000});
   await page.waitForSelector("#tertiaryMolecularViewer canvas",{state:"visible",timeout:30000});
   await page.waitForFunction(()=>typeof TertiaryExplorer!=="undefined"&&TertiaryExplorer.getDiagnostics().modelReady,{timeout:30000});

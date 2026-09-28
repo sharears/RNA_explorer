@@ -32,3 +32,4 @@ jobs:
           node tests/secondary-browser.mjs
           node tests/tertiary-browser.mjs
           node tests/tertiary-learning-browser.mjs
+          node tests/guided-structure-transitions-browser.mjs

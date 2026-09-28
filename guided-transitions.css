@@ -1,0 +1,86 @@
+/* Guided Journey transition lessons. Scoped so Analyze 2D/3D layouts remain unchanged. */
+.guided-transition{display:none}
+body[data-page-mode="journey"] .scene.guided-transition-active{
+  display:block;min-height:720px;
+}
+body[data-page-mode="journey"] .scene.guided-transition-active[hidden]{display:none!important}
+body[data-page-mode="journey"] .scene.guided-transition-active>.scene-copy,
+body[data-page-mode="journey"] .scene.guided-transition-active>.visual-stage{display:none!important}
+body[data-page-mode="journey"] .scene.guided-transition-active>.guided-transition{
+  display:grid;grid-template-columns:minmax(330px,.82fr) minmax(520px,1.18fr);min-height:720px;
+}
+.gps-transition-copy{padding:44px 42px;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:flex-start}
+.gps-transition-copy h2{font-size:clamp(1.7rem,2.6vw,2.7rem);margin:8px 0 16px}
+.gps-transition-copy>p{color:var(--muted);line-height:1.65;margin:0}
+.gps-transition-visual{min-width:0;position:relative;display:flex;flex-direction:column;justify-content:center;padding:28px;background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);background-size:32px 32px;overflow:hidden}
+.gps-step-row{display:flex;flex-wrap:wrap;gap:6px;margin:24px 0 14px}
+.gps-step-row button,.gps-pair-tabs button,.gps-feature-grid button,.gps-fold-actions button,.gps-mini-toolbar button{
+  border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--muted);padding:9px 11px;cursor:pointer
+}
+.gps-step-row button.active,.gps-step-row button:hover,.gps-pair-tabs button.active,.gps-pair-tabs button:hover,.gps-feature-grid button.active,.gps-feature-grid button:hover{
+  border-color:var(--mint);color:var(--mint);background:rgba(116,215,182,.07)
+}
+.gps-secondary-copy{width:100%;min-height:190px;margin-bottom:18px;padding:15px 16px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.025)}
+.gps-secondary-copy h3,.gps-mini-copy h3{margin:0 0 8px;font-size:1.08rem}
+.gps-secondary-copy p,.gps-secondary-copy li,.gps-mini-copy p{color:var(--muted);font-size:.88rem;line-height:1.55}
+.gps-secondary-copy ul{padding-left:20px}
+.gps-pair-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+.gps-nonstandard-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.gps-nonstandard-list span{padding:7px 9px;border:1px solid var(--line);border-radius:999px;color:var(--cream);font-size:.76rem}
+.gps-fold-card,.gps-pair-stage,.gps-more-card{width:100%;padding:18px;border:1px solid var(--line);border-radius:13px;background:rgba(7,17,28,.78)}
+.gps-fold-svg{width:100%;max-height:390px;overflow:visible}
+.gps-fold-backbone line{stroke:#64788a;stroke-width:5;stroke-linecap:round}
+.gps-fold-residue circle{fill:#18283d;stroke:#8ba0b0;stroke-width:2}
+.gps-fold-residue text{fill:#fff;text-anchor:middle;font:600 10px "DM Mono",monospace}
+.gps-fold-pair{stroke:#74d7b6;stroke-width:3;stroke-dasharray:6 5;opacity:1}
+.gps-fold-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;color:var(--muted);font-size:.78rem}
+.gps-chain-straight{opacity:1}
+.gps-chain-folded,.gps-fold-svg .gps-fold-pair,.gps-fold-caption.folded{opacity:0}
+.gps-fold-svg.animate .gps-chain-straight,.gps-fold-svg.animate .gps-fold-caption.straight{animation:gps-straight-away 1.7s ease both}
+.gps-fold-svg.animate .gps-chain-folded,.gps-fold-svg.animate .gps-fold-caption.folded{animation:gps-folded-in 1.7s ease both}
+.gps-fold-svg.animate .gps-fold-pair{animation:gps-pair-appear 2.05s ease both}
+.gps-fold-caption{fill:#9cabb8;text-anchor:middle;font:600 11px "DM Mono",monospace}
+@keyframes gps-straight-away{0%,25%{opacity:1}58%,100%{opacity:0}}
+@keyframes gps-folded-in{0%,35%{opacity:0}70%,100%{opacity:1}}
+@keyframes gps-pair-appear{0%,67%{opacity:0}100%{opacity:1}}
+.gps-pair-svg{display:block;width:100%;max-height:360px}
+.gps-base-ring{fill:rgba(242,198,109,.12);stroke:#f2c66d;stroke-width:3}
+.gps-base-ring.right{fill:rgba(116,215,182,.1);stroke:#74d7b6}
+.gps-base-ring.small{opacity:.8}
+.gps-hbond{stroke:#fff;stroke-width:2;stroke-dasharray:5 5;animation:gps-hbond-form .85s ease both}
+.gps-hbond:nth-of-type(2){animation-delay:.14s}.gps-hbond:nth-of-type(3){animation-delay:.28s}
+@keyframes gps-hbond-form{from{opacity:0;stroke-dashoffset:45}to{opacity:1;stroke-dashoffset:0}}
+.gps-atom-label{fill:#fff;font:600 12px "DM Mono",monospace;text-anchor:middle;paint-order:stroke;stroke:#07111c;stroke-width:4}
+.gps-base-name{fill:#aebdca;font:600 12px "Manrope",sans-serif;text-anchor:middle}
+.gps-more-card{display:grid;grid-template-columns:1fr auto 1fr;gap:18px;align-items:center;text-align:center;min-height:270px}
+.gps-more-card>div:not(.gps-arrow){padding:24px;border:1px solid var(--line);border-radius:12px}
+.gps-more-card strong{display:block;color:var(--cream);margin-bottom:8px}
+.gps-more-card small{display:block;color:var(--muted);line-height:1.5}
+.gps-arrow{font-size:2rem;color:var(--mint)}
+.gps-feature-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;width:100%;margin:20px 0 14px}
+.gps-feature-grid button{text-align:left;font-size:.78rem}
+.gps-mini-copy{width:100%;padding:14px 15px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.025);margin-bottom:18px}
+.gps-mini-copy p{margin:7px 0}
+.gps-mini-copy strong{color:var(--cream)}
+.gps-mini-toolbar{position:absolute;top:16px;left:20px;right:20px;z-index:2;display:flex;justify-content:space-between;align-items:center;color:var(--muted);font:600 .72rem "DM Mono",monospace}
+#gpsMini3D{width:100%;height:min(60vh,530px);touch-action:none;cursor:grab}
+#gpsMini3D:active{cursor:grabbing}
+.gps-mini-bond{stroke:#71879a;stroke-width:6;stroke-linecap:round}
+.gps-mini-guide{stroke:#fff;stroke-width:3;stroke-dasharray:8 7;opacity:.9}
+.gps-mini-node circle{stroke:rgba(255,255,255,.5);stroke-width:2}
+.gps-mini-node.highlight circle{filter:drop-shadow(0 0 8px rgba(255,255,255,.45))}
+.gps-mini-node text{fill:#dce8ed;text-anchor:middle;font:600 11px "DM Mono",monospace;paint-order:stroke;stroke:#07111c;stroke-width:4}
+.gps-mini-caption{margin:0;text-align:center;color:var(--muted);font:.7rem "DM Mono",monospace}
+@media(max-width:920px){
+  body[data-page-mode="journey"] .scene.guided-transition-active>.guided-transition{grid-template-columns:1fr}
+  .gps-transition-copy{border-right:0;border-bottom:1px solid var(--line);padding:30px 25px}
+  .gps-transition-visual{min-height:500px;padding:18px}
+}
+@media(max-width:560px){
+  .gps-feature-grid{grid-template-columns:1fr}
+  .gps-more-card{grid-template-columns:1fr}
+  .gps-arrow{transform:rotate(90deg)}
+}
+@media(prefers-reduced-motion:reduce){
+  .gps-fold-svg.animate *{animation:none!important}
+}

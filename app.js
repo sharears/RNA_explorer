@@ -144,6 +144,7 @@ function showScene(index) {
   if (activeName === "tertiary" && typeof TertiaryExplorer !== "undefined") TertiaryExplorer.render(state.selectedResidue);
   enterChemicalScene(activeName);
   if (activeName === 'primary') enterPrimaryAnimation();
+  if (typeof GuidedStructureTransitions !== "undefined") GuidedStructureTransitions.enter(activeName);
 }
 
 function setupNavigation() {
@@ -491,6 +492,7 @@ function initialize() {
   MoleculeEditor.setup();
   renderPrimary();
   setupPrimaryAnimation();
+  if(typeof GuidedStructureTransitions!=="undefined")GuidedStructureTransitions.setup();
   setupSecondaryWorkspace();
   renderSecondary();
   TertiaryExplorer.setup({
