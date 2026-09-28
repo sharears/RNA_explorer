@@ -1,0 +1,77 @@
+/* Guided Journey structure-transition lessons. Analysis workspaces do not use these classes. */
+.journey-structure-bridge{
+  min-height:680px;display:grid;grid-template-columns:minmax(280px,.75fr) minmax(0,1.45fr);
+  border:1px solid var(--line);border-radius:13px 13px 0 0;background:var(--panel);overflow:hidden;
+}
+.journey-structure-bridge[hidden]{display:none!important}
+.bridge-copy{padding:48px 40px;border-right:1px solid var(--line);background:rgba(255,255,255,.012)}
+.bridge-copy h2{margin:0 0 14px;font-size:clamp(1.8rem,3vw,2.7rem);line-height:1.08}
+.bridge-copy>p:not(.scene-number){color:var(--muted);line-height:1.7}
+.bridge-callout{display:grid;gap:5px;margin-top:28px;padding:15px;border:1px solid rgba(116,215,182,.35);border-radius:10px;background:rgba(116,215,182,.07)}
+.bridge-callout strong{color:var(--mint)}.bridge-callout span{color:var(--muted);font-size:.88rem;line-height:1.5}
+.bridge-caveat{margin-top:22px!important;padding-top:15px;border-top:1px solid var(--line);font-size:.76rem!important}
+.bridge-work{padding:32px;overflow:auto;display:grid;align-content:start;gap:24px}
+.bridge-section-heading{display:flex;align-items:flex-start;gap:12px;margin-bottom:13px}
+.bridge-section-heading>span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--mint);color:var(--ink);font:700 .8rem "DM Mono",monospace;flex:0 0 auto}
+.bridge-section-heading b{display:block;color:var(--cream)}.bridge-section-heading small{display:block;margin-top:3px;color:var(--muted);line-height:1.4}
+.fold-demo,.pair-tutorial,.secondary-reveal{padding:18px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02)}
+.fold-stage{border-radius:10px;background:#07111c;overflow:hidden}
+.fold-stage svg{display:block;width:100%;height:auto}
+.fold-stage circle{fill:#27445a;stroke:#9db1c1;stroke-width:1.5}
+.fold-stage text{fill:#f7fbff;text-anchor:middle;font:700 12px "DM Mono",monospace;pointer-events:none}
+.fold-stage path{fill:none;stroke:#465c70;stroke-width:5;stroke-linecap:round}
+.fold-stage .fold-paired{opacity:0}.fold-stage .fold-linear{opacity:1}
+.fold-stage.folded .fold-linear{animation:fold-linear-out .7s .2s ease forwards}
+.fold-stage.folded .fold-paired{animation:fold-paired-in 1s .65s ease forwards}
+.fold-stage .forming-pairs line{stroke:#74d7b6;stroke-width:3;stroke-dasharray:7 6;opacity:0}
+.fold-stage.folded .forming-pairs line{animation:pair-appear .5s 1.45s ease forwards}
+.bridge-demo-button{margin-top:10px}
+.pair-tabs,.feature-tabs{display:flex;flex-wrap:wrap;gap:7px}
+.pair-tabs button,.feature-tabs button{
+  border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.025);color:var(--muted);
+  padding:8px 11px;cursor:pointer;font:700 .72rem "DM Mono",monospace
+}
+.pair-tabs button.active,.feature-tabs button.active{border-color:var(--mint);background:rgba(116,215,182,.1);color:var(--mint)}
+.pair-chemistry{margin-top:12px;border:1px solid var(--line);border-radius:10px;background:#07111c;min-height:260px;display:grid;place-items:center;overflow:auto}
+.bp-chem-svg{display:block;width:100%;min-width:600px;height:auto}
+.bp-base polygon{fill:rgba(135,169,204,.15);stroke:#c7d5df;stroke-width:2}.bp-right polygon{fill:rgba(116,215,182,.12)}
+.bp-letter{fill:#fff;text-anchor:middle;font:700 34px "DM Mono",monospace}
+.bp-hbond line{stroke:#f2c66d;stroke-width:3;stroke-dasharray:7 6;animation:hbond-draw .65s ease both}
+.bp-hbond text,.bp-caption{fill:#aebfca;text-anchor:middle;font:12px "DM Mono",monospace}
+.bp-edge-atom{fill:#f7fbff;font:700 12px "DM Mono",monospace}
+.bp-caption{font-size:13px}.bridge-notice{display:grid;gap:4px;margin:12px 0 0;padding:12px;border-left:3px solid var(--mint);background:rgba(116,215,182,.055);color:var(--muted);font-size:.84rem;line-height:1.5}
+.bridge-notice strong{color:var(--cream)}
+.nonstandard-grid{width:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:18px}
+.nonstandard-grid>div{padding:16px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.025)}
+.nonstandard-grid b{display:block;color:var(--cream);margin-bottom:6px}.nonstandard-grid span{font-size:.8rem;color:var(--muted);line-height:1.45}.nonstandard-grid p{grid-column:1/-1;margin:0;color:var(--muted);font-size:.78rem}
+.mini-secondary-preview{display:flex;align-items:center;justify-content:center;gap:12px;padding:22px;border-radius:10px;background:#07111c;color:var(--muted);font:700 .78rem "DM Mono",monospace;text-align:center}.mini-secondary-preview b{color:var(--mint)}
+.feature-learning-grid{display:grid;grid-template-columns:minmax(240px,.72fr) minmax(360px,1.28fr);gap:16px}
+.feature-explanation,.feature-mini-view{border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02);padding:18px}
+.feature-explanation h3{margin:7px 0 10px}.feature-explanation>p{color:var(--muted);line-height:1.6}
+.bridge-torsion{display:grid;gap:6px;margin:14px 0;color:var(--muted);font:700 .72rem "DM Mono",monospace}
+.bridge-torsion select{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:#07111c;color:var(--text)}
+.bridge-mini-status{min-height:3em;color:var(--mint)!important;font:500 .73rem/1.45 "DM Mono",monospace!important}
+.bridge-3d-viewer{height:390px;position:relative;border-radius:9px;overflow:hidden;background:#07111c}
+.bridge-view-controls{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px}
+.bridge-view-controls button{border:1px solid var(--line);background:transparent;color:var(--text);padding:8px 10px;border-radius:7px;cursor:pointer}
+.bridge-view-controls span{color:var(--muted);font-size:.7rem}
+.bridge-nav{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-top:1px solid var(--line);background:rgba(7,17,28,.72)}
+.bridge-nav>button:first-child{border:0;background:transparent;color:var(--text);padding:12px;cursor:pointer;font-weight:650}
+.bridge-nav .primary-action{margin:0}
+body[data-page-mode="journey"] #scene-tertiary.learning-feature-active .te-molecular-viewport{box-shadow:0 0 0 1px rgba(255,255,255,.18),0 0 30px rgba(255,255,255,.06)}
+.tertiary-learning-status[data-pulse="true"]::before{content:"● ";color:#fff;animation:learning-status-pulse .38s ease-in-out infinite alternate}
+@keyframes fold-linear-out{to{opacity:.08}}
+@keyframes fold-paired-in{to{opacity:1}}
+@keyframes pair-appear{to{opacity:1}}
+@keyframes hbond-draw{from{stroke-dashoffset:36;opacity:0}to{stroke-dashoffset:0;opacity:1}}
+@keyframes learning-status-pulse{from{opacity:.2}to{opacity:1}}
+@media(max-width:960px){
+  .journey-structure-bridge{grid-template-columns:1fr}.bridge-copy{border-right:0;border-bottom:1px solid var(--line);padding:30px 26px}.bridge-work{padding:22px}.feature-learning-grid{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  .bridge-work{padding:15px}.pair-tabs,.feature-tabs{gap:6px}.pair-tabs button,.feature-tabs button{font-size:.66rem}.nonstandard-grid{grid-template-columns:1fr}.nonstandard-grid p{grid-column:auto}.bridge-3d-viewer{height:330px}.mini-secondary-preview{flex-direction:column}
+}
+@media(prefers-reduced-motion:reduce){
+  .fold-stage.folded .fold-linear,.fold-stage.folded .fold-paired,.fold-stage.folded .forming-pairs line,.bp-hbond line,.tertiary-learning-status[data-pulse="true"]::before{animation:none!important}
+  .fold-stage.folded .fold-linear{opacity:.08}.fold-stage.folded .fold-paired,.fold-stage.folded .forming-pairs line{opacity:1}
+}

@@ -104,7 +104,7 @@ function setupChemicalJourney() {
       <h2 id="${kind}Title">${sugar?'Nucleoside: base + sugar':'Nucleotide: add phosphate'}</h2>
       <p id="${kind}Explanation"></p>
       <button class="primary-action replay-connection" id="${kind}Replay" type="button">Replay connection</button>
-      <p class="journey-transition">${sugar?'The base and sugar together are a nucleoside. Next, attach phosphate to make a nucleotide.':'Each A-, G-, C-, or U-containing nucleotide has this base–sugar–phosphate framework. Join residues through 3′–5′ phosphodiester linkages to make an RNA chain. Its nucleotide order is the primary sequence.'}</p>
+      <p class="journey-transition">${sugar?'The base and sugar together are a nucleoside. The C1′–N connection is the N-glycosidic bond; remember it, because its rotation becomes the glycosidic torsion χ when we study RNA in 3D. Next, attach phosphate to make a nucleotide.':'Each A-, G-, C-, or U-containing nucleotide has this base–sugar–phosphate framework. Join residues through 3′–5′ phosphodiester linkages to make an RNA chain. Its nucleotide order is the primary sequence.'}</p>
       </div><div class="visual-stage chemical-stage">
       <div class="chemical-scroll" id="${kind}Diagram"></div>
       <div class="chemical-result" aria-live="polite"><p>${sugar?'BASE + RIBOSE → NUCLEOSIDE + H₂O':'NUCLEOSIDE + H₃PO₄ → NUCLEOTIDE + H₂O'}</p><h3 id="${kind}Name"></h3><p id="${kind}Bond"></p></div>
