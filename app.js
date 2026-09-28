@@ -146,12 +146,27 @@ function showScene(index) {
   if (activeName === 'primary') enterPrimaryAnimation();
 }
 
+function navigateJourney(targetIndex) {
+  const next=Math.max(0,Math.min(SCENES.length-1,targetIndex));
+  if(typeof JourneyStructureLearning!=="undefined"&&JourneyStructureLearning.interceptNavigation){
+    const handled=JourneyStructureLearning.interceptNavigation({
+      fromIndex:state.sceneIndex,
+      toIndex:next,
+      fromScene:SCENES[state.sceneIndex],
+      toScene:SCENES[next],
+      commit:()=>showScene(next)
+    });
+    if(handled)return;
+  }
+  showScene(next);
+}
+
 function setupNavigation() {
   document.querySelectorAll(".scale-step").forEach((button, index) => {
-    button.addEventListener("click", () => showScene(index));
+    button.addEventListener("click", () => navigateJourney(index));
   });
-  document.getElementById("previousButton").addEventListener("click", () => showScene(state.sceneIndex - 1));
-  document.getElementById("nextButton").addEventListener("click", () => showScene(state.sceneIndex + 1));
+  document.getElementById("previousButton").addEventListener("click", () => navigateJourney(state.sceneIndex - 1));
+  document.getElementById("nextButton").addEventListener("click", () => navigateJourney(state.sceneIndex + 1));
 }
 
 function setupHomePaths() {
@@ -483,6 +498,7 @@ function initialize() {
   if (RNA_SEQUENCE.length !== 76 || TERTIARY_COORDS.length !== RNA_SEQUENCE.length) {
     console.error("RNA data length mismatch.");
   }
+  if(typeof JourneyStructureLearning!=="undefined")JourneyStructureLearning.setup();
   setupNavigation();
   setupHomePaths();
   setupSiteSearch();
