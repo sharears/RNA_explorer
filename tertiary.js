@@ -859,7 +859,7 @@ const TertiaryExplorer = (() => {
     if(!viewer||!g?.focusIndices?.length)return;
     const residues=activeResidues(),selected=g.focusIndices.map(i=>residues[i]).filter(Boolean);if(!selected.length)return;
     const resi=selected.map(r=>r.resi),chain=state.activeChain,sel=chain?{chain,resi}:{resi};
-    viewer.zoomTo(sel,420);viewer.render();
+    viewer.zoomTo(sel,0);viewer.render();
   }
   function renderLearningPanel(){
     const lesson=LEARNING_LESSONS[state.learning.key]||LEARNING_LESSONS.glycosidic;
@@ -876,16 +876,24 @@ const TertiaryExplorer = (() => {
     if(learningPulseTimer!==null)clearTimeout(learningPulseTimer);
     learningPulseTimer=null;learningPulseStep=0;state.learning.flashPhase=false;
   }
+  function setLearningTargetColor(color){
+    const g=state.learning.geometry;if(!g||!model)return;
+    (g.groups||[]).forEach(group=>(group.indices||[]).forEach(i=>{
+      const residue=activeResidues()[i];if(!residue)return;
+      model.setStyle(selectorForResidue(residue),{stick:{radius:.27,color,opacity:.99},sphere:{radius:.31,color,opacity:.32}});
+    }));
+    viewer?.render();
+  }
   function pulseLearningFeature(){
     cancelLearningPulse();
     if(!guidedLearningActive()||window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches)return;
     const tick=()=>{
       learningPulseStep++;
       state.learning.flashPhase=learningPulseStep%2===1;
-      applyStyles(false);viewer?.render();
-      if(learningPulseStep<7)learningPulseTimer=setTimeout(tick,230);
+      setLearningTargetColor(state.learning.flashPhase?"#f2c66d":"#ffffff");
+      if(learningPulseStep<6)learningPulseTimer=setTimeout(tick,250);
       else{
-        learningPulseTimer=null;state.learning.flashPhase=false;applyStyles(false);viewer?.render();
+        learningPulseTimer=null;state.learning.flashPhase=false;setLearningTargetColor("#ffffff");
       }
     };
     tick();
