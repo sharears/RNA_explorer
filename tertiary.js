@@ -490,7 +490,7 @@ const TertiaryExplorer = (() => {
     },(_,v)=>{if(hoverLabel){v.removeLabel(hoverLabel);hoverLabel=null;v.render();}});
   }
   function resetModelState(){
-    hoverLabel=null;initialView=null;state.selected=0;state.measurementPicks=[];state.measurements=[];state.measurementMode="off";state.derivedSecondary=null;state.learning.geometry=null;
+    cancelLearningPulse();hoverLabel=null;initialView=null;state.selected=0;state.measurementPicks=[];state.measurements=[];state.measurementMode="off";state.derivedSecondary=null;state.learning.geometry=null;
     state.selectionIndices.clear();state.selectedPairs.clear();state.pairHbondStyles={};state.savedObjects=[];state.isolateObjectId=null;state.savedViews=[];clearComparison(false);
   }
   async function setModelFromText(text,format,sourceIsDefault,fileName){
