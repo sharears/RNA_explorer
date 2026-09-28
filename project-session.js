@@ -2,7 +2,27 @@ const ProjectSession = (() => {
   const SCHEMA="rna-explorer-project";
   const VERSION=1;
   const MAX_FILE_BYTES=40*1024*1024;
+  const MAX_JSON_NODES=250000;
+  const MAX_JSON_DEPTH=40;
+  const FORBIDDEN_JSON_KEYS=new Set(["__proto__","prototype","constructor"]);
   const $=id=>document.getElementById(id);
+
+  function assertSafeProjectData(root){
+    const stack=[{value:root,path:"project",depth:0}];
+    let nodes=0;
+    while(stack.length){
+      const {value,path,depth}=stack.pop();
+      if(++nodes>MAX_JSON_NODES)throw new Error("Project file is too complex to open safely.");
+      if(depth>MAX_JSON_DEPTH)throw new Error("Project file is nested too deeply to open safely.");
+      if(!value||typeof value!=="object")continue;
+      const keys=Object.keys(value);
+      if(keys.length>50000)throw new Error("Project file contains an object with too many fields.");
+      for(const key of keys){
+        if(FORBIDDEN_JSON_KEYS.has(key))throw new Error("Project file contains a forbidden field: "+key+".");
+        stack.push({value:value[key],path:path+"."+key,depth:depth+1});
+      }
+    }
+  }
 
   function currentPage(){
     const page=new URL(window.location.href).searchParams.get("page");
@@ -27,10 +47,15 @@ const ProjectSession = (() => {
     };
   }
   function validateProject(project){
-    if(!project||typeof project!=="object")throw new Error("This file does not contain a valid RNA Explorer project.");
+    if(!project||typeof project!=="object"||Array.isArray(project))throw new Error("This file does not contain a valid RNA Explorer project.");
+    assertSafeProjectData(project);
     if(project.schema!==SCHEMA)throw new Error("This is not an RNA Explorer project file.");
     if(!Number.isInteger(project.version)||project.version<1||project.version>VERSION)throw new Error("This project file uses an unsupported version.");
     if(!project.secondary&&!project.tertiary&&!project.chemistry)throw new Error("The project file does not contain any restorable workspace data.");
+    for(const key of ["secondary","tertiary","chemistry"]){
+      const value=project[key];
+      if(value!=null&&(typeof value!=="object"||Array.isArray(value)))throw new Error("Project file contains an invalid "+key+" workspace.");
+    }
     return project;
   }
   function downloadProject(){

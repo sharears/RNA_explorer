@@ -33,6 +33,29 @@ const MoleculeEditor = (() => {
   };
 
   function clone(obj){return JSON.parse(JSON.stringify(obj));}
+  function sanitizeSavedBase(value,base){
+    if(!value||typeof value!=="object"||!Array.isArray(value.atoms)||!Array.isArray(value.bonds))throw new Error("Saved "+base+" chemistry is invalid.");
+    if(value.atoms.length<1||value.atoms.length>500||value.bonds.length>1200)throw new Error("Saved "+base+" chemistry is too large.");
+    const atoms=[],ids=new Set();
+    value.atoms.forEach((raw,index)=>{
+      if(!Array.isArray(raw)||raw.length<4)throw new Error("Saved "+base+" atom "+(index+1)+" is invalid.");
+      const id=String(raw[0]??"");
+      const element=String(raw[1]??"");
+      const x=Number(raw[2]),y=Number(raw[3]),charge=Number(raw[4]??0);
+      if(!/^[A-Za-z0-9_+'*.-]{1,32}$/.test(id)||ids.has(id))throw new Error("Saved "+base+" atom identifier is invalid.");
+      if(!Object.prototype.hasOwnProperty.call(standardValence,element))throw new Error("Saved "+base+" atom element is invalid.");
+      if(!Number.isFinite(x)||!Number.isFinite(y)||Math.abs(x)>100000||Math.abs(y)>100000)throw new Error("Saved "+base+" atom coordinates are invalid.");
+      if(!Number.isInteger(charge)||charge<-8||charge>8)throw new Error("Saved "+base+" atom charge is invalid.");
+      ids.add(id);atoms.push([id,element,x,y,charge]);
+    });
+    const bonds=value.bonds.map((raw,index)=>{
+      if(!Array.isArray(raw)||raw.length<2)throw new Error("Saved "+base+" bond "+(index+1)+" is invalid.");
+      const a=String(raw[0]??""),b=String(raw[1]??""),order=Number(raw[2]??1);
+      if(!ids.has(a)||!ids.has(b)||a===b||![1,2,3].includes(order))throw new Error("Saved "+base+" bond "+(index+1)+" is invalid.");
+      return [a,b,order];
+    });
+    return {name:(BASES[base]||{}).name||base,atoms,bonds};
+  }
   function graphFromBase(base){
     const src=savedBases[base]||BASES[base]||BASES.A;
     return {
@@ -320,10 +343,12 @@ const MoleculeEditor = (() => {
   }
   function deleteAtoms(ids){[...new Set(ids.filter(Boolean))].forEach(deleteAtom);}
 
-  function bondLines(a,b,order){
-    const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1,ox=-dy/len*4,oy=dx/len*4;
+  function bondSegments(a,b,order){
+    const ax=Number(a.x),ay=Number(a.y),bx=Number(b.x),by=Number(b.y);
+    if(![ax,ay,bx,by].every(Number.isFinite))return [];
+    const dx=bx-ax,dy=by-ay,len=Math.hypot(dx,dy)||1,ox=-dy/len*4,oy=dx/len*4;
     const shifts=order===1?[0]:order===2?[-1,1]:[-1.4,0,1.4];
-    return shifts.map(s=>`<line x1="${a.x+ox*s}" y1="${a.y+oy*s}" x2="${b.x+ox*s}" y2="${b.y+oy*s}"/>`).join("");
+    return shifts.map(s=>({x1:ax+ox*s,y1:ay+oy*s,x2:bx+ox*s,y2:by+oy*s}));
   }
   function atomText(a){
     const charge=a.charge===0?"":a.charge===1?"⁺":a.charge===-1?"⁻":a.charge>1?String(a.charge)+"⁺":String(Math.abs(a.charge))+"⁻";
@@ -337,7 +362,12 @@ const MoleculeEditor = (() => {
     graph.bonds.forEach(b=>{
       const a=atomById(b.a),c=atomById(b.b);if(!a||!c)return;
       const g=document.createElementNS(NS,"g");g.dataset.bondId=b.id;g.setAttribute("class","chem-editor-bond");
-      g.innerHTML=bondLines(a,c,b.order);bondLayer.append(g);
+      bondSegments(a,c,b.order).forEach(segment=>{
+        const line=document.createElementNS(NS,"line");
+        Object.entries(segment).forEach(([key,value])=>line.setAttribute(key,String(value)));
+        g.append(line);
+      });
+      bondLayer.append(g);
     });
     const hLayer=document.createElementNS(NS,"g");hLayer.setAttribute("class","chem-editor-hbonds");
     graph.hbonds.forEach(h=>{
@@ -428,8 +458,9 @@ const MoleculeEditor = (() => {
     return {savedBases:clone(savedBases)};
   }
   function restoreSessionSnapshot(snapshot={}){
+    if(!snapshot||typeof snapshot!=="object"||Array.isArray(snapshot))throw new Error("Project chemistry data are invalid.");
     Object.keys(savedBases).forEach(key=>delete savedBases[key]);
-    Object.entries(snapshot.savedBases||{}).forEach(([key,value])=>{if(BASES[key]&&value)savedBases[key]=clone(value);});
+    Object.entries(snapshot.savedBases||{}).forEach(([key,value])=>{if(BASES[key]&&value)savedBases[key]=sanitizeSavedBase(value,key);});
     if(dialog?.open)loadCurrent();
     return getSessionSnapshot();
   }
