@@ -48,6 +48,65 @@ const TertiaryExplorer = (() => {
   const BASE_PLANE_TRIPLE={A:["N9","C4","C8"],G:["N9","C4","C8"],C:["N1","C2","C6"],U:["N1","C2","C6"]};
   const DEFAULT_LINE_STYLE={lineStyle:"dashed",color:"#ffffff",thickness:.07,opacity:.82,visible:true,labelVisible:true};
   const DEFAULT_HBOND_STYLE={lineStyle:"dashed",color:"#74d7b6",thickness:.055,opacity:.95,visible:true,labelVisible:false};
+  const LEARNING_COLORS={amber:"#f2c66d",mint:"#74d7b6",rose:"#d9808e",blue:"#87a9cc",white:"#f7fbff"};
+  const LEARNING_LESSONS={
+    glycosidic:{
+      name:"Glycosidic angle (χ)",
+      definition:"The glycosidic angle describes how a nucleobase is rotated around the bond that links it to ribose.",
+      example:"A residue in the loaded RNA is selected automatically and the four atoms defining χ are highlighted.",
+      notice:"The four atoms define a dihedral angle. Rotating around the C1′–N bond changes how the base sits relative to the sugar."
+    },
+    pucker:{
+      name:"Sugar pucker",
+      definition:"Ribose is not flat. Sugar pucker describes the out-of-plane shape adopted by its five-membered ring.",
+      example:"The five ribose-ring atoms are highlighted so you can inspect their non-planar arrangement directly.",
+      notice:"Look especially at C2′ and C3′. In RNA helices, C3′-endo-like puckers are common and help support A-form geometry."
+    },
+    backbone:{
+      name:"Backbone torsions (α–ζ)",
+      definition:"Six torsion angles—α, β, γ, δ, ε, and ζ—describe rotations along the phosphodiester backbone.",
+      example:"Choose one torsion and the four atoms that define it will be highlighted on an internal nucleotide.",
+      notice:"Each torsion is local, but many torsions acting together determine the path and flexibility of the RNA backbone."
+    },
+    stacking:{
+      name:"Base stacking",
+      definition:"Base stacking is the close, roughly parallel packing of neighboring nucleobases.",
+      example:"A sequential pair with favorable base-plane geometry is selected automatically from the loaded RNA.",
+      notice:"The bases sit above and below one another rather than facing edge-to-edge as they do in a base pair."
+    },
+    basepair:{
+      name:"Base pairing & hydrogen bonds",
+      definition:"Base pairing brings nucleobase edges together; hydrogen bonds can provide directional stabilization and specificity.",
+      example:"A mapped base pair is highlighted, together with donor–acceptor contacts that pass the current geometric screen.",
+      notice:"Base pairing is edge-to-edge. Compare this orientation with the approximately face-to-face arrangement of stacked bases."
+    },
+    helix:{
+      name:"RNA helix",
+      definition:"An RNA helix is a repeating arrangement of paired and stacked nucleotides winding around a common axis.",
+      example:"The acceptor stem of the example tRNA is used as a compact RNA-helical segment.",
+      notice:"Follow the two strands and notice that pairing repeats while neighboring bases also stack along the helix."
+    },
+    loopjunction:{
+      name:"Loops & junctions",
+      definition:"Loops turn or expose the RNA chain; junctions are regions where multiple helical segments converge.",
+      example:"The example tRNA highlights an unpaired loop and a central core where several structural arms come together.",
+      notice:"These regions are not simply ‘empty space’ between helices—they help organize the overall 3D fold."
+    },
+    tertiarycontact:{
+      name:"Tertiary contacts",
+      definition:"Tertiary contacts bring residues that are distant in sequence close together in three-dimensional space.",
+      example:"The viewer finds a close non-neighboring residue pair that is not the mapped secondary-structure partner.",
+      notice:"Sequence distance and 3D distance are different. Spatial proximity can help stabilize the compact RNA fold."
+    }
+  };
+  const TORSION_DEFS={
+    alpha:{symbol:"α",atoms:[[-1,"O3'"],[0,"P"],[0,"O5'"],[0,"C5'"]]},
+    beta:{symbol:"β",atoms:[[0,"P"],[0,"O5'"],[0,"C5'"],[0,"C4'"]]},
+    gamma:{symbol:"γ",atoms:[[0,"O5'"],[0,"C5'"],[0,"C4'"],[0,"C3'"]]},
+    delta:{symbol:"δ",atoms:[[0,"C5'"],[0,"C4'"],[0,"C3'"],[0,"O3'"]]},
+    epsilon:{symbol:"ε",atoms:[[0,"C4'"],[0,"C3'"],[0,"O3'"],[1,"P"]]},
+    zeta:{symbol:"ζ",atoms:[[0,"C3'"],[0,"O3'"],[1,"P"],[1,"O5'"]]}
+  };
 
   const state={
     defaultSequence:"",defaultStructure:"",secondarySequence:"",structure:"",
@@ -68,7 +127,8 @@ const TertiaryExplorer = (() => {
     savedViews:[],viewSerial:1,
     comparison:{model:null,name:"",rmsd:null,count:0,visible:true,status:""},
     clipEnabled:false,clipNear:-40,clipFar:40,
-    secondaryLayoutPositions:null,derivedSecondary:null
+    secondaryLayoutPositions:null,derivedSecondary:null,
+    learning:{key:"glycosidic",torsion:"alpha",geometry:null}
   };
 
   let viewer=null,model=null,viewerPromise=null,initialView=null,hoverLabel=null;
@@ -430,7 +490,7 @@ const TertiaryExplorer = (() => {
     },(_,v)=>{if(hoverLabel){v.removeLabel(hoverLabel);hoverLabel=null;v.render();}});
   }
   function resetModelState(){
-    hoverLabel=null;initialView=null;state.selected=0;state.measurementPicks=[];state.measurements=[];state.measurementMode="off";state.derivedSecondary=null;
+    hoverLabel=null;initialView=null;state.selected=0;state.measurementPicks=[];state.measurements=[];state.measurementMode="off";state.derivedSecondary=null;state.learning.geometry=null;
     state.selectionIndices.clear();state.selectedPairs.clear();state.pairHbondStyles={};state.savedObjects=[];state.isolateObjectId=null;state.savedViews=[];clearComparison(false);
   }
   async function setModelFromText(text,format,sourceIsDefault,fileName){
@@ -604,6 +664,226 @@ const TertiaryExplorer = (() => {
     const ub1={x:b1.x/b1n,y:b1.y/b1n,z:b1.z/b1n},m1=vcross(n1,ub1);
     return Math.atan2(vdot(m1,n2),vdot(n1,n2))*180/Math.PI;
   }
+  function learningResidueOrder(){
+    const n=activeResidues().length,out=[];
+    if(Number.isInteger(state.selected)&&state.selected>=0&&state.selected<n)out.push(state.selected);
+    for(let i=0;i<n;i++)if(!out.includes(i))out.push(i);
+    return out;
+  }
+  function residueAtomSet(index,names){
+    const residue=activeResidues()[index];if(!residue)return null;
+    const atoms=names.map(name=>atomByName(residue,name));
+    return atoms.every(Boolean)?{index,residue,atoms}:null;
+  }
+  function meanPoint(points){
+    if(!points.length)return null;
+    return points.reduce((sum,p)=>({x:sum.x+Number(p.x)/points.length,y:sum.y+Number(p.y)/points.length,z:sum.z+Number(p.z)/points.length}),{x:0,y:0,z:0});
+  }
+  function residueText(index){
+    const residue=activeResidues()[index];
+    return baseAt(index)+(index+1)+(residue?.resn&&String(residue.resn).toUpperCase()!==baseAt(index)?" ("+residue.resn+")":"");
+  }
+  function atomPoint(atom,label,color=LEARNING_COLORS.amber,radius=.25){
+    return {point:atom,label,color,radius};
+  }
+  function connector(a,b,color=LEARNING_COLORS.white,thickness=.055,lineStyle="solid"){
+    return {a,b,color,thickness,lineStyle};
+  }
+  function glycosidicLearningGeometry(){
+    for(const i of learningResidueOrder()){
+      const base=baseAt(i),purine=base==="A"||base==="G";
+      if(!purine&&!["C","U"].includes(base))continue;
+      const names=purine?["O4'","C1'","N9","C4"]:["O4'","C1'","N1","C2"];
+      const set=residueAtomSet(i,names);if(!set)continue;
+      const value=atomDihedral(...set.atoms);
+      return {
+        groups:[{indices:[i],color:LEARNING_COLORS.amber}],
+        points:set.atoms.map((a,k)=>atomPoint(a,names[k],k===1||k===2?LEARNING_COLORS.rose:LEARNING_COLORS.amber,.27)),
+        connectors:set.atoms.slice(0,-1).map((a,k)=>connector(a,set.atoms[k+1],LEARNING_COLORS.white,.06)),
+        focusIndices:[i],
+        status:residueText(i)+" · χ from "+names.join("–")+" = "+value.toFixed(1)+"°. The C1′–"+names[2]+" bond is the glycosidic bond."
+      };
+    }
+    throw new Error("No residue with the atoms needed to display a glycosidic angle was found.");
+  }
+  function sugarPuckerLearningGeometry(){
+    const names=["O4'","C1'","C2'","C3'","C4'"];
+    for(const i of learningResidueOrder()){
+      const set=residueAtomSet(i,names);if(!set)continue;
+      const edges=set.atoms.map((a,k)=>connector(a,set.atoms[(k+1)%set.atoms.length],LEARNING_COLORS.mint,.055));
+      return {
+        groups:[{indices:[i],color:LEARNING_COLORS.mint}],
+        points:set.atoms.map((a,k)=>atomPoint(a,names[k],names[k]==="C2'"?LEARNING_COLORS.rose:names[k]==="C3'"?LEARNING_COLORS.amber:LEARNING_COLORS.mint,.26)),
+        connectors:edges,focusIndices:[i],
+        status:residueText(i)+" · ribose ring highlighted. Rotate the model edge-on to see that O4′, C1′, C2′, C3′, and C4′ do not lie in one plane."
+      };
+    }
+    throw new Error("No complete ribose ring was found in the active RNA chain.");
+  }
+  function backboneLearningGeometry(){
+    const def=TORSION_DEFS[state.learning.torsion]||TORSION_DEFS.alpha,residues=activeResidues();
+    for(const i of learningResidueOrder()){
+      const atoms=def.atoms.map(([offset,name])=>atomByName(residues[i+offset],name));
+      if(atoms.every(Boolean)){
+        const labels=def.atoms.map(([offset,name])=>name+(offset<0?"(i−1)":offset>0?"(i+1)":""));
+        const value=atomDihedral(...atoms);
+        return {
+          groups:[{indices:[...new Set(def.atoms.map(([offset])=>i+offset))],color:LEARNING_COLORS.blue}],
+          points:atoms.map((a,k)=>atomPoint(a,labels[k],k===1||k===2?LEARNING_COLORS.rose:LEARNING_COLORS.blue,.27)),
+          connectors:atoms.slice(0,-1).map((a,k)=>connector(a,atoms[k+1],LEARNING_COLORS.white,.06)),
+          focusIndices:[...new Set(def.atoms.map(([offset])=>i+offset))],
+          status:residueText(i)+" · "+def.symbol+" = "+value.toFixed(1)+"° from "+labels.join("–")+"."
+        };
+      }
+    }
+    throw new Error("No internal residue contains all atoms required for this backbone torsion.");
+  }
+  function stackingLearningGeometry(){
+    const residues=activeResidues();let best=null;
+    for(let i=0;i<residues.length-1;i++){
+      const a=baseAt(i),b=baseAt(i+1);if(!BASE_RING_ATOMS[a]||!BASE_RING_ATOMS[b])continue;
+      const ca=baseCentroid(residues[i],a),cb=baseCentroid(residues[i+1],b),na=basePlaneNormal(residues[i],a),nb=basePlaneNormal(residues[i+1],b);
+      if(!ca||!cb||!na||!nb)continue;
+      const distance=pointDistance(ca,cb),dot=clamp(Math.abs(vdot(na,nb)),-1,1),tilt=Math.acos(dot)*180/Math.PI;
+      if(distance<2.5||distance>7.0||tilt>55)continue;
+      const score=Math.abs(distance-4.2)+tilt/30;
+      if(!best||score<best.score)best={i,j:i+1,ca,cb,distance,tilt,score};
+    }
+    if(!best)throw new Error("No suitable sequential base-stacking example was found.");
+    return {
+      groups:[{indices:[best.i],color:LEARNING_COLORS.amber},{indices:[best.j],color:LEARNING_COLORS.mint}],
+      points:[{point:best.ca,label:residueText(best.i)+" base",color:LEARNING_COLORS.amber,radius:.18},{point:best.cb,label:residueText(best.j)+" base",color:LEARNING_COLORS.mint,radius:.18}],
+      connectors:[connector(best.ca,best.cb,LEARNING_COLORS.white,.045,"dashed")],focusIndices:[best.i,best.j],
+      status:residueText(best.i)+" / "+residueText(best.j)+" · base-center separation "+best.distance.toFixed(2)+" Å · plane tilt "+best.tilt.toFixed(1)+"°. Rotate to compare their approximately parallel faces."
+    };
+  }
+  function basePairLearningGeometry(){
+    const ranked=pairs.map(([a,b])=>({a,b,bonds:pairHydrogenBonds(a,b)})).sort((x,y)=>y.bonds.length-x.bonds.length);
+    const hit=ranked.find(x=>x.bonds.length)||ranked[0];if(!hit)throw new Error("No mapped base pair is available in the current RNA.");
+    const groups=[{indices:[hit.a],color:LEARNING_COLORS.amber},{indices:[hit.b],color:LEARNING_COLORS.mint}];
+    const connectors=hit.bonds.map(b=>connector(b.donor,b.acceptor,LEARNING_COLORS.mint,.055,"dashed"));
+    const points=[
+      {point:activeResidues()[hit.a].coord,label:residueText(hit.a),color:LEARNING_COLORS.amber,radius:.16},
+      {point:activeResidues()[hit.b].coord,label:residueText(hit.b),color:LEARNING_COLORS.mint,radius:.16}
+    ];
+    return {
+      groups,points,connectors,focusIndices:[hit.a,hit.b],
+      status:residueText(hit.a)+" ↔ "+residueText(hit.b)+" · "+hit.bonds.length+" donor–acceptor contact"+(hit.bonds.length===1?"":"s")+" pass the ≤"+state.hbondCutoff.toFixed(1)+" Å geometric screen"+(hit.bonds.length?": "+hit.bonds.map(b=>b.distance.toFixed(2)+" Å").join(", "):".")
+    };
+  }
+  function helixLearningGeometry(){
+    let left=[],right=[];
+    if(state.secondaryIsDefault&&activeResidues().length>=72){left=[0,1,2,3,4,5,6];right=[65,66,67,68,69,70,71];}
+    else{
+      const chosen=pairs.slice(0,4);left=chosen.map(p=>p[0]);right=chosen.map(p=>p[1]);
+    }
+    const indices=[...left,...right].filter(i=>activeResidues()[i]);if(indices.length<4)throw new Error("Not enough mapped paired residues are available to show a helix.");
+    const links=[];
+    left.forEach(i=>{const j=partner[i];if(right.includes(j)&&coordFor(i)&&coordFor(j))links.push(connector(coordFor(i),coordFor(j),LEARNING_COLORS.white,.035,"dashed"));});
+    return {
+      groups:[{indices:left,color:LEARNING_COLORS.amber},{indices:right,color:LEARNING_COLORS.mint}],
+      points:[],connectors:links,focusIndices:indices,
+      status:(state.secondaryIsDefault?"Acceptor stem":"Paired segment")+" · two strands are highlighted in different colors. Follow the repeating paired-and-stacked arrangement along the stem."
+    };
+  }
+  function longestUnpairedRun(){
+    let best=[],run=[];for(let i=0;i<activeResidues().length;i++){if(partner[i]<0)run.push(i);else{if(run.length>best.length)best=run;run=[];}}if(run.length>best.length)best=run;return best;
+  }
+  function loopJunctionLearningGeometry(){
+    const loop=longestUnpairedRun().slice(0,9);if(!loop.length)throw new Error("No unpaired loop-like segment is available.");
+    let core=[];
+    if(state.secondaryIsDefault&&activeResidues().length>=65)core=[7,8,25,43,44,45,46,47,64].filter(i=>activeResidues()[i]);
+    else core=[...new Set(pairs.slice(0,3).flat())].filter(i=>!loop.includes(i));
+    const loopCenter=meanPoint(loop.map(coordFor).filter(Boolean)),coreCenter=meanPoint(core.map(coordFor).filter(Boolean));
+    const points=[];if(loopCenter)points.push({point:loopCenter,label:"loop",color:LEARNING_COLORS.amber,radius:.18});if(coreCenter)points.push({point:coreCenter,label:"junction / core",color:LEARNING_COLORS.mint,radius:.18});
+    return {
+      groups:[{indices:loop,color:LEARNING_COLORS.amber},{indices:core,color:LEARNING_COLORS.mint}],
+      points,connectors:[],focusIndices:[...loop,...core],
+      status:"Amber marks an unpaired loop-like segment; mint marks the compact central core where several tRNA arms converge. Rotate the RNA to see that these regions occupy distinct 3D neighborhoods."
+    };
+  }
+  function tertiaryContactLearningGeometry(){
+    const residues=activeResidues();let best=null;
+    for(let i=0;i<residues.length;i++)for(let j=i+5;j<residues.length;j++){
+      if(partner[i]===j)continue;
+      const ai=residues[i].atoms.filter(a=>normalizeElement(a)!=="H"),aj=residues[j].atoms.filter(a=>normalizeElement(a)!=="H");
+      for(const a of ai)for(const b of aj){
+        const d=atomDistanceRaw(a,b);if(d<1.8||d>5.0)continue;
+        if(!best||d<best.distance)best={i,j,a,b,distance:d};
+      }
+    }
+    if(!best)throw new Error("No close non-neighboring residue contact was found with the current geometric screen.");
+    return {
+      groups:[{indices:[best.i],color:LEARNING_COLORS.rose},{indices:[best.j],color:LEARNING_COLORS.blue}],
+      points:[atomPoint(best.a,atomName(best.a),LEARNING_COLORS.rose,.25),atomPoint(best.b,atomName(best.b),LEARNING_COLORS.blue,.25)],
+      connectors:[connector(best.a,best.b,LEARNING_COLORS.white,.055,"dashed")],focusIndices:[best.i,best.j],
+      status:residueText(best.i)+" ↔ "+residueText(best.j)+" · "+atomName(best.a)+"…"+atomName(best.b)+" = "+best.distance.toFixed(2)+" Å. This is a close tertiary-proximity example; distance alone does not prove a specific chemical interaction."
+    };
+  }
+  function buildLearningGeometry(key){
+    if(key==="glycosidic")return glycosidicLearningGeometry();
+    if(key==="pucker")return sugarPuckerLearningGeometry();
+    if(key==="backbone")return backboneLearningGeometry();
+    if(key==="stacking")return stackingLearningGeometry();
+    if(key==="basepair")return basePairLearningGeometry();
+    if(key==="helix")return helixLearningGeometry();
+    if(key==="loopjunction")return loopJunctionLearningGeometry();
+    if(key==="tertiarycontact")return tertiaryContactLearningGeometry();
+    throw new Error("Unknown learning feature.");
+  }
+  function addLearningFeature(){
+    const g=state.learning.geometry;if(!g||!viewer||!model)return;
+    (g.groups||[]).forEach(group=>(group.indices||[]).forEach(i=>{
+      const residue=activeResidues()[i];if(!residue)return;
+      model.addStyle(selectorForResidue(residue),{stick:{radius:.23,color:group.color,opacity:.98},sphere:{radius:.25,color:group.color,opacity:.24}});
+    }));
+    (g.connectors||[]).forEach(c=>drawStyledConnector(c.a,c.b,{lineStyle:c.lineStyle||"solid",color:c.color||LEARNING_COLORS.white,thickness:c.thickness||.055,opacity:.95,visible:true,labelVisible:false}));
+    (g.points||[]).forEach(p=>{
+      if(!p.point)return;
+      viewer.addSphere({center:p.point,radius:p.radius||.22,color:p.color||LEARNING_COLORS.amber,opacity:.92});
+      if(p.label)viewer.addLabel(p.label,{position:p.point,fontSize:11,fontColor:"#07111c",backgroundColor:p.color||LEARNING_COLORS.amber,backgroundOpacity:.92,borderColor:"#ffffff",borderThickness:.5,inFront:true});
+    });
+  }
+  function focusLearningGeometry(g){
+    if(!viewer||!g?.focusIndices?.length)return;
+    const residues=activeResidues(),selected=g.focusIndices.map(i=>residues[i]).filter(Boolean);if(!selected.length)return;
+    const resi=selected.map(r=>r.resi),chain=state.activeChain,sel=chain?{chain,resi}:{resi};
+    viewer.zoomTo(sel,420);viewer.render();
+  }
+  function renderLearningPanel(){
+    const lesson=LEARNING_LESSONS[state.learning.key]||LEARNING_LESSONS.glycosidic;
+    const name=$("teLearningName"),definition=$("teLearningDefinition"),example=$("teLearningExample"),notice=$("teLearningNotice"),torsion=$("teLearningTorsionWrap");
+    if(name)name.textContent=lesson.name;if(definition)definition.textContent=lesson.definition;if(example)example.textContent=lesson.example;if(notice)notice.textContent=lesson.notice;
+    if(torsion)torsion.hidden=state.learning.key!=="backbone";
+    if($("teLearningTorsion"))$("teLearningTorsion").value=state.learning.torsion;
+    document.querySelectorAll("[data-learning-feature]").forEach(button=>{const active=button.dataset.learningFeature===state.learning.key;button.classList.toggle("active",active);button.setAttribute("aria-selected",String(active));});
+  }
+  function setLearningStatus(message,error=false){
+    const node=$("teLearningStatus");if(!node)return;node.textContent=message;node.dataset.level=error?"error":"ok";
+  }
+  async function showLearningFeature(key=state.learning.key){
+    state.learning.key=LEARNING_LESSONS[key]?key:"glycosidic";renderLearningPanel();setLearningStatus("Preparing the 3D example…");
+    try{
+      await ensureViewer();if(!model)throw new Error("The 3D structure is not available.");
+      const g=buildLearningGeometry(state.learning.key);state.learning.geometry=g;
+      applyStyles(false);focusLearningGeometry(g);viewer.render();setLearningStatus(g.status);return g;
+    }catch(error){state.learning.geometry=null;setLearningStatus(error.message||"This example could not be shown.",true);throw error;}
+  }
+  function clearLearningFeature(){
+    state.learning.geometry=null;setLearningStatus("Highlight cleared. Choose “Show in 3D” to display the current concept again.");
+    if(viewer&&model){applyStyles(false);viewer.render();}
+  }
+  function setupLearningPanel(){
+    renderLearningPanel();
+    document.querySelectorAll("[data-learning-feature]").forEach(button=>button.addEventListener("click",()=>{
+      state.learning.key=button.dataset.learningFeature;state.learning.geometry=null;renderLearningPanel();setLearningStatus("Choose “Show in 3D” to highlight this feature.");
+      if(viewer&&model){applyStyles(false);viewer.render();}
+    }));
+    $("teLearningTorsion")?.addEventListener("change",event=>{state.learning.torsion=event.target.value;if(state.learning.key==="backbone"&&state.learning.geometry)showLearningFeature("backbone").catch(()=>{});});
+    $("teLearningShow")?.addEventListener("click",()=>showLearningFeature().catch(()=>{}));
+    $("teLearningClear")?.addEventListener("click",clearLearningFeature);
+  }
+
   function measurementValue(type,p){if(type==="distance")return atomDistance(p[0],p[1]);if(type==="angle")return atomAngle(p[0],p[1],p[2]);if(type==="dihedral")return atomDihedral(p[0],p[1],p[2],p[3]);return NaN;}
   function measurementUnit(type){return type==="distance"?"Å":"°";}
   function requiredPicks(type){return type==="distance"?2:type==="angle"?3:type==="dihedral"?4:0;}
@@ -699,7 +979,7 @@ const TertiaryExplorer = (() => {
     safe("selection highlights",addSelectionHighlights);safe("selected pair highlights",addSelectedPairHighlights);safe("object highlights",addObjectHighlights);
     safe("optional pair guides",addPairs);safe("selected pair hydrogen bonds",addSelectedPairHydrogenBonds);
     safe("indices",addIndices);safe("selected label",addSelectedLabel);safe("proximity",addProximity);safe("contacts",addContacts);
-    safe("measurements",addMeasurements);safe("surface",updateSurface);safe("clipping",applyClipping);
+    safe("measurements",addMeasurements);safe("surface",updateSurface);safe("clipping",applyClipping);safe("guided learning",addLearningFeature);
     if(renderNow)safe("render",()=>viewer.render());
   }
 
@@ -1150,7 +1430,7 @@ const TertiaryExplorer = (() => {
     $("teMeasureClear").addEventListener("click",()=>{state.measurementPicks=[];state.measurements=[];render();});
     $("teSplit").addEventListener("change",e=>{state.split=e.target.checked&&state.mapping.enabled;render();scheduleViewerResize(true);});
     $("teSameMolecule").addEventListener("change",e=>{state.sameMoleculeConfirmed=e.target.checked;evaluateMapping();render();});
-    $("teChainSelect").addEventListener("change",e=>{state.activeChain=e.target.value;state.chainNeedsChoice=false;state.sameMoleculeConfirmed=false;state.derivedSecondary=null;buildResidueLookup();evaluateMapping();state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();const ds=$("teDerivedStatus");if(ds){ds.hidden=true;ds.textContent="";}const od=$("teOpenDerivedSecondary");if(od)od.hidden=true;render();});
+    $("teChainSelect").addEventListener("change",e=>{state.activeChain=e.target.value;state.chainNeedsChoice=false;state.sameMoleculeConfirmed=false;state.derivedSecondary=null;state.learning.geometry=null;buildResidueLookup();evaluateMapping();state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();const ds=$("teDerivedStatus");if(ds){ds.hidden=true;ds.textContent="";}const od=$("teOpenDerivedSecondary");if(od)od.hidden=true;render();});
     $("teGenerateSecondary").addEventListener("click",()=>{const button=$("teGenerateSecondary"),status=$("teDerivedStatus");button.disabled=true;if(status){status.hidden=false;status.textContent="Deriving base pairs from the active 3D RNA chain…";}try{generateSecondaryFrom3D();}catch(error){if(status){status.hidden=false;status.textContent="3D → 2D generation failed: "+error.message;}}finally{button.disabled=false;}});
     $("teOpenDerivedSecondary").addEventListener("click",()=>{window.location.href="?page=secondary";});
     $("teStructureFile").addEventListener("change",async e=>{const file=e.target.files[0];if(!file)return;setStatus("Loading "+file.name+"…");try{await handleStructureUpload(file);setStatus("");}catch(error){setStatus("Upload failed: "+error.message,"error");}});
@@ -1348,7 +1628,7 @@ const TertiaryExplorer = (() => {
     if(setupDone)return;setupDone=true;
     state.defaultSequence=config.sequence;state.defaultStructure=config.structure;state.secondarySequence=config.sequence;state.structure=config.structure;state.colors=config.colors;state.names=config.names;state.onSelect=config.onSelect;
     const parsed=parseStructure(state.structure,state.secondarySequence.length);pairs=parsed.pairs;partner=parsed.partner;
-    setupControls();setupToolbar();
+    setupControls();setupToolbar();setupLearningPanel();
     $("followButton")?.addEventListener("click",()=>{const n=activeResidues().length;if(n<2)return;let next=state.selected;while(next===state.selected)next=Math.floor(Math.random()*n);chooseResidue(next);});
     window.addEventListener("rna-metadata-change",e=>applyMetadata(e.detail));
     window.addEventListener("rna-secondary-context",e=>handleSecondaryContext(e.detail));
@@ -1361,11 +1641,12 @@ const TertiaryExplorer = (() => {
     render();
   }
 
-  return {setup,render,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,getWorkspaceSnapshot,restoreWorkspaceSnapshot,
+  return {setup,render,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,getWorkspaceSnapshot,restoreWorkspaceSnapshot,showLearningFeature,clearLearningFeature,
     getDiagnostics(){return {viewerReady:!!viewer,modelReady:!!model,atomCount:model?.selectedAtoms?model.selectedAtoms({}).length:0,representation:state.representation,colorMode:state.colorMode,split:state.split,mappingEnabled:state.mapping.enabled,source:state.currentFileName,derivedSecondary:state.derivedSecondary,
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
       selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
       comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count,selectedPairCount:state.selectedPairs.size,
+      learningKey:state.learning.key,learningTorsion:state.learning.torsion,learningActive:!!state.learning.geometry,learningStatus:state.learning.geometry?.status||"",
       selectedPairKeys:[...state.selectedPairs],hbondCounts:Object.fromEntries([...state.selectedPairs].map(key=>{const [a,b]=key.split(":").map(Number);return [key,pairHydrogenBonds(a,b).length];}))};}
   };
 })();

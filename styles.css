@@ -576,3 +576,54 @@ body[data-page-mode="home"] .home-cover{margin-bottom:84px}
 @media(max-width:420px){
   .home-analyze-fork{grid-template-columns:1fr}
 }
+
+
+/* Guided Journey · interactive tertiary learning lab */
+body:not([data-page-mode="journey"]) .tertiary-learning{display:none!important}
+.tertiary-learning{
+  width:100%;margin-top:24px;padding-top:22px;border-top:1px solid var(--line);
+}
+.tertiary-learning>h3{margin:6px 0 8px;font-size:1.08rem}
+.tertiary-learning-intro{font-size:.9rem;line-height:1.55!important}
+.tertiary-learning-picker{
+  width:100%;display:flex;flex-wrap:wrap;gap:7px;margin:14px 0 12px;
+}
+.tertiary-learning-picker button{
+  border:1px solid var(--line);border-radius:999px;padding:7px 10px;background:rgba(255,255,255,.035);
+  color:var(--muted);font:700 .72rem "DM Mono",monospace;cursor:pointer;
+}
+.tertiary-learning-picker button:hover,.tertiary-learning-picker button:focus-visible{
+  border-color:var(--mint);color:var(--text);outline:none;
+}
+.tertiary-learning-picker button.active{
+  border-color:var(--mint);background:rgba(116,215,182,.12);color:var(--mint);
+}
+.tertiary-learning-card{
+  width:100%;box-sizing:border-box;padding:16px;border:1px solid var(--line);border-radius:12px;
+  background:rgba(255,255,255,.025);
+}
+.tertiary-learning-card h4{margin:0 0 9px;color:var(--text);font-size:1rem}
+.tertiary-learning-card p{margin:7px 0!important;font-size:.86rem;line-height:1.55!important}
+.tertiary-learning-example strong{color:var(--amber)}
+.tertiary-learning-notice{
+  padding:10px 11px;border-left:3px solid var(--mint);background:rgba(116,215,182,.055);border-radius:0 8px 8px 0;
+}
+.tertiary-torsion-choice{
+  display:grid;gap:6px;margin:12px 0;font:700 .72rem "DM Mono",monospace;color:var(--muted);
+}
+.tertiary-torsion-choice select{
+  width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);
+}
+.tertiary-learning-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:13px}
+.tertiary-learning-actions button{margin:0}
+.tertiary-learning-status{min-height:2.6em;color:var(--mint)!important;font-family:"DM Mono",monospace;font-size:.75rem!important}
+body[data-page-mode="journey"] #scene-tertiary .te-molecular-viewport::after{
+  content:"Learning view · rotate, zoom, and inspect the highlighted atoms";
+  position:absolute;left:12px;bottom:12px;z-index:3;padding:6px 8px;border-radius:7px;
+  background:rgba(7,17,28,.78);color:#dce8ed;font:600 10px/1.35 "DM Mono",monospace;pointer-events:none;
+}
+@media(max-width:620px){
+  .tertiary-learning-picker{gap:6px}
+  .tertiary-learning-picker button{font-size:.68rem;padding:7px 9px}
+  .tertiary-learning-actions{display:grid;grid-template-columns:1fr 1fr}
+}

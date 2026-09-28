@@ -222,6 +222,45 @@
               <h3 class="selected-residue-title">Guanine · G1</h3>
               <p class="selected-residue-copy">Left-drag to rotate, mouse wheel to zoom, and right-drag to pan.</p>
             </div>
+
+            <section class="tertiary-learning" id="tertiaryLearning" aria-labelledby="tertiaryLearningTitle">
+              <span class="fact-label">3D LEARNING LAB</span>
+              <h3 id="tertiaryLearningTitle">Explore one structural idea at a time</h3>
+              <p class="tertiary-learning-intro">Choose a concept, then use the same rotatable 3D structure to see where it lives in real RNA.</p>
+              <div class="tertiary-learning-picker" role="tablist" aria-label="RNA tertiary structure concepts">
+                <button type="button" class="active" data-learning-feature="glycosidic" role="tab" aria-selected="true">χ angle</button>
+                <button type="button" data-learning-feature="pucker" role="tab" aria-selected="false">Sugar pucker</button>
+                <button type="button" data-learning-feature="backbone" role="tab" aria-selected="false">Backbone torsions</button>
+                <button type="button" data-learning-feature="stacking" role="tab" aria-selected="false">Base stacking</button>
+                <button type="button" data-learning-feature="basepair" role="tab" aria-selected="false">Base pairs</button>
+                <button type="button" data-learning-feature="helix" role="tab" aria-selected="false">RNA helix</button>
+                <button type="button" data-learning-feature="loopjunction" role="tab" aria-selected="false">Loops &amp; junctions</button>
+                <button type="button" data-learning-feature="tertiarycontact" role="tab" aria-selected="false">Tertiary contacts</button>
+              </div>
+              <article class="tertiary-learning-card" aria-live="polite">
+                <h4 id="teLearningName">Glycosidic angle (χ)</h4>
+                <p id="teLearningDefinition">The glycosidic angle describes how a nucleobase is rotated around the bond that links it to ribose.</p>
+                <p class="tertiary-learning-example"><strong>Example:</strong> <span id="teLearningExample">A residue in the 1EHZ tRNA will be selected automatically and its four χ-defining atoms highlighted.</span></p>
+                <p class="tertiary-learning-notice"><strong>What should I notice?</strong> <span id="teLearningNotice">The four atoms define a dihedral angle. Changing χ swings the base relative to the sugar.</span></p>
+                <label class="tertiary-torsion-choice" id="teLearningTorsionWrap" hidden>
+                  Backbone torsion
+                  <select id="teLearningTorsion">
+                    <option value="alpha">α · O3′(i−1)–P–O5′–C5′</option>
+                    <option value="beta">β · P–O5′–C5′–C4′</option>
+                    <option value="gamma">γ · O5′–C5′–C4′–C3′</option>
+                    <option value="delta">δ · C5′–C4′–C3′–O3′</option>
+                    <option value="epsilon">ε · C4′–C3′–O3′–P(i+1)</option>
+                    <option value="zeta">ζ · C3′–O3′–P(i+1)–O5′(i+1)</option>
+                  </select>
+                </label>
+                <div class="tertiary-learning-actions">
+                  <button class="primary-action" id="teLearningShow" type="button">Show in 3D</button>
+                  <button class="secondary-action" id="teLearningClear" type="button">Clear highlight</button>
+                </div>
+                <p class="tertiary-learning-status" id="teLearningStatus" role="status">Choose “Show in 3D” to highlight this feature.</p>
+              </article>
+            </section>
+
             <button class="secondary-action" id="followButton" type="button">Follow a random nucleotide</button>
             <div id="tertiaryControls"></div>
           </div>

@@ -31,3 +31,4 @@ jobs:
           node tests/homepage-browser.mjs
           node tests/secondary-browser.mjs
           node tests/tertiary-browser.mjs
+          node tests/tertiary-learning-browser.mjs
