@@ -17,7 +17,6 @@ try{
   const features=["glycosidic","pucker","stacking","basepair","helix","loopjunction","tertiarycontact"];
   for(const key of features){
     await page.locator('[data-learning-feature="'+key+'"]').click();
-    await page.locator("#teLearningShow").click();
     await page.waitForFunction(expected=>{
       const d=TertiaryExplorer.getDiagnostics();
       return d.learningKey===expected&&d.learningActive&&d.learningStatus.length>5;
@@ -27,6 +26,7 @@ try{
   }
 
   await page.locator('[data-learning-feature="backbone"]').click();
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().learningKey==="backbone"&&TertiaryExplorer.getDiagnostics().learningActive,{timeout:15000});
   if(!(await page.locator("#teLearningTorsionWrap").isVisible()))throw new Error("Backbone torsion selector is not visible.");
   for(const torsion of ["alpha","beta","gamma","delta","epsilon","zeta"]){
     await page.selectOption("#teLearningTorsion",torsion);
