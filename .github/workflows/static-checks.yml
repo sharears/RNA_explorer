@@ -21,6 +21,7 @@ jobs:
       - run: node tests/tertiary.cjs
       - run: node tests/chemistry-editor.cjs
       - run: node tests/chemistry.cjs
+      - run: node tests/security.cjs
       - run: node tests/secondary-v7.cjs
       - name: Browser smoke test · tertiary workspace
         run: |
