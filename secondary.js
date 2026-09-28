@@ -233,15 +233,30 @@ const SecondaryExplorer = (() => {
     const el=$("secondarySourceNote");if(!el)return;
     el.textContent=sourceNote;el.hidden=!sourceNote;
   }
+  function browserSessionStorage(){
+    try{return typeof sessionStorage!=="undefined"?sessionStorage:null;}catch(_){return null;}
+  }
+  function legacyLocalStorage(){
+    try{return typeof localStorage!=="undefined"?localStorage:null;}catch(_){return null;}
+  }
   function saveWorkspaceLocal(){
-    if(restoringWorkspace||typeof localStorage==="undefined"||!seq)return;
-    try{localStorage.setItem(WORKSPACE_KEY,JSON.stringify(workspaceSnapshot()));}catch(_){}
+    if(restoringWorkspace||!seq)return;
+    const storage=browserSessionStorage();if(!storage)return;
+    try{storage.setItem(WORKSPACE_KEY,JSON.stringify(workspaceSnapshot()));}catch(_){}
   }
   function restoreWorkspaceLocal(){
-    if(typeof localStorage==="undefined"||typeof window==="undefined")return false;
+    if(typeof window==="undefined")return false;
     const search=String(window.location?.search||"");if(!/[?&]page=(secondary|tertiary)(?:&|$)/.test(search))return false;
-    try{const raw=localStorage.getItem(WORKSPACE_KEY);if(!raw)return false;restoreWorkspaceSnapshot(JSON.parse(raw),{saveLocal:false});return true;}
-    catch(_){restoringWorkspace=false;return false;}
+    try{
+      const session=browserSessionStorage(),legacy=legacyLocalStorage();
+      let raw=session?.getItem(WORKSPACE_KEY)||null;
+      if(!raw&&legacy){
+        raw=legacy.getItem(WORKSPACE_KEY);
+        if(raw){session?.setItem(WORKSPACE_KEY,raw);legacy.removeItem(WORKSPACE_KEY);}
+      }
+      if(!raw)return false;
+      restoreWorkspaceSnapshot(JSON.parse(raw),{saveLocal:false});return true;
+    }catch(_){restoringWorkspace=false;return false;}
   }
   function pushLayoutHistory(){
     layoutHistory.push(JSON.stringify(manualOffsets));if(layoutHistory.length>60)layoutHistory.shift();layoutFuture=[];
@@ -1096,7 +1111,7 @@ const SecondaryExplorer = (() => {
     setupToolbar(viewport,stage);
     installNodeDragging(root);
     const fileTools=document.createElement("div");fileTools.className="secondary-file-tools";
-    fileTools.innerHTML='<label class="secondary-action">Import DBN / CT<input id="seStructureImport" type="file" accept=".dbn,.ct,.txt,text/plain" hidden></label><button class="secondary-action" id="seClearAutosave" type="button">Clear local autosave</button>';
+    fileTools.innerHTML='<label class="secondary-action">Import DBN / CT<input id="seStructureImport" type="file" accept=".dbn,.ct,.txt,text/plain" hidden></label><button class="secondary-action" id="seClearAutosave" type="button">Clear browser autosave</button>';
     document.querySelector(".secondary-workspace-actions")?.insertAdjacentElement("afterend",fileTools);
     const exportDialog=document.createElement("dialog");exportDialog.id="seExportDialog";exportDialog.className="se-export-dialog";
     exportDialog.innerHTML='<button type="button" class="dialog-close" id="seExportClose" aria-label="Close">×</button><h3>Export Secondary Structure</h3><label>Export type<select id="seExportType"><option value="image">Image</option><option value="structure">Structure</option></select></label><div id="seImageExportOptions"><label>Format<select id="seImageFormat"><option value="png">PNG</option><option value="svg">SVG</option><option value="pdf">PDF</option></select></label><label>Resolution / scale<input id="seImageScale" type="range" min="1" max="6" step=".5" value="2"><output id="seImageScaleValue">2×</output></label><label>DPI target<select id="seImageDpi"><option value="96">96</option><option value="150">150</option><option value="300" selected>300</option><option value="600">600</option></select></label><label>Background<select id="seImageBackground"><option value="transparent">Transparent</option><option value="#ffffff">White</option><option value="#0b1220">Dark</option></select></label></div><div id="seStructureExportOptions" hidden><label>Format<select id="seStructureFormat"><option value="dbn">DBN</option><option value="ct">CT</option></select></label></div><button type="button" class="primary-action" id="seExportNow">Export</button><p id="seExportDialogStatus" role="status"></p>';
@@ -1126,7 +1141,7 @@ const SecondaryExplorer = (() => {
       }catch(error){status("Import failed: "+error.message,true);}
       e.target.value="";
     });
-    $("seClearAutosave").addEventListener("click",()=>{try{localStorage.removeItem(WORKSPACE_KEY);}catch(_){}status("Local workspace autosave cleared.");});
+    $("seClearAutosave").addEventListener("click",()=>{try{browserSessionStorage()?.removeItem(WORKSPACE_KEY);legacyLocalStorage()?.removeItem(WORKSPACE_KEY);}catch(_){}status("Browser workspace autosave cleared.");});
     const status=(message,error=false)=>{$("secondaryInputStatus").textContent=message;$("secondaryInputStatus").classList.toggle("error",error);};
     $("renderSecondaryButton").addEventListener("click",()=>{
       try {
