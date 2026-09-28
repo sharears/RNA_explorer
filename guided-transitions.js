@@ -70,7 +70,7 @@ const GuidedStructureTransitions = (() => {
         {id:"A1",x:-1.2,y:.55,z:.5,c:"#f2c66d"},{id:"A2",x:0,y:1.05,z:.5,c:"#f2c66d"},{id:"A3",x:1.2,y:.55,z:.5,c:"#f2c66d"},
         {id:"A4",x:1.2,y:-.55,z:.5,c:"#f2c66d"},{id:"A5",x:0,y:-1.05,z:.5,c:"#f2c66d"},{id:"A6",x:-1.2,y:-.55,z:.5,c:"#f2c66d"},
         {id:"B1",x:-.9,y:.7,z:-.65,c:"#74d7b6"},{id:"B2",x:.3,y:1.2,z:-.65,c:"#74d7b6"},{id:"B3",x:1.5,y:.7,z:-.65,c:"#74d7b6"},
-        {id:"B4",x:1.5,y:-.4,z:-.65,c:"#74d7b6"},{id:"B5",x:.3,y-.9,z:-.65,c:"#74d7b6"},{id:"B6",x:-.9,y:-.4,z:-.65,c:"#74d7b6"}
+        {id:"B4",x:1.5,y:-.4,z:-.65,c:"#74d7b6"},{id:"B5",x:.3,y:-.9,z:-.65,c:"#74d7b6"},{id:"B6",x:-.9,y:-.4,z:-.65,c:"#74d7b6"}
       ],
       bonds:[["A1","A2"],["A2","A3"],["A3","A4"],["A4","A5"],["A5","A6"],["A6","A1"],["B1","B2"],["B2","B3"],["B3","B4"],["B4","B5"],["B5","B6"],["B6","B1"]],
       highlight:["A1","A2","A3","A4","A5","A6","B1","B2","B3","B4","B5","B6"],guide:[["A2","B2"],["A5","B5"]]
@@ -81,7 +81,7 @@ const GuidedStructureTransitions = (() => {
       notice:"Compare this edge-to-edge arrangement with the face-to-face arrangement of base stacking.",
       points:[
         {id:"A1",x:-1.8,y:.8,z:.15,c:"#f2c66d"},{id:"A2",x:-.65,y:1.2,z:.05,c:"#f2c66d"},{id:"A3",x:-.2,y:.1,z:-.05,c:"#ffffff"},
-        {id:"A4",x:-.8,y-.9,z:.1,c:"#f2c66d"},{id:"A5",x:-1.9,y-.55,z:.18,c:"#f2c66d"},
+        {id:"A4",x:-.8,y:-.9,z:.1,c:"#f2c66d"},{id:"A5",x:-1.9,y-.55,z:.18,c:"#f2c66d"},
         {id:"U1",x:1.7,y:.75,z:-.08,c:"#74d7b6"},{id:"U2",x:.65,y:1.1,z:.02,c:"#74d7b6"},{id:"U3",x:.25,y:.05,z:.05,c:"#ffffff"},
         {id:"U4",x:.8,y-.85,z:-.1,c:"#74d7b6"},{id:"U5",x:1.85,y-.45,z:-.12,c:"#74d7b6"}
       ],
