@@ -128,11 +128,11 @@ const TertiaryExplorer = (() => {
     comparison:{model:null,name:"",rmsd:null,count:0,visible:true,status:""},
     clipEnabled:false,clipNear:-40,clipFar:40,
     secondaryLayoutPositions:null,derivedSecondary:null,
-    learning:{key:"glycosidic",torsion:"alpha",geometry:null}
+    learning:{key:"glycosidic",torsion:"alpha",geometry:null,flashPhase:false}
   };
 
   let viewer=null,model=null,viewerPromise=null,initialView=null,hoverLabel=null;
-  let pairs=[],partner=[],setupDone=false,surfaceToken=0,resizeTicket=0;
+  let pairs=[],partner=[],setupDone=false,surfaceToken=0,resizeTicket=0,learningPulseTimer=null,learningPulseStep=0;
   function scheduleViewerResize(preserveView=true){
     if(!viewer)return;
     const ticket=++resizeTicket,view=preserveView&&viewer.getView?viewer.getView():null;
@@ -540,8 +540,17 @@ const TertiaryExplorer = (() => {
     if(state.representation==="cartoon")return {cartoon:{...colorSpec,thickness:.4}};
     return {stick:{radius:.14,...colorSpec}};
   }
+  function guidedLearningActive(){
+    return document.body?.dataset?.pageMode==="journey"&&!!state.learning.geometry;
+  }
   function applyResidueRepresentation(r,i){
-    const elementMode=state.colorMode==="element",color=residueColor(i,r),sel=selectorForResidue(r);
+    const sel=selectorForResidue(r);
+    if(guidedLearningActive()){
+      // In Guided Journey, mute the complete molecule so the requested feature is unmistakable.
+      model.setStyle(sel,{stick:{radius:.08,color:"#435363",opacity:.16},sphere:{radius:.12,color:"#435363",opacity:.06}});
+      return;
+    }
+    const elementMode=state.colorMode==="element",color=residueColor(i,r);
     if(state.representation==="backbone"){
       const b={...sel,atom:BACKBONE_ATOMS};
       model.setStyle(b,{stick:{radius:.14,...(elementMode?{colorscheme:"Jmol"}:{color})}});
@@ -833,9 +842,11 @@ const TertiaryExplorer = (() => {
   }
   function addLearningFeature(){
     const g=state.learning.geometry;if(!g||!viewer||!model)return;
+    const guided=guidedLearningActive(),targetColor=guided?(state.learning.flashPhase?"#f2c66d":"#ffffff"):null;
     (g.groups||[]).forEach(group=>(group.indices||[]).forEach(i=>{
       const residue=activeResidues()[i];if(!residue)return;
-      model.addStyle(selectorForResidue(residue),{stick:{radius:.23,color:group.color,opacity:.98},sphere:{radius:.25,color:group.color,opacity:.24}});
+      const color=targetColor||group.color;
+      model.addStyle(selectorForResidue(residue),{stick:{radius:guided?.27:.23,color,opacity:.99},sphere:{radius:guided?.31:.25,color,opacity:guided?.32:.24}});
     }));
     (g.connectors||[]).forEach(c=>drawStyledConnector(c.a,c.b,{lineStyle:c.lineStyle||"solid",color:c.color||LEARNING_COLORS.white,thickness:c.thickness||.055,opacity:.95,visible:true,labelVisible:false}));
     (g.points||[]).forEach(p=>{
@@ -861,16 +872,36 @@ const TertiaryExplorer = (() => {
   function setLearningStatus(message,error=false){
     const node=$("teLearningStatus");if(!node)return;node.textContent=message;node.dataset.level=error?"error":"ok";
   }
+  function cancelLearningPulse(){
+    if(learningPulseTimer!==null)clearTimeout(learningPulseTimer);
+    learningPulseTimer=null;learningPulseStep=0;state.learning.flashPhase=false;
+  }
+  function pulseLearningFeature(){
+    cancelLearningPulse();
+    if(!guidedLearningActive()||window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches)return;
+    const tick=()=>{
+      learningPulseStep++;
+      state.learning.flashPhase=learningPulseStep%2===1;
+      applyStyles(false);viewer?.render();
+      if(learningPulseStep<7)learningPulseTimer=setTimeout(tick,230);
+      else{
+        learningPulseTimer=null;state.learning.flashPhase=false;applyStyles(false);viewer?.render();
+      }
+    };
+    tick();
+  }
   async function showLearningFeature(key=state.learning.key){
     state.learning.key=LEARNING_LESSONS[key]?key:"glycosidic";renderLearningPanel();setLearningStatus("Preparing the 3D example…");
     try{
       await ensureViewer();if(!model)throw new Error("The 3D structure is not available.");
-      const g=buildLearningGeometry(state.learning.key);state.learning.geometry=g;
-      applyStyles(false);focusLearningGeometry(g);viewer.render();setLearningStatus(g.status);return g;
-    }catch(error){state.learning.geometry=null;setLearningStatus(error.message||"This example could not be shown.",true);throw error;}
+      const g=buildLearningGeometry(state.learning.key);state.learning.geometry=g;state.learning.flashPhase=false;
+      applyStyles(false);focusLearningGeometry(g);viewer.render();
+      pulseLearningFeature();
+      setLearningStatus(g.status+" The target flashes briefly, then remains white while the rest of the RNA is muted.");return g;
+    }catch(error){cancelLearningPulse();state.learning.geometry=null;setLearningStatus(error.message||"This example could not be shown.",true);throw error;}
   }
   function clearLearningFeature(){
-    state.learning.geometry=null;setLearningStatus("Highlight cleared. Choose “Show in 3D” to display the current concept again.");
+    cancelLearningPulse();state.learning.geometry=null;setLearningStatus("Highlight cleared. Choose a concept to locate it in the RNA.");
     if(viewer&&model){applyStyles(false);viewer.render();}
   }
   function setupLearningPanel(){
@@ -1646,7 +1677,7 @@ const TertiaryExplorer = (() => {
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
       selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
       comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count,selectedPairCount:state.selectedPairs.size,
-      learningKey:state.learning.key,learningTorsion:state.learning.torsion,learningActive:!!state.learning.geometry,learningStatus:state.learning.geometry?.status||"",
+      learningKey:state.learning.key,learningTorsion:state.learning.torsion,learningActive:!!state.learning.geometry,learningFlashActive:learningPulseTimer!==null,learningGuidedDimmed:guidedLearningActive(),learningStatus:state.learning.geometry?.status||"",
       selectedPairKeys:[...state.selectedPairs],hbondCounts:Object.fromEntries([...state.selectedPairs].map(key=>{const [a,b]=key.split(":").map(Number);return [key,pairHydrogenBonds(a,b).length];}))};}
   };
 })();
