@@ -51,6 +51,8 @@ try{
     const status=await page.locator("#bridgeFeatureStatus").textContent();
     if(!status||/unavailable|not found/i.test(status))throw new Error("Isolated 3D lesson failed for "+key+": "+status);
   }
+  await page.locator('[data-bridge-feature="backbone"]').click();
+  await page.waitForFunction(()=>JourneyStructureLearning.getState().currentFeature==="backbone",{timeout:5000});
   for(const torsion of ["alpha","beta","gamma","delta","epsilon","zeta"]){
     await page.selectOption("#bridgeTorsion",torsion);
     await page.waitForFunction(expected=>JourneyStructureLearning.getState().currentTorsion===expected,torsion,{timeout:5000});
