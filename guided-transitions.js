@@ -53,7 +53,7 @@ const GuidedStructureTransitions = (() => {
     backbone:{
       title:"Backbone torsions α–ζ",
       definition:"Six torsion angles describe rotations along the phosphodiester backbone: α, β, γ, δ, ε and ζ.",
-      notice:"A torsion is defined by four atoms. Changing several local torsions changes the path taken by the RNA backbone.",
+      notice:"A torsion is defined by four atoms. This clean model shows the idea; in the full RNA viewer you can choose α, β, γ, δ, ε or ζ individually and highlight its defining atoms.",
       points:[
         {id:"O3′(i−1)",x:-2.1,y:-.4,z:.25,c:"#87a9cc"},{id:"P",x:-.8,y:.35,z:-.3,c:"#f2c66d"},
         {id:"O5′",x:.35,y:-.25,z:.4,c:"#ffffff"},{id:"C5′",x:1.5,y:.45,z:-.35,c:"#ffffff"},
