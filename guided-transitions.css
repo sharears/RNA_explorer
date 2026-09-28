@@ -3,6 +3,7 @@
 body[data-page-mode="journey"] .scene.guided-transition-active{
   display:block;min-height:720px;
 }
+body[data-page-mode="journey"] .scene.guided-transition-active[hidden]{display:none!important}
 body[data-page-mode="journey"] .scene.guided-transition-active>.scene-copy,
 body[data-page-mode="journey"] .scene.guided-transition-active>.visual-stage{display:none!important}
 body[data-page-mode="journey"] .scene.guided-transition-active>.guided-transition{
