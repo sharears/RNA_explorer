@@ -34,17 +34,22 @@ body[data-page-mode="journey"] .scene.guided-transition-active>.guided-transitio
 .gps-fold-residue text{fill:#fff;text-anchor:middle;font:600 10px "DM Mono",monospace}
 .gps-fold-pair{stroke:#74d7b6;stroke-width:3;stroke-dasharray:6 5;opacity:1}
 .gps-fold-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;color:var(--muted);font-size:.78rem}
-.gps-fold-svg.animate .r0,.gps-fold-svg.animate .r11{animation:gps-fold-end 1.4s ease both}
-.gps-fold-svg.animate .r1,.gps-fold-svg.animate .r10{animation:gps-fold-near 1.4s ease both}
-.gps-fold-svg.animate .gps-fold-pair{animation:gps-pair-appear 1.7s ease both}
-@keyframes gps-fold-end{0%{transform:translate(0,60px)}100%{transform:translate(0,0)}}
-@keyframes gps-fold-near{0%{transform:translate(0,35px)}100%{transform:translate(0,0)}}
-@keyframes gps-pair-appear{0%,55%{opacity:0}100%{opacity:1}}
+.gps-chain-straight{opacity:1}
+.gps-chain-folded,.gps-fold-svg .gps-fold-pair,.gps-fold-caption.folded{opacity:0}
+.gps-fold-svg.animate .gps-chain-straight,.gps-fold-svg.animate .gps-fold-caption.straight{animation:gps-straight-away 1.7s ease both}
+.gps-fold-svg.animate .gps-chain-folded,.gps-fold-svg.animate .gps-fold-caption.folded{animation:gps-folded-in 1.7s ease both}
+.gps-fold-svg.animate .gps-fold-pair{animation:gps-pair-appear 2.05s ease both}
+.gps-fold-caption{fill:#9cabb8;text-anchor:middle;font:600 11px "DM Mono",monospace}
+@keyframes gps-straight-away{0%,25%{opacity:1}58%,100%{opacity:0}}
+@keyframes gps-folded-in{0%,35%{opacity:0}70%,100%{opacity:1}}
+@keyframes gps-pair-appear{0%,67%{opacity:0}100%{opacity:1}}
 .gps-pair-svg{display:block;width:100%;max-height:360px}
 .gps-base-ring{fill:rgba(242,198,109,.12);stroke:#f2c66d;stroke-width:3}
 .gps-base-ring.right{fill:rgba(116,215,182,.1);stroke:#74d7b6}
 .gps-base-ring.small{opacity:.8}
-.gps-hbond{stroke:#fff;stroke-width:2;stroke-dasharray:5 5}
+.gps-hbond{stroke:#fff;stroke-width:2;stroke-dasharray:5 5;animation:gps-hbond-form .85s ease both}
+.gps-hbond:nth-of-type(2){animation-delay:.14s}.gps-hbond:nth-of-type(3){animation-delay:.28s}
+@keyframes gps-hbond-form{from{opacity:0;stroke-dashoffset:45}to{opacity:1;stroke-dashoffset:0}}
 .gps-atom-label{fill:#fff;font:600 12px "DM Mono",monospace;text-anchor:middle;paint-order:stroke;stroke:#07111c;stroke-width:4}
 .gps-base-name{fill:#aebdca;font:600 12px "Manrope",sans-serif;text-anchor:middle}
 .gps-more-card{display:grid;grid-template-columns:1fr auto 1fr;gap:18px;align-items:center;text-align:center;min-height:270px}
