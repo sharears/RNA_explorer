@@ -38,6 +38,7 @@
 .bp-letter{fill:#fff;text-anchor:middle;font:700 34px "DM Mono",monospace}
 .bp-hbond line{stroke:#f2c66d;stroke-width:3;stroke-dasharray:7 6;animation:hbond-draw .65s ease both}
 .bp-hbond text,.bp-caption{fill:#aebfca;text-anchor:middle;font:12px "DM Mono",monospace}
+.bp-edge-atom{fill:#f7fbff;font:700 12px "DM Mono",monospace}
 .bp-caption{font-size:13px}.bridge-notice{display:grid;gap:4px;margin:12px 0 0;padding:12px;border-left:3px solid var(--mint);background:rgba(116,215,182,.055);color:var(--muted);font-size:.84rem;line-height:1.5}
 .bridge-notice strong{color:var(--cream)}
 .nonstandard-grid{width:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:18px}
