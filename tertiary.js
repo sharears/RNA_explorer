@@ -876,8 +876,8 @@ const TertiaryExplorer = (() => {
   function setupLearningPanel(){
     renderLearningPanel();
     document.querySelectorAll("[data-learning-feature]").forEach(button=>button.addEventListener("click",()=>{
-      state.learning.key=button.dataset.learningFeature;state.learning.geometry=null;renderLearningPanel();setLearningStatus("Choose “Show in 3D” to highlight this feature.");
-      if(viewer&&model){applyStyles(false);viewer.render();}
+      state.learning.geometry=null;
+      showLearningFeature(button.dataset.learningFeature).catch(()=>{});
     }));
     $("teLearningTorsion")?.addEventListener("change",event=>{state.learning.torsion=event.target.value;if(state.learning.key==="backbone"&&state.learning.geometry)showLearningFeature("backbone").catch(()=>{});});
     $("teLearningShow")?.addEventListener("click",()=>showLearningFeature().catch(()=>{}));
