@@ -12,8 +12,7 @@ const TertiaryExplorer = (() => {
     "Connector":"#8fa2b3","Paired":"#74d7b6","Unpaired":"#e8bb69"
   };
   const SOURCES=[
-    "https://cdn.jsdelivr.net/npm/3dmol@2.5.5/build/3Dmol-min.js",
-    "https://3Dmol.org/build/3Dmol-min.js"
+    "https://cdn.jsdelivr.net/npm/3dmol@2.5.5/build/3Dmol-min.js"
   ];
   const PDB_URL="https://files.rcsb.org/download/1EHZ.pdb";
   const MOD_BASES={
@@ -287,7 +286,7 @@ const TertiaryExplorer = (() => {
         if(window.$3Dmol)return resolve();
         existing.addEventListener("load",resolve,{once:true});existing.addEventListener("error",reject,{once:true});return;
       }
-      const script=document.createElement("script");script.src=src;script.async=true;script.crossOrigin="anonymous";
+      const script=document.createElement("script");script.src=src;script.async=true;script.crossOrigin="anonymous";script.referrerPolicy="no-referrer";
       script.onload=resolve;script.onerror=()=>reject(new Error("Could not load "+src));document.head.append(script);
     });
   }
@@ -736,8 +735,11 @@ const TertiaryExplorer = (() => {
     const box=$("teHeatLegend");if(!box)return;
     const active=state.mapping.enabled&&state.colorMode==="metadata"&&state.heatEnabled;box.hidden=!active;if(!active)return;
     const stops=PALETTES[state.heatTheme]||PALETTES.viridis;
-    box.innerHTML="<strong>Residue information · "+state.heatTheme+"</strong><div class=\"te-heat-bar\"></div><p>"+state.heatRange[0]+" → "+state.heatRange[1]+" · Same scale as Secondary.</p>";
-    box.querySelector(".te-heat-bar").style.background="linear-gradient(to right,"+stops.join(",")+")";
+    box.replaceChildren();
+    const heading=document.createElement("strong");heading.textContent="Residue information · "+state.heatTheme;
+    const bar=document.createElement("div");bar.className="te-heat-bar";bar.style.background="linear-gradient(to right,"+stops.join(",")+")";
+    const note=document.createElement("p");note.textContent=state.heatRange[0]+" → "+state.heatRange[1]+" · Same scale as Secondary.";
+    box.append(heading,bar,note);
   }
   function regionLegend(){
     [$("teRegionLegend"),$("teRegionLegendStage")].filter(Boolean).forEach(box=>{
@@ -1263,8 +1265,13 @@ const TertiaryExplorer = (() => {
     if(viewer?.setBackgroundColor)viewer.setBackgroundColor(state.backgroundColor,1);
     if(viewer?.setCameraParameters)viewer.setCameraParameters({orthographic:state.orthographic});
   }
+  function restoredEnum(value,allowed,fallback){return allowed.includes(value)?value:fallback;}
+  function restoredNumber(value,fallback,min=-Infinity,max=Infinity){
+    const n=Number(value);return Number.isFinite(n)?clamp(n,min,max):fallback;
+  }
+  function restoredColor(value,fallback){return /^#[0-9a-f]{6}$/i.test(String(value||""))?String(value):fallback;}
   async function restoreWorkspaceSnapshot(w){
-    if(!w||typeof w!=="object")throw new Error("Project file is missing the Tertiary workspace.");
+    if(!w||typeof w!=="object"||Array.isArray(w))throw new Error("Project file is missing the Tertiary workspace.");
     if(!w.sourceText)throw new Error("Project file does not contain the 3D structure coordinates needed to restore this workspace.");
     await ensureViewer();
     await setModelFromText(w.sourceText,w.currentFormat==="cif"?"cif":"pdb",Boolean(w.sourceIsDefault),w.currentFileName||"Restored project structure");
@@ -1276,18 +1283,29 @@ const TertiaryExplorer = (() => {
     state.derivedSecondary=w.derivedSecondary||null;
     const parsed=parseStructure(state.structure,state.secondarySequence.length);pairs=parsed.pairs;partner=parsed.partner;
     state.selected=Number.isInteger(w.selected)?clamp(w.selected,0,Math.max(0,activeResidues().length-1)):0;
-    state.representation=w.representation||"sticks";state.colorMode=w.colorMode||"nucleotide";
+    state.representation=restoredEnum(w.representation,["sticks","ballstick","wire","spheres","backbone","cartoon"],"sticks");
+    state.colorMode=restoredEnum(w.colorMode,["nucleotide","chain","element","uniform","region","metadata"],"nucleotide");
     state.showPairs=Boolean(w.showPairs);state.showIndices=w.showIndices!==false;state.showSelectedLabel=w.showSelectedLabel!==false;
-    state.indexSelection=new Set(w.indexSelection||[]);state.metadata=w.metadata||{};state.heatEnabled=Boolean(w.heatEnabled);
-    state.heatTheme=w.heatTheme||"viridis";state.heatRange=Array.isArray(w.heatRange)?w.heatRange:[0,1];
-    state.proximityEnabled=Boolean(w.proximityEnabled);state.proximityCutoff=Number(w.proximityCutoff)||12;
-    state.contactEnabled=Boolean(w.contactEnabled);state.contactCutoff=Number(w.contactCutoff)||4;
-    state.measurementMode=w.measurementMode||"off";state.measurementPicks=Array.isArray(w.measurementPicks)?w.measurementPicks:[];
+    state.indexSelection=new Set(Array.isArray(w.indexSelection)?w.indexSelection.filter(Number.isInteger):[]);state.metadata=w.metadata&&typeof w.metadata==="object"&&!Array.isArray(w.metadata)?w.metadata:{};state.heatEnabled=Boolean(w.heatEnabled);
+    state.heatTheme=restoredEnum(w.heatTheme,Object.keys(PALETTES),"viridis");
+    state.heatRange=Array.isArray(w.heatRange)&&w.heatRange.length===2?w.heatRange.map((v,i)=>restoredNumber(v,i, -1e9,1e9)):[0,1];
+    state.proximityEnabled=Boolean(w.proximityEnabled);state.proximityCutoff=restoredNumber(w.proximityCutoff,12,6,30);
+    state.contactEnabled=Boolean(w.contactEnabled);state.contactCutoff=restoredNumber(w.contactCutoff,4,2.5,8);
+    state.measurementMode=restoredEnum(w.measurementMode,["off","distance","angle","dihedral"],"off");state.measurementPicks=Array.isArray(w.measurementPicks)?w.measurementPicks:[];
     state.measurements=Array.isArray(w.measurements)?w.measurements:[];state.measurementSerial=Number(w.measurementSerial)||1;
-    state.split=Boolean(w.split);state.exportScale=Number(w.exportScale)||2;state.surfaceEnabled=Boolean(w.surfaceEnabled);
-    state.surfaceOpacity=Number(w.surfaceOpacity)||.35;state.uniformColor=w.uniformColor||"#74d7b6";state.backgroundColor=w.backgroundColor||"#07111c";
-    state.orthographic=Boolean(w.orthographic);state.visibility={...state.visibility,...(w.visibility||{})};
-    state.selectionIndices=new Set(w.selectionIndices||[]);state.selectionLabels=Boolean(w.selectionLabels);state.selectionStyle={...state.selectionStyle,...(w.selectionStyle||{})};
+    state.split=Boolean(w.split);state.exportScale=restoredNumber(w.exportScale,2,1,5);state.surfaceEnabled=Boolean(w.surfaceEnabled);
+    state.surfaceOpacity=restoredNumber(w.surfaceOpacity,.35,0,1);state.uniformColor=restoredColor(w.uniformColor,"#74d7b6");state.backgroundColor=restoredColor(w.backgroundColor,"#07111c");
+    state.orthographic=Boolean(w.orthographic);
+    state.visibility={
+      rna:w.visibility?.rna!==false,protein:w.visibility?.protein!==false,solvent:Boolean(w.visibility?.solvent),
+      ions:w.visibility?.ions!==false,other:w.visibility?.other!==false,hydrogen:Boolean(w.visibility?.hydrogen)
+    };
+    state.selectionIndices=new Set(Array.isArray(w.selectionIndices)?w.selectionIndices.filter(Number.isInteger):[]);state.selectionLabels=Boolean(w.selectionLabels);
+    state.selectionStyle={
+      color:restoredColor(w.selectionStyle?.color,"#f2c66d"),
+      thickness:restoredNumber(w.selectionStyle?.thickness,.24,.01,2),
+      opacity:restoredNumber(w.selectionStyle?.opacity,.32,0,1)
+    };
     state.selectedPairs=new Set(w.selectedPairs||[]);state.pairHbondStyles=w.pairHbondStyles||{};state.hbondCutoff=Number(w.hbondCutoff)||3.5;
     state.savedObjects=(w.savedObjects||[]).map(o=>({...o,indices:new Set(o.indices||[])}));state.objectSerial=Number(w.objectSerial)||1;state.isolateObjectId=w.isolateObjectId??null;
     state.savedViews=Array.isArray(w.savedViews)?w.savedViews:[];state.viewSerial=Number(w.viewSerial)||1;
