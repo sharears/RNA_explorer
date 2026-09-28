@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="styles.css?v=guided-tertiary-1" />
   <link rel="stylesheet" href="secondary.css?v=secondary-19" />
   <link rel="stylesheet" href="tertiary.css?v=tertiary-10" />
+  <link rel="stylesheet" href="guided-transitions.css?v=guided-1" />
   <link rel="stylesheet" href="chemistry-editor.css?v=chem-editor-4" />
 </head>
 <body>
@@ -225,8 +226,8 @@
 
             <section class="tertiary-learning" id="tertiaryLearning" aria-labelledby="tertiaryLearningTitle">
               <span class="fact-label">3D LEARNING LAB</span>
-              <h3 id="tertiaryLearningTitle">Explore one structural idea at a time</h3>
-              <p class="tertiary-learning-intro">Choose a concept, then use the same rotatable 3D structure to see where it lives in real RNA.</p>
+              <h3 id="tertiaryLearningTitle">Find a structural feature in the real RNA</h3>
+              <p class="tertiary-learning-intro">You learned these concepts with simple 3D models. Choose one here to locate a real example in the complete RNA structure.</p>
               <div class="tertiary-learning-picker" role="tablist" aria-label="RNA tertiary structure concepts">
                 <button type="button" class="active" data-learning-feature="glycosidic" role="tab" aria-selected="true">χ angle</button>
                 <button type="button" data-learning-feature="pucker" role="tab" aria-selected="false">Sugar pucker</button>
@@ -254,7 +255,7 @@
                   </select>
                 </label>
                 <div class="tertiary-learning-actions">
-                  <button class="primary-action" id="teLearningShow" type="button">Show in 3D</button>
+                  <button class="primary-action" id="teLearningShow" type="button">Highlight in RNA</button>
                   <button class="secondary-action" id="teLearningClear" type="button">Clear highlight</button>
                 </div>
                 <p class="tertiary-learning-status" id="teLearningStatus" role="status">Choose “Show in 3D” to highlight this feature.</p>
@@ -327,6 +328,7 @@
   <script src="chemistry-editor.js?v=chem-editor-5"></script>
   <script src="journey.js"></script>
   <script src="primary-animation.js"></script>
+  <script src="guided-transitions.js?v=guided-1"></script>
   <script src="secondary.js?v=secondary-19"></script>
   <script src="tertiary.js?v=tertiary-12"></script>
   <script src="project-session.js?v=project-1"></script>
