@@ -81,7 +81,7 @@ const GuidedStructureTransitions = (() => {
       notice:"Compare this edge-to-edge arrangement with the face-to-face arrangement of base stacking.",
       points:[
         {id:"A1",x:-1.8,y:.8,z:.15,c:"#f2c66d"},{id:"A2",x:-.65,y:1.2,z:.05,c:"#f2c66d"},{id:"A3",x:-.2,y:.1,z:-.05,c:"#ffffff"},
-        {id:"A4",x:-.8,y:-.9,z:.1,c:"#f2c66d"},{id:"A5",x:-1.9,y-.55,z:.18,c:"#f2c66d"},
+        {id:"A4",x:-.8,y:-.9,z:.1,c:"#f2c66d"},{id:"A5",x:-1.9,y:-.55,z:.18,c:"#f2c66d"},
         {id:"U1",x:1.7,y:.75,z:-.08,c:"#74d7b6"},{id:"U2",x:.65,y:1.1,z:.02,c:"#74d7b6"},{id:"U3",x:.25,y:.05,z:.05,c:"#ffffff"},
         {id:"U4",x:.8,y-.85,z:-.1,c:"#74d7b6"},{id:"U5",x:1.85,y-.45,z:-.12,c:"#74d7b6"}
       ],
