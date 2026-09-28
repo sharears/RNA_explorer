@@ -41,7 +41,7 @@ const GuidedStructureTransitions = (() => {
     pucker:{
       title:"Sugar pucker",
       definition:"The five-membered ribose ring is not flat. Different ring atoms can lie above or below the average ring plane.",
-      notice:"Rotate the ring edge-on. The displacement of C2′ and C3′ becomes much easier to see.",
+      notice:"Rotate the ring edge-on. C3′-endo and C2′-endo are two important pucker families; the key idea is that different ribose atoms can project to different sides of the average ring plane.",
       points:[
         {id:"O4′",x:-1.25,y:.75,z:0,c:"#87a9cc"},{id:"C1′",x:.2,y:1.15,z:.38,c:"#ffffff"},
         {id:"C2′",x:1.25,y:.15,z:-.46,c:"#f2c66d"},{id:"C3′",x:.65,y:-1.1,z:.52,c:"#74d7b6"},
@@ -192,14 +192,20 @@ const GuidedStructureTransitions = (() => {
   }
 
   function renderFoldVisual(){
-    const points=[[50,150],[95,135],[140,112],[186,80],[232,65],[280,85],[320,125],[355,165],[410,190],[465,175],[510,140],[555,105]];
-    const circles=points.map((p,i)=>'<g class="gps-fold-residue r'+i+'"><circle cx="'+p[0]+'" cy="'+p[1]+'" r="14"/><text x="'+p[0]+'" y="'+(p[1]+4)+'">'+["G","C","A","U","G","C","A","A","U","G","C","U"][i]+'</text></g>').join("");
-    const backbone=points.slice(1).map((p,i)=>'<line x1="'+points[i][0]+'" y1="'+points[i][1]+'" x2="'+p[0]+'" y2="'+p[1]+'"/>').join("");
-    const pairs=[[1,10],[2,9],[3,8]].map(([a,b],i)=>'<line class="gps-fold-pair p'+i+'" x1="'+points[a][0]+'" y1="'+points[a][1]+'" x2="'+points[b][0]+'" y2="'+points[b][1]+'"/>').join("");
-    return '<div class="gps-fold-card"><svg viewBox="0 0 610 245" class="gps-fold-svg"><g class="gps-fold-backbone">'+backbone+'</g>'+pairs+circles+'</svg>'+
+    const folded=[[50,150],[95,135],[140,112],[186,80],[232,65],[280,85],[320,125],[355,165],[410,190],[465,175],[510,140],[555,105]];
+    const straight=folded.map((_,i)=>[48+i*46,125]);
+    const letters=["G","C","A","U","G","C","A","A","U","G","C","U"];
+    const group=(points,cls)=>{
+      const circles=points.map((p,i)=>'<g class="gps-fold-residue"><circle cx="'+p[0]+'" cy="'+p[1]+'" r="14"/><text x="'+p[0]+'" y="'+(p[1]+4)+'">'+letters[i]+'</text></g>').join("");
+      const backbone=points.slice(1).map((p,i)=>'<line x1="'+points[i][0]+'" y1="'+points[i][1]+'" x2="'+p[0]+'" y2="'+p[1]+'"/>').join("");
+      return '<g class="'+cls+'"><g class="gps-fold-backbone">'+backbone+'</g>'+circles+'</g>';
+    };
+    const pairs=[[1,10],[2,9],[3,8]].map(([a,b],i)=>'<line class="gps-fold-pair p'+i+'" x1="'+folded[a][0]+'" y1="'+folded[a][1]+'" x2="'+folded[b][0]+'" y2="'+folded[b][1]+'"/>').join("");
+    return '<div class="gps-fold-card"><svg viewBox="0 0 610 245" class="gps-fold-svg" role="img" aria-label="An extended RNA chain transitions to a folded chain with three intramolecular base pairs.">'+
+      group(straight,"gps-chain-straight")+group(folded,"gps-chain-folded")+pairs+
+      '<text class="gps-fold-caption straight" x="305" y="205">primary chain · extended for teaching</text><text class="gps-fold-caption folded" x="305" y="225">parts of the same chain approach and pair</text></svg>'+
       '<div class="gps-fold-actions"><button type="button" id="gpsFoldPlay">Replay folding</button><span>Watch distant residues approach and pair.</span></div></div>';
   }
-
   function playFold(){
     const svg=document.querySelector(".gps-fold-svg");if(!svg)return;
     svg.classList.remove("animate");void svg.getBoundingClientRect();svg.classList.add("animate");
