@@ -167,7 +167,9 @@ const JourneyStructureLearning = (() => {
     sourcePanel=document.querySelector('[data-scene-panel="'+(kind==="pairing"?"primary":"secondary")+'"]');
     if(sourcePanel)sourcePanel.hidden=true;
     panel.hidden=false;footerHidden(true);
-    const content=panel.querySelector("#journeyBridgeContent");content.innerHTML=kind==="pairing"?primaryBridge():tertiaryBridge();
+    const content=panel.querySelector("#journeyBridgeContent");
+    if(kind==="tertiary"){miniViewer=null;miniModel=null;miniResidues=[];miniReady=null;}
+    content.innerHTML=kind==="pairing"?primaryBridge():tertiaryBridge();
     panel.querySelector("#journeyBridgeContinue").textContent=kind==="pairing"?"Continue to Secondary structure →":"Continue to Tertiary structure →";
     if(kind==="pairing")setupPairBridge();else setupTertiaryBridge();
     panel.scrollIntoView({behavior:"smooth",block:"start"});
