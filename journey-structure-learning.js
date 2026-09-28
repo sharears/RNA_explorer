@@ -73,11 +73,18 @@ const JourneyStructureLearning = (() => {
       <p>Exact hydrogen-bond patterns depend on which base edges meet and whether the pair is cis or trans.</p>
     </div>`;
     const lines=meta.bonds.map((b,i)=>`<g class="bp-hbond"><line x1="285" y1="${118+i*54}" x2="475" y2="${118+i*54}"/><text x="380" y="${105+i*54}">${b}</text></g>`).join("");
+    const edgeLabels={
+      AU:{left:["N6–H","N1"],right:["O4","H–N3"]},
+      GC:{left:["O6","N1–H","N2–H"],right:["H–N4","N3","O2"]},
+      GU:{left:["O6","N1–H"],right:["H–N3","O2"]}
+    }[kind];
+    const edgeText=edgeLabels.left.map((t,i)=>`<text class="bp-edge-atom" x="278" y="${123+i*54}" text-anchor="end">${t}</text>`).join("")+
+      edgeLabels.right.map((t,i)=>`<text class="bp-edge-atom" x="482" y="${123+i*54}" text-anchor="start">${t}</text>`).join("");
     const leftPurine=meta.left==="A"||meta.left==="G",rightPurine=meta.right==="A"||meta.right==="G";
     const base=(x,y,label,purine,side)=>`<g class="bp-base bp-${side}"><polygon points="${x-70},${y} ${x-35},${y-61} ${x+35},${y-61} ${x+70},${y} ${x+35},${y+61} ${x-35},${y+61}"/>${purine?`<polygon points="${x+35},${y-61} ${x+94},${y-35} ${x+94},${y+35} ${x+35},${y+61}"/>`:""}<text x="${x}" y="${y+8}" class="bp-letter">${label}</text></g>`;
     return `<svg class="bp-chem-svg" viewBox="0 0 760 330" role="img" aria-label="${meta.left}–${meta.right} base-pair schematic with ${meta.count} hydrogen bonds">
       ${base(190,170,meta.left,leftPurine,"left")}${base(570,170,meta.right,rightPurine,"right")}
-      ${lines}<text x="380" y="306" class="bp-caption">${kind==="GU"?"G–U wobble":"Watson–Crick "+meta.left+"–"+meta.right} · ${meta.count} hydrogen bonds shown schematically</text>
+      ${edgeText}${lines}<text x="380" y="306" class="bp-caption">${kind==="GU"?"G–U wobble":"Watson–Crick "+meta.left+"–"+meta.right} · ${meta.count} hydrogen bonds shown schematically</text>
     </svg>`;
   }
 
