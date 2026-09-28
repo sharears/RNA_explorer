@@ -133,6 +133,7 @@ const TertiaryExplorer = (() => {
 
   let viewer=null,model=null,viewerPromise=null,initialView=null,hoverLabel=null;
   let pairs=[],partner=[],setupDone=false,surfaceToken=0,resizeTicket=0;
+  let learningPulseTimer=null,learningPulseShapes=[];
   function scheduleViewerResize(preserveView=true){
     if(!viewer)return;
     const ticket=++resizeTicket,view=preserveView&&viewer.getView?viewer.getView():null;
@@ -490,7 +491,7 @@ const TertiaryExplorer = (() => {
     },(_,v)=>{if(hoverLabel){v.removeLabel(hoverLabel);hoverLabel=null;v.render();}});
   }
   function resetModelState(){
-    hoverLabel=null;initialView=null;state.selected=0;state.measurementPicks=[];state.measurements=[];state.measurementMode="off";state.derivedSecondary=null;state.learning.geometry=null;
+    clearLearningPulse();hoverLabel=null;initialView=null;state.selected=0;state.measurementPicks=[];state.measurements=[];state.measurementMode="off";state.derivedSecondary=null;state.learning.geometry=null;
     state.selectionIndices.clear();state.selectedPairs.clear();state.pairHbondStyles={};state.savedObjects=[];state.isolateObjectId=null;state.savedViews=[];clearComparison(false);
   }
   async function setModelFromText(text,format,sourceIsDefault,fileName){
@@ -835,7 +836,7 @@ const TertiaryExplorer = (() => {
     const g=state.learning.geometry;if(!g||!viewer||!model)return;
     (g.groups||[]).forEach(group=>(group.indices||[]).forEach(i=>{
       const residue=activeResidues()[i];if(!residue)return;
-      model.addStyle(selectorForResidue(residue),{stick:{radius:.23,color:group.color,opacity:.98},sphere:{radius:.25,color:group.color,opacity:.24}});
+      model.addStyle(selectorForResidue(residue),{stick:{radius:.27,color:"#ffffff",opacity:1},sphere:{radius:.29,color:"#ffffff",opacity:.22}});
     }));
     (g.connectors||[]).forEach(c=>drawStyledConnector(c.a,c.b,{lineStyle:c.lineStyle||"solid",color:c.color||LEARNING_COLORS.white,thickness:c.thickness||.055,opacity:.95,visible:true,labelVisible:false}));
     (g.points||[]).forEach(p=>{
@@ -849,6 +850,34 @@ const TertiaryExplorer = (() => {
     const residues=activeResidues(),selected=g.focusIndices.map(i=>residues[i]).filter(Boolean);if(!selected.length)return;
     const resi=selected.map(r=>r.resi),chain=state.activeChain,sel=chain?{chain,resi}:{resi};
     viewer.zoomTo(sel,420);viewer.render();
+  }
+  function clearLearningPulse(){
+    if(learningPulseTimer!==null)clearTimeout(learningPulseTimer);learningPulseTimer=null;
+    if(viewer&&typeof viewer.removeShape==="function")learningPulseShapes.forEach(shape=>{try{viewer.removeShape(shape);}catch(_){}});
+    learningPulseShapes=[];
+    const status=$("teLearningStatus");if(status)delete status.dataset.pulse;
+  }
+  function learningPulsePoints(g){
+    const pts=[];(g.points||[]).forEach(p=>{if(p?.point)pts.push(p.point);});
+    const residues=activeResidues();(g.focusIndices||[]).forEach(i=>{if(residues[i]?.coord)pts.push(residues[i].coord);});
+    const seen=new Set();return pts.filter(p=>{const k=[p.x,p.y,p.z].map(v=>Number(v).toFixed(2)).join("|");if(seen.has(k))return false;seen.add(k);return true;}).slice(0,30);
+  }
+  function pulseLearningGeometry(g,finalStatus){
+    clearLearningPulse();if(!viewer||!g)return;
+    if(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches){setLearningStatus(finalStatus);return;}
+    const pts=learningPulsePoints(g);if(!pts.length){setLearningStatus(finalStatus);return;}
+    const status=$("teLearningStatus");if(status)status.dataset.pulse="true";
+    let phase=0;
+    const tick=()=>{
+      if(typeof viewer.removeShape==="function")learningPulseShapes.forEach(shape=>{try{viewer.removeShape(shape);}catch(_){}});
+      learningPulseShapes=[];
+      if(phase%2===0)pts.forEach(p=>learningPulseShapes.push(viewer.addSphere({center:p,radius:.58,color:"#ffffff",opacity:.9})));
+      viewer.render();phase++;
+      if(phase<8)learningPulseTimer=setTimeout(tick,220);
+      else{learningPulseTimer=null;learningPulseShapes=[];if(status)delete status.dataset.pulse;setLearningStatus(finalStatus+" The feature remains highlighted in white.");viewer.render();}
+    };
+    setLearningStatus("Look here — the selected feature is flashing briefly.");
+    tick();
   }
   function renderLearningPanel(){
     const lesson=LEARNING_LESSONS[state.learning.key]||LEARNING_LESSONS.glycosidic;
@@ -865,12 +894,13 @@ const TertiaryExplorer = (() => {
     state.learning.key=LEARNING_LESSONS[key]?key:"glycosidic";renderLearningPanel();setLearningStatus("Preparing the 3D example…");
     try{
       await ensureViewer();if(!model)throw new Error("The 3D structure is not available.");
+      clearLearningPulse();
       const g=buildLearningGeometry(state.learning.key);state.learning.geometry=g;
-      applyStyles(false);focusLearningGeometry(g);viewer.render();setLearningStatus(g.status);return g;
+      applyStyles(false);focusLearningGeometry(g);viewer.render();pulseLearningGeometry(g,g.status);return g;
     }catch(error){state.learning.geometry=null;setLearningStatus(error.message||"This example could not be shown.",true);throw error;}
   }
   function clearLearningFeature(){
-    state.learning.geometry=null;setLearningStatus("Highlight cleared. Choose “Show in 3D” to display the current concept again.");
+    clearLearningPulse();state.learning.geometry=null;setLearningStatus("Highlight cleared. Choose a concept to display it again.");
     if(viewer&&model){applyStyles(false);viewer.render();}
   }
   function setupLearningPanel(){
@@ -972,8 +1002,13 @@ const TertiaryExplorer = (() => {
     safe("shape cleanup",()=>viewer.removeAllShapes());safe("label cleanup",()=>viewer.removeAllLabels());hoverLabel=null;
     safe("base style reset",()=>model.setStyle({},{}));
     if(state.comparison.model)safe("comparison reset",()=>state.comparison.model.setStyle({},{}));
-    const residues=activeResidues();
-    if(state.visibility.rna)residues.forEach((r,i)=>{if(isVisibleIndex(i))safe("residue style "+(i+1),()=>applyResidueRepresentation(r,i));});
+    const residues=activeResidues(),guidedLearning=document.body?.dataset?.pageMode==="journey"&&Boolean(state.learning.geometry);
+    const scene=$("scene-tertiary");if(scene)scene.classList.toggle("learning-feature-active",guidedLearning);
+    if(state.visibility.rna)residues.forEach((r,i)=>{
+      if(!isVisibleIndex(i))return;
+      if(guidedLearning)safe("dim residue "+(i+1),()=>model.setStyle(selectorForResidue(r),{line:{linewidth:1,color:"#6c7884",opacity:.18}}));
+      else safe("residue style "+(i+1),()=>applyResidueRepresentation(r,i));
+    });
     safe("component styles",applyCategoryStyles);
     if(state.comparison.model&&state.comparison.visible)safe("comparison style",()=>state.comparison.model.setStyle({},{line:{linewidth:2,color:"#f0a36f",opacity:.8}}));
     safe("selection highlights",addSelectionHighlights);safe("selected pair highlights",addSelectedPairHighlights);safe("object highlights",addObjectHighlights);
