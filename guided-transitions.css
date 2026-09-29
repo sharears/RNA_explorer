@@ -98,4 +98,7 @@ body[data-page-mode="journey"] .scene.guided-transition-active>.guided-transitio
 }
 @media(prefers-reduced-motion:reduce){
   .gps-fold-svg.animate *{animation:none!important}
+  .gps-fold-svg.shape-view .gps-chain-straight,.gps-fold-svg.shape-view .gps-fold-caption.straight{opacity:0}
+  .gps-fold-svg.shape-view .gps-chain-folded,.gps-fold-svg.shape-view .gps-fold-caption.folded{opacity:1}
+  .gps-fold-svg.pairing-view .gps-fold-pair-group{opacity:1}
 }
