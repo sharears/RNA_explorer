@@ -1,5 +1,6 @@
 const GuidedStructureTransitions = (() => {
-  const state={secondaryReady:false,tertiaryReady:false,miniFeature:"glycosidic",yaw:-0.55,pitch:0.34,dragging:false,lastX:0,lastY:0};
+  const state={secondaryReady:false,tertiaryReady:false,miniFeature:"glycosidic",yaw:-0.55,pitch:0.34,dragging:false,lastX:0,lastY:0,
+    realPairKey:"gc",realPairModels:null,realPairPromise:null};
 
   const PAIR_LESSONS={
     au:{
@@ -77,16 +78,9 @@ const GuidedStructureTransitions = (() => {
     },
     basepair:{
       title:"Base pairing in 3D",
-      definition:"Base pairing brings nucleobase edges together. Hydrogen bonds can stabilize a particular relative orientation.",
-      notice:"Compare this edge-to-edge arrangement with the face-to-face arrangement of base stacking.",
-      points:[
-        {id:"A1",x:-1.8,y:.8,z:.15,c:"#f2c66d"},{id:"A2",x:-.65,y:1.2,z:.05,c:"#f2c66d"},{id:"A3",x:-.2,y:.1,z:-.05,c:"#ffffff"},
-        {id:"A4",x:-.8,y:-.9,z:.1,c:"#f2c66d"},{id:"A5",x:-1.9,y:-.55,z:.18,c:"#f2c66d"},
-        {id:"U1",x:1.7,y:.75,z:-.08,c:"#74d7b6"},{id:"U2",x:.65,y:1.1,z:.02,c:"#74d7b6"},{id:"U3",x:.25,y:.05,z:.05,c:"#ffffff"},
-        {id:"U4",x:.8,y:-.85,z:-.1,c:"#74d7b6"},{id:"U5",x:1.85,y:-.45,z:-.12,c:"#74d7b6"}
-      ],
-      bonds:[["A1","A2"],["A2","A3"],["A3","A4"],["A4","A5"],["A5","A1"],["U1","U2"],["U2","U3"],["U3","U4"],["U4","U5"],["U5","U1"]],
-      highlight:["A1","A2","A3","A4","A5","U1","U2","U3","U4","U5"],guide:[["A3","U3"],["A2","U2"]]
+      definition:"A real RNA base pair is an atom-by-atom interaction between complete nucleotides, not a pair of abstract polygons.",
+      notice:"Rotate the nucleotide pair. Carbon is green, oxygen red, nitrogen blue, hydrogen white, and phosphorus orange. Dashed white lines mark the hydrogen bonds.",
+      generator:"realpair"
     },
     helix:{
       title:"RNA helix",
@@ -107,6 +101,78 @@ const GuidedStructureTransitions = (() => {
       generator:"contact"
     }
   };
+
+  const ELEMENT_COLORS={C:"#33cc66",O:"#ff3b30",N:"#2f6bff",H:"#ffffff",P:"#ff9f0a",S:"#ffd60a"};
+  const COVALENT_RADII={C:.76,N:.71,O:.66,H:.31,P:1.07,S:1.05};
+  const REAL_PAIR_DEFS={
+    gc:{label:"G–C Watson–Crick",residues:[["G",1,"G1"],["C",72,"C72"]],hbonds:[["C72","N4","G1","O6"],["G1","N1","C72","N3"],["G1","N2","C72","O2"]]},
+    au:{label:"A–U Watson–Crick",residues:[["A",5,"A5"],["U",68,"U68"]],hbonds:[["A5","N6","U68","O4"],["U68","N3","A5","N1"]]},
+    gu:{label:"G–U wobble",residues:[["G",4,"G4"],["U",69,"U69"]],hbonds:[["U69","N3","G4","O6"],["G4","N1","U69","O2"]]}
+  };
+  const distance3=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
+  function atomElement(atomName,raw=""){
+    const e=String(raw||"").trim().toUpperCase();if(ELEMENT_COLORS[e])return e;
+    const m=String(atomName||"").toUpperCase().match(/[A-Z]/);return m&&ELEMENT_COLORS[m[0]]?m[0]:"C";
+  }
+  function parsePdbAtoms(text){
+    const out=[];
+    String(text||"").split(/\r?\n/).forEach(line=>{
+      if(!line.startsWith("ATOM  ")&&!line.startsWith("HETATM"))return;
+      const chain=line.slice(21,22).trim(),resi=Number.parseInt(line.slice(22,26).trim(),10);
+      const name=line.slice(12,16).trim(),resn=line.slice(17,20).trim().toUpperCase();
+      const x=Number.parseFloat(line.slice(30,38)),y=Number.parseFloat(line.slice(38,46)),z=Number.parseFloat(line.slice(46,54));
+      if(chain!=="A"||!Number.isFinite(resi)||![x,y,z].every(Number.isFinite))return;
+      out.push({name,resn,resi,x,y,z,element:atomElement(name,line.slice(76,78))});
+    });
+    return out;
+  }
+  function normalizeRealPair(def,allAtoms){
+    const points=[],bonds=[],guide=[],byId=new Map(),groups=[];
+    def.residues.forEach(([resn,resi,prefix])=>{
+      const atoms=allAtoms.filter(a=>a.resi===resi&&a.resn===resn);
+      if(!atoms.length)throw new Error("Could not find "+resn+resi+" in the 1EHZ coordinate file.");
+      groups.push(atoms.map(a=>prefix+":"+a.name));
+      atoms.forEach(a=>{
+        const id=prefix+":"+a.name;
+        const point={id,x:a.x,y:a.y,z:a.z,element:a.element,showLabel:a.element!=="C"||a.name==="C1'"};
+        points.push(point);byId.set(id,point);
+      });
+      for(let i=0;i<atoms.length;i++)for(let j=i+1;j<atoms.length;j++){
+        const a=atoms[i],b=atoms[j],cut=(COVALENT_RADII[a.element]||.75)+(COVALENT_RADII[b.element]||.75)+.42;
+        const d=distance3(a,b);
+        if(d>.45&&d<=cut)bonds.push([prefix+":"+a.name,prefix+":"+b.name]);
+      }
+    });
+    def.hbonds.forEach(([donorPrefix,donorName,acceptPrefix,acceptName],i)=>{
+      const donor=byId.get(donorPrefix+":"+donorName),accept=byId.get(acceptPrefix+":"+acceptName);
+      if(!donor||!accept)return;
+      const dx=accept.x-donor.x,dy=accept.y-donor.y,dz=accept.z-donor.z,len=Math.hypot(dx,dy,dz)||1;
+      const hid="HbondH"+i;
+      const h={id:hid,x:donor.x+dx/len*.98,y:donor.y+dy/len*.98,z:donor.z+dz/len*.98,element:"H",showLabel:true};
+      points.push(h);byId.set(hid,h);bonds.push([donorPrefix+":"+donorName,hid]);guide.push([hid,acceptPrefix+":"+acceptName]);
+    });
+    const center=points.reduce((o,p)=>({x:o.x+p.x/points.length,y:o.y+p.y/points.length,z:o.z+p.z/points.length}),{x:0,y:0,z:0});
+    const scale=.34;
+    points.forEach(p=>{p.x=(p.x-center.x)*scale;p.y=(p.y-center.y)*scale;p.z=(p.z-center.z)*scale;});
+    return {points,bonds,guide,highlight:points.map(p=>p.id),label: def.label,source:"PDB 1EHZ"};
+  }
+  async function loadRealPairModels(){
+    if(state.realPairModels)return state.realPairModels;
+    if(state.realPairPromise)return state.realPairPromise;
+    state.realPairPromise=fetch("https://files.rcsb.org/download/1EHZ.pdb")
+      .then(r=>{if(!r.ok)throw new Error("Could not load the 1EHZ teaching coordinates.");return r.text();})
+      .then(text=>{
+        const atoms=parsePdbAtoms(text),models={};
+        Object.entries(REAL_PAIR_DEFS).forEach(([key,def])=>{models[key]=normalizeRealPair(def,atoms);});
+        state.realPairModels=models;state.realPairPromise=null;return models;
+      })
+      .catch(error=>{state.realPairPromise=null;throw error;});
+    return state.realPairPromise;
+  }
+  function inferMiniElement(id){
+    const atom=String(id||"").split(":").pop();
+    const m=atom.match(/^([A-Z])/);return m&&ELEMENT_COLORS[m[1]]?m[1]:"C";
+  }
 
   function helixModel(){
     const points=[],bonds=[],highlight=[];
@@ -166,7 +232,7 @@ const GuidedStructureTransitions = (() => {
     return '<section class="guided-transition gps-secondary-transition" id="guidedSecondaryTransition">'+
       '<div class="gps-transition-copy"><span class="fact-label">PRIMARY → SECONDARY</span><h2>How can one RNA chain make a secondary structure?</h2>'+
       '<p>The chain can bend back toward itself. When compatible nucleobases meet, they can form base pairs. Several pairs together create stems, loops and other secondary-structure elements.</p>'+
-      '<div class="gps-step-row"><button type="button" class="active" data-gps-secondary-step="fold">1 · Fold the chain</button><button type="button" data-gps-secondary-step="pair">2 · Look at a base pair</button><button type="button" data-gps-secondary-step="more">3 · RNA can pair in other ways</button></div>'+
+      '<div class="gps-step-row"><button type="button" class="active" data-gps-secondary-step="fold">1 · Shape the chain</button><button type="button" data-gps-secondary-step="pair">2 · Reveal base pairs</button><button type="button" data-gps-secondary-step="more">3 · Look closer</button></div>'+
       '<div class="gps-secondary-copy" id="gpsSecondaryCopy"></div>'+
       '<button class="primary-action" type="button" id="gpsContinueSecondary">Continue to the full secondary structure →</button></div>'+
       '<div class="gps-transition-visual"><div id="gpsSecondaryVisual"></div></div></section>';
@@ -180,7 +246,7 @@ const GuidedStructureTransitions = (() => {
       Object.entries(MINI_LESSONS).map(([key,v])=>'<button type="button" data-gps-mini-feature="'+key+'" class="'+(key==="glycosidic"?"active":"")+'">'+v.title+'</button>').join("")+
       '</div><article class="gps-mini-copy"><h3 id="gpsMiniTitle"></h3><p id="gpsMiniDefinition"></p><p><strong>What should I notice?</strong> <span id="gpsMiniNotice"></span></p></article>'+
       '<button class="primary-action" type="button" id="gpsContinueTertiary">Continue to the full tertiary structure →</button></div>'+
-      '<div class="gps-transition-visual"><div class="gps-mini-toolbar"><span>Drag to rotate</span><button type="button" id="gpsMiniReset">Reset view</button></div><svg id="gpsMini3D" viewBox="0 0 640 520" role="img" aria-label="Interactive 3D teaching model"></svg><p class="gps-mini-caption">Interactive teaching model · not to scale</p></div></section>';
+      '<div class="gps-transition-visual"><div class="gps-mini-toolbar"><span>Drag to rotate</span><button type="button" id="gpsMiniReset">Reset view</button></div><div class="gps-real-pair-tabs" id="gpsRealPairTabs" hidden><button type="button" class="active" data-gps-real-pair="gc">G–C</button><button type="button" data-gps-real-pair="au">A–U</button><button type="button" data-gps-real-pair="gu">G–U</button></div><svg id="gpsMini3D" viewBox="0 0 640 520" role="img" aria-label="Interactive 3D teaching model"></svg><div class="gps-element-legend" aria-label="Element colors"><span><i data-element="C"></i>Carbon</span><span><i data-element="O"></i>Oxygen</span><span><i data-element="N"></i>Nitrogen</span><span><i data-element="H"></i>Hydrogen</span><span><i data-element="P"></i>Phosphorus</span></div><p class="gps-mini-caption" id="gpsMiniCaption">Interactive teaching model</p></div></section>';
   }
 
   function buildSecondaryTransition(){
@@ -191,20 +257,28 @@ const GuidedStructureTransitions = (() => {
     renderSecondaryStep("fold");
   }
 
-  function renderFoldVisual(){
-    const folded=[[50,150],[95,135],[140,112],[186,80],[232,65],[280,85],[320,125],[355,165],[410,190],[465,175],[510,140],[555,105]];
-    const straight=folded.map((_,i)=>[48+i*46,125]);
-    const letters=["G","C","A","U","G","C","A","A","U","G","C","U"];
-    const group=(points,cls)=>{
-      const circles=points.map((p,i)=>'<g class="gps-fold-residue"><circle cx="'+p[0]+'" cy="'+p[1]+'" r="14"/><text x="'+p[0]+'" y="'+(p[1]+4)+'">'+letters[i]+'</text></g>').join("");
-      const backbone=points.slice(1).map((p,i)=>'<line x1="'+points[i][0]+'" y1="'+points[i][1]+'" x2="'+p[0]+'" y2="'+p[1]+'"/>').join("");
-      return '<g class="'+cls+'"><g class="gps-fold-backbone">'+backbone+'</g>'+circles+'</g>';
-    };
-    const pairs=[[1,10],[2,9],[3,8]].map(([a,b],i)=>'<line class="gps-fold-pair p'+i+'" x1="'+folded[a][0]+'" y1="'+folded[a][1]+'" x2="'+folded[b][0]+'" y2="'+folded[b][1]+'"/>').join("");
-    return '<div class="gps-fold-card"><svg viewBox="0 0 610 245" class="gps-fold-svg" role="img" aria-label="An extended RNA chain transitions to a folded chain with three intramolecular base pairs.">'+
-      group(straight,"gps-chain-straight")+group(folded,"gps-chain-folded")+pairs+
-      '<text class="gps-fold-caption straight" x="305" y="205">primary chain · extended for teaching</text><text class="gps-fold-caption folded" x="305" y="225">parts of the same chain approach and pair</text></svg>'+
-      '<div class="gps-fold-actions"><button type="button" id="gpsFoldPlay">Replay folding</button><span>Watch distant residues approach and pair.</span></div></div>';
+  const FOLD_LETTERS=["U","A","G","G","A","G","C","A","U","G","U","U","C","A","G","U"];
+  const FOLDED_POINTS=[[70,220],[100,205],[132,186],[162,162],[184,132],[190,100],[200,70],[225,48],[258,40],[291,48],[316,70],[326,100],[332,132],[354,162],[384,186],[416,205]];
+  const STRAIGHT_POINTS=FOLDED_POINTS.map((_,i)=>[48+i*33,125]);
+  const FOLD_PAIRS=[
+    {a:3,b:12,type:"G–C"},{a:4,b:11,type:"A–U"},{a:5,b:10,type:"G–U"},{a:6,b:9,type:"C–G"}
+  ];
+  function chainGroup(points,cls){
+    const circles=points.map((p,i)=>'<g class="gps-fold-residue"><circle cx="'+p[0]+'" cy="'+p[1]+'" r="13"/><text x="'+p[0]+'" y="'+(p[1]+4)+'">'+FOLD_LETTERS[i]+'</text></g>').join("");
+    const backbone=points.slice(1).map((p,i)=>'<line x1="'+points[i][0]+'" y1="'+points[i][1]+'" x2="'+p[0]+'" y2="'+p[1]+'"/>').join("");
+    return '<g class="'+cls+'"><g class="gps-fold-backbone">'+backbone+'</g>'+circles+'</g>';
+  }
+  function renderFoldVisual(showPairs=false){
+    const pairLines=showPairs?FOLD_PAIRS.map((pair,i)=>{
+      const a=FOLDED_POINTS[pair.a],b=FOLDED_POINTS[pair.b];
+      return '<g class="gps-fold-pair-group pair-'+i+'"><line class="gps-fold-pair" x1="'+a[0]+'" y1="'+a[1]+'" x2="'+b[0]+'" y2="'+b[1]+'"/><text x="'+((a[0]+b[0])/2)+'" y="'+((a[1]+b[1])/2-5)+'">'+pair.type+'</text></g>';
+    }).join(""):"";
+    const aria=showPairs?"A radial hairpin-like RNA chain with base-pair connections revealed one by one.":"A straight RNA chain bends into a radial hairpin-like path without showing any base pairs.";
+    return '<div class="gps-fold-card"><svg viewBox="0 0 520 255" class="gps-fold-svg '+(showPairs?"pairing-view":"shape-view")+'" role="img" aria-label="'+aria+'">'+
+      (showPairs?chainGroup(FOLDED_POINTS,"gps-chain-fixed")+pairLines:chainGroup(STRAIGHT_POINTS,"gps-chain-straight")+chainGroup(FOLDED_POINTS,"gps-chain-folded"))+
+      '<text class="gps-fold-caption straight" x="260" y="238">'+(showPairs?"radial shape stays fixed while pairs appear":"straight primary chain")+'</text>'+
+      (!showPairs?'<text class="gps-fold-caption folded" x="260" y="238">radial / hairpin-like shape · no base pairs yet</text>':"")+
+      '</svg><div class="gps-fold-actions"><button type="button" id="gpsFoldPlay">'+(showPairs?"Replay base pairs":"Replay shape change")+'</button><span>'+(showPairs?"The chain does not move during this step.":"First change the shape only; do not imply what causes the fold.")+'</span></div></div>';
   }
   function playFold(){
     const svg=document.querySelector(".gps-fold-svg");if(!svg)return;
@@ -215,21 +289,20 @@ const GuidedStructureTransitions = (() => {
     document.querySelectorAll("[data-gps-secondary-step]").forEach(b=>b.classList.toggle("active",b.dataset.gpsSecondaryStep===step));
     const copy=$("gpsSecondaryCopy"),visual=$("gpsSecondaryVisual");if(!copy||!visual)return;
     if(step==="fold"){
-      copy.innerHTML='<h3>Start with the primary chain</h3><p>The sequence does not have to stay extended. Parts of the same RNA can approach one another and form intramolecular base pairs.</p>';
-      visual.innerHTML=renderFoldVisual();$("gpsFoldPlay")?.addEventListener("click",playFold);setTimeout(playFold,50);return;
+      copy.innerHTML='<h3>First, change the shape of the chain</h3><p>Start with a straight teaching representation. Watch the same continuous RNA backbone bend and make a U-turn into a radial, hairpin-like layout. No base pairs are shown during this step, so the animation does not claim whether pairing or folding happened first.</p>';
+      visual.innerHTML=renderFoldVisual(false);$("gpsFoldPlay")?.addEventListener("click",playFold);setTimeout(playFold,50);return;
     }
     if(step==="pair"){
-      copy.innerHTML='<h3>Zoom in: what does a base pair mean chemically?</h3><p>A secondary-structure line is a shorthand for an atomic interaction. Choose a standard Watson–Crick pair or the common G–U wobble pair.</p>'+
-        '<div class="gps-pair-tabs"><button type="button" data-gps-pair="au" class="active">A–U</button><button type="button" data-gps-pair="gc">G–C</button><button type="button" data-gps-pair="gu">G–U wobble</button></div><div id="gpsPairText"></div>';
-      visual.innerHTML='<div class="gps-pair-stage" id="gpsPairStage"></div>';
-      document.querySelectorAll("[data-gps-pair]").forEach(b=>b.addEventListener("click",()=>renderPair(b.dataset.gpsPair)));
-      renderPair("au");return;
+      copy.innerHTML='<h3>Now reveal the base-pair connections</h3><p>Keep the radial shape fixed. Base-pair connections appear one by one across the two sides of the folded chain, including A–U, G–C and a G–U wobble example.</p>';
+      visual.innerHTML=renderFoldVisual(true);$("gpsFoldPlay")?.addEventListener("click",playFold);setTimeout(playFold,50);return;
     }
-    copy.innerHTML='<h3>RNA is not limited to Watson–Crick geometry</h3><p>A–U and G–C are the standard Watson–Crick pairs, but folded RNA contains many non-Watson–Crick interactions. The important idea here is that nucleobases have multiple interaction edges and can meet in different relative orientations.</p>'+
+    copy.innerHTML='<h3>Zoom in: what does one of those lines mean chemically?</h3><p>A secondary-structure line is shorthand for an atom-level interaction. Compare standard Watson–Crick pairs with the common G–U wobble. RNA can also use other non-Watson–Crick edges and orientations.</p>'+
+      '<div class="gps-pair-tabs"><button type="button" data-gps-pair="au" class="active">A–U</button><button type="button" data-gps-pair="gc">G–C</button><button type="button" data-gps-pair="gu">G–U wobble</button></div><div id="gpsPairText"></div>'+
       '<div class="gps-nonstandard-list"><span>G–U wobble</span><span>Sheared G–A</span><span>Hoogsteen / reverse-Hoogsteen geometries</span><span>Other edge combinations</span></div>';
-    visual.innerHTML='<div class="gps-more-card"><div><strong>Watson–Crick</strong><small>canonical edge-to-edge geometry</small></div><div class="gps-arrow">→</div><div><strong>Non-Watson–Crick</strong><small>alternative edges and orientations expand RNA structural diversity</small></div></div>';
+    visual.innerHTML='<div class="gps-pair-stage" id="gpsPairStage"></div>';
+    document.querySelectorAll("[data-gps-pair]").forEach(b=>b.addEventListener("click",()=>renderPair(b.dataset.gpsPair)));
+    renderPair("au");
   }
-
   function renderPair(key){
     const lesson=PAIR_LESSONS[key]||PAIR_LESSONS.au;
     document.querySelectorAll("[data-gps-pair]").forEach(b=>b.classList.toggle("active",b.dataset.gpsPair===key));
@@ -241,6 +314,7 @@ const GuidedStructureTransitions = (() => {
     const scene=$("scene-tertiary");if(!scene||$("guidedTertiaryTransition"))return;
     scene.insertAdjacentHTML("afterbegin",tertiaryTransitionMarkup());
     document.querySelectorAll("[data-gps-mini-feature]").forEach(b=>b.addEventListener("click",()=>{state.miniFeature=b.dataset.gpsMiniFeature;renderMiniLesson();}));
+    document.querySelectorAll("[data-gps-real-pair]").forEach(b=>b.addEventListener("click",()=>{state.realPairKey=b.dataset.gpsRealPair;renderMiniLesson();}));
     $("gpsMiniReset").addEventListener("click",()=>{state.yaw=-.55;state.pitch=.34;renderMiniModel();});
     $("gpsContinueTertiary").addEventListener("click",()=>showTertiaryWorkspace());
     const svg=$("gpsMini3D");
@@ -252,6 +326,7 @@ const GuidedStructureTransitions = (() => {
 
   function modelForLesson(){
     const lesson=MINI_LESSONS[state.miniFeature]||MINI_LESSONS.glycosidic;
+    if(lesson.generator==="realpair")return state.realPairModels?.[state.realPairKey]||{...lesson,points:[],bonds:[],guide:[],highlight:[]};
     if(lesson.generator==="helix")return {...lesson,...helixModel()};
     if(lesson.generator==="junction")return {...lesson,...junctionModel()};
     if(lesson.generator==="contact")return {...lesson,...contactModel()};
@@ -264,13 +339,19 @@ const GuidedStructureTransitions = (() => {
   }
   function renderMiniModel(){
     const svg=$("gpsMini3D");if(!svg)return;const model=modelForLesson();
-    const pts=model.points.map(rotatePoint),map=new Map(pts.map(p=>[p.id,p])),scale=76,cx=320,cy=255;
+    if(!model.points?.length){
+      svg.innerHTML='<text x="320" y="260" text-anchor="middle" class="gps-mini-loading">Loading atom-level nucleotide coordinates…</text>';
+      svg.dataset.feature=state.miniFeature;return;
+    }
+    const pts=model.points.map(rotatePoint),map=new Map(pts.map(p=>[p.id,p])),scale=state.miniFeature==="basepair"?72:76,cx=320,cy=255;
     const line=(a,b,cls)=>{const p=map.get(a),q=map.get(b);if(!p||!q)return"";return '<line class="'+cls+'" x1="'+(cx+p.rx*scale)+'" y1="'+(cy-p.ry*scale)+'" x2="'+(cx+q.rx*scale)+'" y2="'+(cy-q.ry*scale)+'"/>';};
     const bonds=(model.bonds||[]).map(x=>line(x[0],x[1],"gps-mini-bond")).join("");
     const guides=(model.guide||[]).map(x=>line(x[0],x[1],"gps-mini-guide")).join("");
     const nodes=pts.slice().sort((a,b)=>a.rz-b.rz).map(p=>{
-      const hi=(model.highlight||[]).includes(p.id),r=hi?13:9,op=Math.max(.55,Math.min(1,.8+p.rz*.08));
-      return '<g class="gps-mini-node '+(hi?"highlight":"")+'" transform="translate('+(cx+p.rx*scale)+' '+(cy-p.ry*scale)+')" opacity="'+op+'"><circle r="'+r+'" fill="'+p.c+'"/><text y="'+(hi?-18:-14)+'">'+p.id+'</text></g>';
+      const hi=(model.highlight||[]).includes(p.id),element=p.element||inferMiniElement(p.id),color=ELEMENT_COLORS[element]||"#33cc66";
+      const r=element==="H"?7:element==="P"?14:hi?11:9,op=Math.max(.58,Math.min(1,.82+p.rz*.06));
+      const label=p.showLabel===false?"":'<text y="'+(r+13)+'">'+String(p.id).split(":").pop()+'</text>';
+      return '<g class="gps-mini-node '+(hi?"highlight":"")+'" data-element="'+element+'" transform="translate('+(cx+p.rx*scale)+' '+(cy-p.ry*scale)+')" opacity="'+op+'"><circle r="'+r+'" fill="'+color+'"/>'+label+'</g>';
     }).join("");
     svg.innerHTML='<g>'+bonds+guides+nodes+'</g>';
     svg.dataset.feature=state.miniFeature;svg.dataset.yaw=state.yaw.toFixed(3);svg.dataset.pitch=state.pitch.toFixed(3);
@@ -278,7 +359,18 @@ const GuidedStructureTransitions = (() => {
   function renderMiniLesson(){
     const l=MINI_LESSONS[state.miniFeature]||MINI_LESSONS.glycosidic;
     document.querySelectorAll("[data-gps-mini-feature]").forEach(b=>b.classList.toggle("active",b.dataset.gpsMiniFeature===state.miniFeature));
-    $("gpsMiniTitle").textContent=l.title;$("gpsMiniDefinition").textContent=l.definition;$("gpsMiniNotice").textContent=l.notice;renderMiniModel();
+    document.querySelectorAll("[data-gps-real-pair]").forEach(b=>b.classList.toggle("active",b.dataset.gpsRealPair===state.realPairKey));
+    const pairMode=state.miniFeature==="basepair";
+    if($("gpsRealPairTabs"))$("gpsRealPairTabs").hidden=!pairMode;
+    $("gpsMiniTitle").textContent=pairMode?(REAL_PAIR_DEFS[state.realPairKey]?.label||l.title):l.title;
+    $("gpsMiniDefinition").textContent=l.definition;$("gpsMiniNotice").textContent=l.notice;
+    if($("gpsMiniCaption"))$("gpsMiniCaption").textContent=pairMode?"Atom coordinates from PDB 1EHZ · teaching hydrogens added for donor–acceptor visualization":"Interactive teaching model · element-colored atoms";
+    renderMiniModel();
+    if(pairMode&&!state.realPairModels){
+      loadRealPairModels().then(()=>{if(state.miniFeature==="basepair")renderMiniLesson();}).catch(error=>{
+        const svg=$("gpsMini3D");if(svg)svg.innerHTML='<text x="320" y="250" text-anchor="middle" class="gps-mini-loading">Could not load the atom-level base-pair example.</text><text x="320" y="278" text-anchor="middle" class="gps-mini-loading small">'+String(error.message||error)+'</text>';
+      });
+    }
   }
 
   function activateOverlay(sceneName){
