@@ -55,7 +55,9 @@ run('showScene(3)');
 assert.equal(document.querySelectorAll('.growth-residue').length,1);
 for(let i=0;i<4;i++)flush();
 assert.equal(document.querySelectorAll('.growth-residue').length,5);
-assert.equal(document.querySelectorAll('.growth-link').length,4);
+assert.equal(document.querySelectorAll('.growth-phosphate').length,5,'Every displayed incoming unit should already contain its phosphate');
+assert.equal(document.querySelectorAll('.growth-residue[data-nucleotide-phosphate="attached"]').length,5,'Phosphate is part of the nucleotide before chain linkage');
+assert.equal(document.querySelectorAll('.growth-link').length,4,'Only inter-nucleotide phosphodiester connections are animated between complete nucleotides');
 assert.equal(document.getElementById('sequenceReveal').hidden,true);
 flush();
 assert.equal(document.getElementById('sequenceReveal').hidden,false);
@@ -74,4 +76,4 @@ assert.equal(document.querySelectorAll('#primarySequence .nt:not(.unbuilt)').len
 assert.equal(timers.size,0);
 document.querySelectorAll('#primarySequence .nt')[17].click();
 assert.equal(run('state.selectedResidue'),17);
-console.log('PASS: six views, four base choices, chemistry reactions, 5′→3′ growth, four linkages, 76-letter transition, replay, cancellation, reduced motion and linked selection. DOM integration checked; visual browser QA not performed.');
+console.log('PASS: six views, four base choices, chemistry reactions, phosphate-bearing nucleotide growth, four inter-nucleotide linkages, 76-letter transition, replay, cancellation, reduced motion and linked selection. DOM integration checked; visual browser QA not performed.');
