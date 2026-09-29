@@ -35,14 +35,20 @@ body[data-page-mode="journey"] .scene.guided-transition-active>.guided-transitio
 .gps-fold-pair{stroke:#74d7b6;stroke-width:3;stroke-dasharray:6 5;opacity:1}
 .gps-fold-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;color:var(--muted);font-size:.78rem}
 .gps-chain-straight{opacity:1}
-.gps-chain-folded,.gps-fold-svg .gps-fold-pair,.gps-fold-caption.folded{opacity:0}
-.gps-fold-svg.animate .gps-chain-straight,.gps-fold-svg.animate .gps-fold-caption.straight{animation:gps-straight-away 1.7s ease both}
-.gps-fold-svg.animate .gps-chain-folded,.gps-fold-svg.animate .gps-fold-caption.folded{animation:gps-folded-in 1.7s ease both}
-.gps-fold-svg.animate .gps-fold-pair{animation:gps-pair-appear 2.05s ease both}
+.gps-chain-folded,.gps-fold-caption.folded{opacity:0}
+.gps-chain-fixed{opacity:1}
+.gps-fold-svg.shape-view.animate .gps-chain-straight,.gps-fold-svg.shape-view.animate .gps-fold-caption.straight{animation:gps-straight-away 1.9s ease both}
+.gps-fold-svg.shape-view.animate .gps-chain-folded,.gps-fold-svg.shape-view.animate .gps-fold-caption.folded{animation:gps-folded-in 1.9s ease both}
+.gps-fold-pair-group{opacity:0}
+.gps-fold-svg.pairing-view.animate .gps-fold-pair-group{animation:gps-pair-group-appear .55s ease both}
+.gps-fold-svg.pairing-view.animate .gps-fold-pair-group.pair-1{animation-delay:.48s}
+.gps-fold-svg.pairing-view.animate .gps-fold-pair-group.pair-2{animation-delay:.96s}
+.gps-fold-svg.pairing-view.animate .gps-fold-pair-group.pair-3{animation-delay:1.44s}
+.gps-fold-pair-group text{fill:#dce8ed;text-anchor:middle;font:700 10px "DM Mono",monospace;paint-order:stroke;stroke:#07111c;stroke-width:4}
 .gps-fold-caption{fill:#9cabb8;text-anchor:middle;font:600 11px "DM Mono",monospace}
-@keyframes gps-straight-away{0%,25%{opacity:1}58%,100%{opacity:0}}
-@keyframes gps-folded-in{0%,35%{opacity:0}70%,100%{opacity:1}}
-@keyframes gps-pair-appear{0%,67%{opacity:0}100%{opacity:1}}
+@keyframes gps-straight-away{0%,24%{opacity:1}62%,100%{opacity:0}}
+@keyframes gps-folded-in{0%,34%{opacity:0}72%,100%{opacity:1}}
+@keyframes gps-pair-group-appear{from{opacity:0}to{opacity:1}}
 .gps-pair-svg{display:block;width:100%;max-height:360px}
 .gps-base-ring{fill:rgba(242,198,109,.12);stroke:#f2c66d;stroke-width:3}
 .gps-base-ring.right{fill:rgba(116,215,182,.1);stroke:#74d7b6}
@@ -63,13 +69,22 @@ body[data-page-mode="journey"] .scene.guided-transition-active>.guided-transitio
 .gps-mini-copy p{margin:7px 0}
 .gps-mini-copy strong{color:var(--cream)}
 .gps-mini-toolbar{position:absolute;top:16px;left:20px;right:20px;z-index:2;display:flex;justify-content:space-between;align-items:center;color:var(--muted);font:600 .72rem "DM Mono",monospace}
+.gps-real-pair-tabs{position:absolute;top:56px;left:20px;z-index:3;display:flex;gap:6px}
+.gps-real-pair-tabs[hidden]{display:none}
+.gps-real-pair-tabs button{border:1px solid var(--line);border-radius:999px;background:rgba(7,17,28,.84);color:var(--muted);padding:7px 10px;cursor:pointer;font:700 .7rem "DM Mono",monospace}
+.gps-real-pair-tabs button.active{border-color:var(--mint);color:var(--mint);background:rgba(116,215,182,.1)}
+.gps-element-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:9px 14px;margin:4px 0 7px;color:var(--muted);font:.68rem "DM Mono",monospace}
+.gps-element-legend span{display:flex;align-items:center;gap:5px}
+.gps-element-legend i{width:10px;height:10px;border-radius:50%;display:inline-block;border:1px solid rgba(255,255,255,.42)}
+.gps-element-legend i[data-element="C"]{background:#33cc66}.gps-element-legend i[data-element="O"]{background:#ff3b30}.gps-element-legend i[data-element="N"]{background:#2f6bff}.gps-element-legend i[data-element="H"]{background:#fff}.gps-element-legend i[data-element="P"]{background:#ff9f0a}
 #gpsMini3D{width:100%;height:min(60vh,530px);touch-action:none;cursor:grab}
 #gpsMini3D:active{cursor:grabbing}
 .gps-mini-bond{stroke:#71879a;stroke-width:6;stroke-linecap:round}
-.gps-mini-guide{stroke:#fff;stroke-width:3;stroke-dasharray:8 7;opacity:.9}
+.gps-mini-guide{stroke:#fff;stroke-width:2.5;stroke-dasharray:7 6;opacity:.92}
 .gps-mini-node circle{stroke:rgba(255,255,255,.5);stroke-width:2}
 .gps-mini-node.highlight circle{filter:drop-shadow(0 0 8px rgba(255,255,255,.45))}
 .gps-mini-node text{fill:#dce8ed;text-anchor:middle;font:600 11px "DM Mono",monospace;paint-order:stroke;stroke:#07111c;stroke-width:4}
+.gps-mini-loading{fill:#dce8ed;font:600 15px "Manrope",sans-serif}.gps-mini-loading.small{fill:#9cabb8;font-size:11px}
 .gps-mini-caption{margin:0;text-align:center;color:var(--muted);font:.7rem "DM Mono",monospace}
 @media(max-width:920px){
   body[data-page-mode="journey"] .scene.guided-transition-active>.guided-transition{grid-template-columns:1fr}
