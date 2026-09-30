@@ -361,11 +361,11 @@ const GuidedStructureTransitions = (() => {
 
     const svg=$("gpsMini3D");
     svg.addEventListener("contextmenu",event=>event.preventDefault());
-    svg.addEventListener("pointerdown",event=>{
+    const startMini=event=>{
       state.dragging=true;state.lastX=event.clientX;state.lastY=event.clientY;
       state.dragMode=event.button===2||event.button===1||event.ctrlKey||event.metaKey?"pan":"rotate";
-      svg.setPointerCapture?.(event.pointerId);event.preventDefault();
-    });
+      event.preventDefault();
+    };
     const moveMini=event=>{
       if(!state.dragging)return;
       const dx=event.clientX-state.lastX,dy=event.clientY-state.lastY;state.lastX=event.clientX;state.lastY=event.clientY;
@@ -374,8 +374,14 @@ const GuidedStructureTransitions = (() => {
       renderMiniModel();event.preventDefault();
     };
     const stop=()=>{state.dragging=false;};
-    window.addEventListener("pointermove",moveMini,{passive:false});
-    window.addEventListener("pointerup",stop);
+    // Desktop mouse path.
+    svg.addEventListener("mousedown",startMini);
+    window.addEventListener("mousemove",moveMini,{passive:false});
+    window.addEventListener("mouseup",stop);
+    // Touch / pen path. Restrict pointer events so mouse input is not processed twice.
+    svg.addEventListener("pointerdown",event=>{if(event.pointerType!=="mouse")startMini(event);});
+    window.addEventListener("pointermove",event=>{if(event.pointerType!=="mouse")moveMini(event);},{passive:false});
+    window.addEventListener("pointerup",event=>{if(event.pointerType!=="mouse")stop();});
     window.addEventListener("pointercancel",stop);
     svg.addEventListener("wheel",event=>{state.zoom=clamp(state.zoom*Math.exp(-event.deltaY*.0012),.45,2.8);renderMiniModel();event.preventDefault();},{passive:false});
 
