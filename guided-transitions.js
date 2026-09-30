@@ -190,7 +190,7 @@ const GuidedStructureTransitions = (() => {
     const center=points.reduce((o,p)=>({x:o.x+p.x/points.length,y:o.y+p.y/points.length,z:o.z+p.z/points.length}),{x:0,y:0,z:0});
     const scale=.34;
     points.forEach(p=>{p.x=(p.x-center.x)*scale;p.y=(p.y-center.y)*scale;p.z=(p.z-center.z)*scale;});
-    return {points,bonds,guide,label:def.label,source:"PDB 1EHZ"};
+    return {points,bonds,guide,guideType:"hbond",label:def.label,source:"PDB 1EHZ"};
   }
 
   async function loadRealPairModels(){
@@ -218,7 +218,7 @@ const GuidedStructureTransitions = (() => {
       ids.forEach((id,i)=>bonds.push([id,ids[(i+1)%ids.length]]));return ids;
     };
     ring("A",.55,-.18,"C");ring("B",-0.55,.18,"N");guide.push(["A2","B2"],["A5","B5"]);
-    return {points,bonds,guide};
+    return {points,bonds,guide,guideType:"helper"};
   }
 
   function helixModel(){
@@ -229,7 +229,7 @@ const GuidedStructureTransitions = (() => {
       const r={id:"R"+i,x:1.25*Math.cos(a+Math.PI),y,z:1.25*Math.sin(a+Math.PI),element:i%2?"C":"N",showLabel:false};
       points.push(l,r);if(i)bonds.push(["L"+(i-1),l.id],["R"+(i-1),r.id]);guide.push([l.id,r.id]);
     }
-    return {points,bonds,guide};
+    return {points,bonds,guide,guideType:"helper"};
   }
 
   function junctionModel(){
@@ -241,7 +241,7 @@ const GuidedStructureTransitions = (() => {
         bonds.push([i===1?"J":"B"+a+"_"+(i-1),id]);
       }
     });
-    return {points,bonds,guide};
+    return {points,bonds,guide,guideType:"helper"};
   }
 
   function contactModel(){
@@ -251,7 +251,7 @@ const GuidedStructureTransitions = (() => {
       const q={id:"B"+i,x:1.4-i*.34,y:-1.4+i*.46,z:-.45*Math.sin(i),element:i%2?"N":"C",showLabel:false};
       points.push(p,q);if(i)bonds.push(["A"+(i-1),p.id],["B"+(i-1),q.id]);
     }
-    guide.push(["A5","B5"]);return {points,bonds,guide};
+    guide.push(["A5","B5"]);return {points,bonds,guide,guideType:"helper"};
   }
 
   function modelForLesson(){
@@ -295,7 +295,7 @@ const GuidedStructureTransitions = (() => {
     const guides=(model.guide||[]).map(([aId,bId])=>{
       const a=map.get(aId),b=map.get(bId);if(!a||!b)return"";
       const pa=projectedPoint(a,scale,cx,cy),pb=projectedPoint(b,scale,cx,cy);
-      return '<line class="gps-mini-guide" x1="'+pa.x+'" y1="'+pa.y+'" x2="'+pb.x+'" y2="'+pb.y+'"/>';
+      return '<line class="gps-mini-guide '+(model.guideType==="hbond"?"hbond":"helper")+'" x1="'+pa.x+'" y1="'+pa.y+'" x2="'+pb.x+'" y2="'+pb.y+'"/>';
     }).join("");
     const caps=pts.slice().sort((a,b)=>a.rz-b.rz).map(p=>{
       const q=projectedPoint(p,scale,cx,cy),element=pointElement(p),color=ELEMENT_COLORS[element]||"#33cc66",r=element==="H"?2.7:element==="P"?3.5:2.4;
