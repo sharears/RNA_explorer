@@ -366,14 +366,17 @@ const GuidedStructureTransitions = (() => {
       state.dragMode=event.button===2||event.button===1||event.ctrlKey||event.metaKey?"pan":"rotate";
       svg.setPointerCapture?.(event.pointerId);event.preventDefault();
     });
-    svg.addEventListener("pointermove",event=>{
+    const moveMini=event=>{
       if(!state.dragging)return;
       const dx=event.clientX-state.lastX,dy=event.clientY-state.lastY;state.lastX=event.clientX;state.lastY=event.clientY;
       if(state.dragMode==="pan"){state.panX+=dx;state.panY+=dy;}
       else{state.yaw+=dx*.011;state.pitch=clamp(state.pitch+dy*.011,-1.35,1.35);}
       renderMiniModel();event.preventDefault();
-    });
-    const stop=()=>{state.dragging=false;};svg.addEventListener("pointerup",stop);svg.addEventListener("pointercancel",stop);
+    };
+    const stop=()=>{state.dragging=false;};
+    window.addEventListener("pointermove",moveMini,{passive:false});
+    window.addEventListener("pointerup",stop);
+    window.addEventListener("pointercancel",stop);
     svg.addEventListener("wheel",event=>{state.zoom=clamp(state.zoom*Math.exp(-event.deltaY*.0012),.45,2.8);renderMiniModel();event.preventDefault();},{passive:false});
 
     $("teLearningShow").addEventListener("click",()=>setTimeout(()=>$("tertiaryViewport")?.scrollIntoView({behavior:"smooth",block:"center"}),80));
