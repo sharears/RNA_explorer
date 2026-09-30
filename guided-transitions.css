@@ -102,3 +102,99 @@ body[data-page-mode="journey"] .scene.guided-transition-active>.guided-transitio
   .gps-fold-svg.shape-view .gps-chain-folded,.gps-fold-svg.shape-view .gps-fold-caption.folded{opacity:1}
   .gps-fold-svg.pairing-view .gps-fold-pair-group{opacity:1}
 }
+
+
+/* Same-page Guided Journey lessons */
+body[data-page-mode="journey"] .scene .guided-inline-lesson{
+  grid-column:1 / -1;
+  border-top:1px solid var(--line);
+  background:rgba(8,17,29,.92);
+}
+.secondary-inline-lesson{padding:34px 38px 38px}
+.guided-inline-heading{max-width:920px;margin-bottom:22px}
+.guided-inline-heading h3{font-size:1.45rem;margin:7px 0 9px}
+.guided-inline-heading p{color:var(--muted);line-height:1.6;margin:0}
+.guided-basepair-grid{display:grid;grid-template-columns:minmax(290px,.8fr) minmax(440px,1.2fr);gap:26px;align-items:start}
+.guided-basepair-copy{padding:18px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.025)}
+.guided-basepair-copy #gpsPairText p,.guided-basepair-copy #gpsPairText li,.guided-nonstandard-note{color:var(--muted);font-size:.88rem;line-height:1.55}
+.guided-nonstandard-note{margin:16px 0 0;padding-top:14px;border-top:1px solid var(--line)}
+.gps-sugar-link{stroke:#8fa2b3;stroke-width:2.2}
+.gps-sugar-label{fill:#f2c66d;text-anchor:middle;font:700 11px "DM Mono",monospace}
+.secondary-inline-lesson .gps-pair-svg{max-height:390px}
+.secondary-inline-lesson .gps-base-name{transform:translateY(10px)}
+
+body[data-page-mode="journey"] #tertiaryLearning.guided-inline-lesson{
+  width:auto;
+  margin:0;
+  padding:34px 38px 40px;
+  border-top:1px solid var(--line);
+  background:rgba(8,17,29,.94);
+}
+body[data-page-mode="journey"] #tertiaryLearning.guided-inline-lesson>h3{
+  font-size:1.45rem;
+}
+body[data-page-mode="journey"] #tertiaryLearning.guided-inline-lesson .tertiary-learning-intro{
+  max-width:980px;
+}
+.gps-inline-mini-shell{
+  position:relative;
+  margin:18px 0;
+  padding:54px 18px 16px;
+  border:1px solid var(--line);
+  border-radius:13px;
+  background:rgba(7,17,28,.8);
+  min-height:520px;
+}
+.gps-mini-toolbar.inline{
+  top:12px;left:16px;right:16px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+.gps-mini-toolbar.inline>div{display:flex;gap:7px}
+.gps-mini-toolbar.inline button{
+  border:1px solid var(--line);border-radius:7px;background:rgba(7,17,28,.9);color:var(--text);
+  padding:7px 9px;cursor:pointer
+}
+.gps-inline-mini-shell .gps-real-pair-tabs{top:54px}
+#gpsMini3D{
+  width:100%;
+  height:min(56vh,520px);
+  cursor:grab;
+  touch-action:none;
+}
+#gpsMini3D:active{cursor:grabbing}
+.gps-stick-bond{stroke-width:6;stroke-linecap:round}
+.gps-stick-atom{stroke:rgba(255,255,255,.32);stroke-width:.7}
+.gps-stick-atom.hydrogen{stroke:#d9e3ea;stroke-width:1}
+.gps-stick-label{
+  fill:#dce8ed;
+  text-anchor:middle;
+  font:600 10px "DM Mono",monospace;
+  paint-order:stroke;
+  stroke:#07111c;
+  stroke-width:3.5;
+}
+.gps-mini-guide{
+  stroke:#ffd60a!important;
+  stroke-width:2.5!important;
+  stroke-dasharray:2.5 6!important;
+  stroke-linecap:round;
+  opacity:.98!important;
+}
+.gps-hbond-key i{
+  width:22px!important;height:0!important;border-radius:0!important;
+  border:0!important;border-top:3px dotted #ffd60a!important;background:transparent!important
+}
+.gps-inline-mini-shell .gps-element-legend{margin-top:4px}
+.gps-inline-mini-shell .gps-mini-caption{margin-top:4px}
+
+@media(max-width:920px){
+  .guided-basepair-grid{grid-template-columns:1fr}
+  .secondary-inline-lesson,
+  body[data-page-mode="journey"] #tertiaryLearning.guided-inline-lesson{padding:26px 22px 30px}
+  .gps-inline-mini-shell{min-height:460px}
+}
+@media(max-width:620px){
+  .gps-mini-toolbar.inline{position:static;margin:-38px 0 10px;align-items:flex-start;flex-direction:column}
+  .gps-inline-mini-shell .gps-real-pair-tabs{position:static;margin-bottom:8px}
+  #gpsMini3D{height:430px}
+}
