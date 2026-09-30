@@ -302,7 +302,7 @@ const GuidedStructureTransitions = (() => {
       const label=state.showLabels&&p.showLabel!==false?'<text class="gps-stick-label" x="'+(q.x+5)+'" y="'+(q.y-5)+'">'+String(p.id).split(":").pop()+'</text>':"";
       return '<g class="gps-stick-atom" data-element="'+element+'"><circle cx="'+q.x+'" cy="'+q.y+'" r="'+r+'" fill="'+color+'"/>'+label+'</g>';
     }).join("");
-    svg.innerHTML='<g>'+bonds+guides+caps+'</g>';
+    svg.innerHTML='<rect class="gps-mini-hitplane" x="0" y="0" width="640" height="520" fill="transparent"/><g>'+bonds+guides+caps+'</g>';
     svg.dataset.feature=state.miniFeature;svg.dataset.yaw=state.yaw.toFixed(3);svg.dataset.pitch=state.pitch.toFixed(3);svg.dataset.zoom=state.zoom.toFixed(3);svg.dataset.labels=state.showLabels?"on":"off";
   }
 
