@@ -16,11 +16,21 @@ function growthDiagram(count) {
   for(let i=0;i<visible;i++) {
     const x=118+i*190, last=i===visible-1;
     const base=RNA_SEQUENCE[i];
-    const phosphateX=x-72, phosphateY=205;
+    const phosphateX=x-82, phosphateY=208;
+    const pOtop=[phosphateX,phosphateY-31],pOleft=[phosphateX-32,phosphateY+3],pObottom=[phosphateX,phosphateY+34],pObridge=[phosphateX+31,phosphateY-6];
     fragments.push(`<g class="growth-residue ${last?'arriving-residue':''}" data-position="${i+1}" data-nucleotide-phosphate="attached">
-      <g class="growth-phosphate" aria-label="5 prime phosphate already attached to nucleotide">
-        <circle cx="${phosphateX}" cy="${phosphateY}" r="18"/>${label(phosphateX,phosphateY,'P','growth-phosphate-label')}
-        ${line(phosphateX+18,phosphateY,x-55,177,'nucleotide-phosphate-bond')}
+      <g class="growth-phosphate detailed-phosphate" aria-label="5 prime phosphate group already attached to nucleotide">
+        ${line(phosphateX,phosphateY-7,pOtop[0],pOtop[1]+7,'phosphate-bond phosphate-double-1')}
+        ${line(phosphateX+5,phosphateY-5,pOtop[0]+5,pOtop[1]+9,'phosphate-bond phosphate-double-2')}
+        ${line(phosphateX-8,phosphateY+2,pOleft[0]+8,pOleft[1]-1,'phosphate-bond')}
+        ${line(phosphateX,phosphateY+8,pObottom[0],pObottom[1]-8,'phosphate-bond')}
+        ${line(phosphateX+8,phosphateY-1,pObridge[0]-8,pObridge[1]+1,'phosphate-bond')}
+        ${line(pObridge[0]+8,pObridge[1],x-55,177,'nucleotide-phosphate-bond')}
+        <circle class="phosphate-atom phosphorus" cx="${phosphateX}" cy="${phosphateY}" r="10"/>${label(phosphateX,phosphateY+4,'P','growth-phosphate-label')}
+        <circle class="phosphate-atom oxygen" cx="${pOtop[0]}" cy="${pOtop[1]}" r="8"/>${label(pOtop[0],pOtop[1]+4,'O','growth-oxygen-label')}
+        <circle class="phosphate-atom oxygen" cx="${pOleft[0]}" cy="${pOleft[1]}" r="8"/>${label(pOleft[0],pOleft[1]+4,'O⁻','growth-oxygen-label')}
+        <circle class="phosphate-atom oxygen" cx="${pObottom[0]}" cy="${pObottom[1]}" r="8"/>${label(pObottom[0],pObottom[1]+4,'O⁻','growth-oxygen-label')}
+        <circle class="phosphate-atom oxygen bridge" cx="${pObridge[0]}" cy="${pObridge[1]}" r="8"/>${label(pObridge[0],pObridge[1]+4,'O','growth-oxygen-label')}
       </g>
       <path d="M ${x-35} 120 L ${x} 95 L ${x+35} 120 L ${x+22} 165 L ${x-22} 165 Z"/>
       ${label(x,95,'O')}${label(x+35,120,'1′')}${label(x+22,165,'2′')}${label(x-22,165,'3′')}${label(x-35,120,'4′')}
@@ -35,7 +45,7 @@ function growthDiagram(count) {
     if(i>0) {
       const prev=x-190;
       fragments.push(`<g class="growth-link ${last?'new-growth-link':''}" data-link="${i}-${i+1}">
-        ${line(prev-22,247,phosphateX-18,phosphateY,'inter-nucleotide-link')}
+        ${line(prev-22,247,pOleft[0]-8,pOleft[1],'inter-nucleotide-link')}
         <title>Residue ${i} O3′ connects to the phosphate already attached to nucleotide ${i+1}, forming a 3′–5′ phosphodiester linkage.</title>
       </g>`);
     }
