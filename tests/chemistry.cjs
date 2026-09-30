@@ -56,6 +56,8 @@ assert.equal(document.querySelectorAll('.growth-residue').length,1);
 for(let i=0;i<4;i++)flush();
 assert.equal(document.querySelectorAll('.growth-residue').length,5);
 assert.equal(document.querySelectorAll('.growth-phosphate').length,5,'Every displayed incoming unit should already contain its phosphate');
+assert.equal(document.querySelectorAll('.growth-phosphate .phosphate-atom.oxygen').length,20,'Each displayed phosphate shows four oxygen atoms');
+assert.equal(document.querySelectorAll('.growth-phosphate .phosphate-bond').length,25,'Each displayed phosphate shows its P–O covalent bonds, including the double-bond drawing');
 assert.equal(document.querySelectorAll('.growth-residue[data-nucleotide-phosphate="attached"]').length,5,'Phosphate is part of the nucleotide before chain linkage');
 assert.equal(document.querySelectorAll('.growth-link').length,4,'Only inter-nucleotide phosphodiester connections are animated between complete nucleotides');
 assert.equal(document.getElementById('sequenceReveal').hidden,true);
