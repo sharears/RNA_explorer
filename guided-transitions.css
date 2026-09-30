@@ -1,104 +1,153 @@
-/* Guided Journey transition lessons. Scoped so Analyze 2D/3D layouts remain unchanged. */
-.guided-transition{display:none}
-body[data-page-mode="journey"] .scene.guided-transition-active{
-  display:block;min-height:720px;
+/* Guided Journey inline learning sections.
+   These styles intentionally do not alter the standalone Analyze workspaces. */
+.guided-inline-lesson{display:none}
+
+body[data-page-mode="journey"] #scene-secondary,
+body[data-page-mode="journey"] #scene-tertiary{align-items:start}
+body[data-page-mode="journey"] .guided-inline-lesson{
+  display:block;
+  grid-column:1/-1;
+  border-top:1px solid var(--line);
+  background:rgba(8,17,30,.52);
 }
-body[data-page-mode="journey"] .scene.guided-transition-active[hidden]{display:none!important}
-body[data-page-mode="journey"] .scene.guided-transition-active>.scene-copy,
-body[data-page-mode="journey"] .scene.guided-transition-active>.visual-stage{display:none!important}
-body[data-page-mode="journey"] .scene.guided-transition-active>.guided-transition{
-  display:grid;grid-template-columns:minmax(330px,.82fr) minmax(520px,1.18fr);min-height:720px;
+body[data-page-mode="journey"] #scene-secondary .secondary-inputs,
+body[data-page-mode="journey"] #scene-secondary .secondary-layout-picker{display:none!important}
+body[data-page-mode="journey"] #scene-tertiary #followButton,
+body[data-page-mode="journey"] #scene-tertiary #tertiaryControls{display:none!important}
+body[data-page-mode="journey"] #scene-tertiary .tertiary-stage{
+  position:relative;top:auto;min-height:690px
 }
-.gps-transition-copy{padding:44px 42px;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:flex-start}
-.gps-transition-copy h2{font-size:clamp(1.7rem,2.6vw,2.7rem);margin:8px 0 16px}
-.gps-transition-copy>p{color:var(--muted);line-height:1.65;margin:0}
-.gps-transition-visual{min-width:0;position:relative;display:flex;flex-direction:column;justify-content:center;padding:28px;background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);background-size:32px 32px;overflow:hidden}
-.gps-step-row{display:flex;flex-wrap:wrap;gap:6px;margin:24px 0 14px}
-.gps-step-row button,.gps-pair-tabs button,.gps-feature-grid button,.gps-fold-actions button,.gps-mini-toolbar button{
-  border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--muted);padding:9px 11px;cursor:pointer
+body[data-page-mode="journey"] #scene-tertiary .stage-note{display:none}
+body[data-page-mode="journey"] #scene-tertiary .scene-copy{max-height:none;overflow:visible}
+body[data-page-mode="journey"] #scene-tertiary .fact-panel{margin-top:24px}
+
+/* Secondary page: base-pair lesson directly under the real radial structure. */
+.guided-secondary-lesson{padding:34px 38px 40px}
+.guided-lesson-heading{max-width:850px;margin-bottom:24px}
+.guided-lesson-heading h3{
+  margin:7px 0 10px;font-size:clamp(1.35rem,2vw,2rem);letter-spacing:-.025em
 }
-.gps-step-row button.active,.gps-step-row button:hover,.gps-pair-tabs button.active,.gps-pair-tabs button:hover,.gps-feature-grid button.active,.gps-feature-grid button:hover{
-  border-color:var(--mint);color:var(--mint);background:rgba(116,215,182,.07)
+.guided-lesson-heading p{margin:0;color:var(--muted);line-height:1.65}
+.gps-pair-card-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.gps-pair-card{
+  min-width:0;padding:18px;border:1px solid var(--line);border-radius:12px;
+  background:rgba(12,24,39,.78)
 }
-.gps-secondary-copy{width:100%;min-height:190px;margin-bottom:18px;padding:15px 16px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.025)}
-.gps-secondary-copy h3,.gps-mini-copy h3{margin:0 0 8px;font-size:1.08rem}
-.gps-secondary-copy p,.gps-secondary-copy li,.gps-mini-copy p{color:var(--muted);font-size:.88rem;line-height:1.55}
-.gps-secondary-copy ul{padding-left:20px}
-.gps-pair-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
-.gps-nonstandard-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
-.gps-nonstandard-list span{padding:7px 9px;border:1px solid var(--line);border-radius:999px;color:var(--cream);font-size:.76rem}
-.gps-fold-card,.gps-pair-stage,.gps-more-card{width:100%;padding:18px;border:1px solid var(--line);border-radius:13px;background:rgba(7,17,28,.78)}
-.gps-fold-svg{width:100%;max-height:390px;overflow:visible}
-.gps-fold-backbone line{stroke:#64788a;stroke-width:5;stroke-linecap:round}
-.gps-fold-residue circle{fill:#18283d;stroke:#8ba0b0;stroke-width:2}
-.gps-fold-residue text{fill:#fff;text-anchor:middle;font:600 10px "DM Mono",monospace}
-.gps-fold-pair{stroke:#74d7b6;stroke-width:3;stroke-dasharray:6 5;opacity:1}
-.gps-fold-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;color:var(--muted);font-size:.78rem}
-.gps-chain-straight{opacity:1}
-.gps-chain-folded,.gps-fold-caption.folded{opacity:0}
-.gps-chain-fixed{opacity:1}
-.gps-fold-svg.shape-view.animate .gps-chain-straight,.gps-fold-svg.shape-view.animate .gps-fold-caption.straight{animation:gps-straight-away 1.9s ease both}
-.gps-fold-svg.shape-view.animate .gps-chain-folded,.gps-fold-svg.shape-view.animate .gps-fold-caption.folded{animation:gps-folded-in 1.9s ease both}
-.gps-fold-pair-group{opacity:0}
-.gps-fold-svg.pairing-view.animate .gps-fold-pair-group{animation:gps-pair-group-appear .55s ease both}
-.gps-fold-svg.pairing-view.animate .gps-fold-pair-group.pair-1{animation-delay:.48s}
-.gps-fold-svg.pairing-view.animate .gps-fold-pair-group.pair-2{animation-delay:.96s}
-.gps-fold-svg.pairing-view.animate .gps-fold-pair-group.pair-3{animation-delay:1.44s}
-.gps-fold-pair-group text{fill:#dce8ed;text-anchor:middle;font:700 10px "DM Mono",monospace;paint-order:stroke;stroke:#07111c;stroke-width:4}
-.gps-fold-caption{fill:#9cabb8;text-anchor:middle;font:600 11px "DM Mono",monospace}
-@keyframes gps-straight-away{0%,24%{opacity:1}62%,100%{opacity:0}}
-@keyframes gps-folded-in{0%,34%{opacity:0}72%,100%{opacity:1}}
-@keyframes gps-pair-group-appear{from{opacity:0}to{opacity:1}}
-.gps-pair-svg{display:block;width:100%;max-height:360px}
-.gps-base-ring{fill:rgba(242,198,109,.12);stroke:#f2c66d;stroke-width:3}
-.gps-base-ring.right{fill:rgba(116,215,182,.1);stroke:#74d7b6}
-.gps-base-ring.small{opacity:.8}
-.gps-hbond{stroke:#fff;stroke-width:2;stroke-dasharray:5 5;animation:gps-hbond-form .85s ease both}
-.gps-hbond:nth-of-type(2){animation-delay:.14s}.gps-hbond:nth-of-type(3){animation-delay:.28s}
-@keyframes gps-hbond-form{from{opacity:0;stroke-dashoffset:45}to{opacity:1;stroke-dashoffset:0}}
-.gps-atom-label{fill:#fff;font:600 12px "DM Mono",monospace;text-anchor:middle;paint-order:stroke;stroke:#07111c;stroke-width:4}
-.gps-base-name{fill:#aebdca;font:600 12px "Manrope",sans-serif;text-anchor:middle}
-.gps-more-card{display:grid;grid-template-columns:1fr auto 1fr;gap:18px;align-items:center;text-align:center;min-height:270px}
-.gps-more-card>div:not(.gps-arrow){padding:24px;border:1px solid var(--line);border-radius:12px}
-.gps-more-card strong{display:block;color:var(--cream);margin-bottom:8px}
-.gps-more-card small{display:block;color:var(--muted);line-height:1.5}
-.gps-arrow{font-size:2rem;color:var(--mint)}
-.gps-feature-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;width:100%;margin:20px 0 14px}
-.gps-feature-grid button{text-align:left;font-size:.78rem}
-.gps-mini-copy{width:100%;padding:14px 15px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.025);margin-bottom:18px}
-.gps-mini-copy p{margin:7px 0}
-.gps-mini-copy strong{color:var(--cream)}
-.gps-mini-toolbar{position:absolute;top:16px;left:20px;right:20px;z-index:2;display:flex;justify-content:space-between;align-items:center;color:var(--muted);font:600 .72rem "DM Mono",monospace}
-.gps-real-pair-tabs{position:absolute;top:56px;left:20px;z-index:3;display:flex;gap:6px}
+.gps-pair-card h4{margin:6px 0 8px;font-size:1rem;color:var(--cream)}
+.gps-pair-card>p{margin:0 0 10px;color:var(--muted);font-size:.82rem;line-height:1.5;min-height:3.7em}
+.gps-pair-svg{display:block;width:100%;height:auto;max-height:245px;margin-top:4px}
+.gps-base-ring{fill:rgba(255,255,255,.025);stroke:#dce8ed;stroke-width:2.3}
+.gps-base-ring.small{opacity:.92}
+.gps-pair-hbond{stroke:#f2c66d;stroke-width:2.1;stroke-dasharray:3 6;stroke-linecap:round}
+.gps-atom-label{
+  fill:#f7fbff;font:700 11px "DM Mono",monospace;text-anchor:middle;
+  paint-order:stroke;stroke:#07111c;stroke-width:4
+}
+.gps-base-name{fill:#aebdca;font:600 11px "Manrope",sans-serif;text-anchor:middle}
+.gps-sugar-bond{stroke:#8fa2b3;stroke-width:2.2}
+.gps-sugar-box{fill:#101d2d;stroke:#62798c;stroke-width:1.4}
+.gps-sugar-label{fill:#dce8ed;text-anchor:middle;font:700 10px "DM Mono",monospace}
+.guided-placeholder-note{
+  margin-top:16px;padding:13px 15px;border-left:3px solid var(--mint);
+  border-radius:0 8px 8px 0;background:rgba(116,215,182,.055);
+  color:var(--muted);font-size:.83rem;line-height:1.55
+}
+.guided-placeholder-note strong{color:var(--cream)}
+
+/* Tertiary page: first show the complete 3D RNA, then teach structural features below it. */
+body[data-page-mode="journey"] #tertiaryLearning.guided-tertiary-lesson{
+  width:auto;margin:0;padding:34px 38px 42px;border-top:1px solid var(--line);
+  background:rgba(8,17,30,.58)
+}
+body[data-page-mode="journey"] #tertiaryLearning.guided-tertiary-lesson>h3{
+  margin:7px 0 8px;font-size:clamp(1.35rem,2vw,2rem)
+}
+body[data-page-mode="journey"] #tertiaryLearning.guided-tertiary-lesson>.tertiary-learning-intro{
+  max-width:900px;margin:0 0 22px!important;color:var(--muted);line-height:1.6!important
+}
+.gps-feature-layout{display:grid;grid-template-columns:minmax(320px,.78fr) minmax(520px,1.22fr);gap:18px;align-items:start}
+.gps-feature-copy{min-width:0}
+body[data-page-mode="journey"] .tertiary-learning-picker{
+  margin:0 0 12px;display:flex;flex-wrap:wrap;gap:7px
+}
+body[data-page-mode="journey"] .tertiary-learning-card{
+  background:rgba(12,24,39,.78);border-color:var(--line)
+}
+body[data-page-mode="journey"] .tertiary-learning-actions{
+  display:flex;flex-wrap:wrap;gap:8px;margin-top:13px
+}
+body[data-page-mode="journey"] #teLearningShow{
+  background:var(--mint);color:var(--ink);border:0
+}
+body[data-page-mode="journey"] #teLearningClear{
+  margin:0;background:transparent;color:var(--text);border:1px solid var(--line)
+}
+
+.gps-inline-mini-viewer{
+  position:relative;min-width:0;border:1px solid var(--line);border-radius:12px;
+  background:
+    radial-gradient(circle at 50% 42%,rgba(34,55,70,.3),transparent 55%),
+    #08111e;
+  padding:16px;overflow:hidden
+}
+.gps-mini-toolbar{
+  display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;
+  min-height:34px;color:var(--muted);font:600 .68rem "DM Mono",monospace
+}
+.gps-mini-toolbar>div{display:flex;gap:6px}
+.gps-mini-toolbar button,.gps-real-pair-tabs button{
+  border:1px solid var(--line);border-radius:7px;background:#0d1928;color:var(--text);
+  padding:7px 9px;cursor:pointer;font:700 .68rem "DM Mono",monospace
+}
+.gps-mini-toolbar button:hover,.gps-real-pair-tabs button:hover{border-color:var(--mint);color:var(--mint)}
+.gps-real-pair-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 0}
 .gps-real-pair-tabs[hidden]{display:none}
-.gps-real-pair-tabs button{border:1px solid var(--line);border-radius:999px;background:rgba(7,17,28,.84);color:var(--muted);padding:7px 10px;cursor:pointer;font:700 .7rem "DM Mono",monospace}
-.gps-real-pair-tabs button.active{border-color:var(--mint);color:var(--mint);background:rgba(116,215,182,.1)}
-.gps-element-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:9px 14px;margin:4px 0 7px;color:var(--muted);font:.68rem "DM Mono",monospace}
-.gps-element-legend span{display:flex;align-items:center;gap:5px}
-.gps-element-legend i{width:10px;height:10px;border-radius:50%;display:inline-block;border:1px solid rgba(255,255,255,.42)}
-.gps-element-legend i[data-element="C"]{background:#33cc66}.gps-element-legend i[data-element="O"]{background:#ff3b30}.gps-element-legend i[data-element="N"]{background:#2f6bff}.gps-element-legend i[data-element="H"]{background:#fff}.gps-element-legend i[data-element="P"]{background:#ff9f0a}
-#gpsMini3D{width:100%;height:min(60vh,530px);touch-action:none;cursor:grab}
+.gps-real-pair-tabs button.active{border-color:var(--mint);color:var(--mint);background:rgba(116,215,182,.08)}
+.gps-mini-description{padding:12px 2px 0}
+.gps-mini-description h4{margin:0 0 7px;font-size:1rem;color:var(--cream)}
+.gps-mini-description p{margin:5px 0;color:var(--muted);font-size:.8rem;line-height:1.5}
+.gps-mini-description strong{color:var(--cream)}
+#gpsMini3D{display:block;width:100%;height:min(56vh,510px);min-height:390px;touch-action:none;cursor:grab}
 #gpsMini3D:active{cursor:grabbing}
-.gps-mini-bond{stroke:#71879a;stroke-width:6;stroke-linecap:round}
-.gps-mini-guide{stroke:#fff;stroke-width:2.5;stroke-dasharray:7 6;opacity:.92}
-.gps-mini-node circle{stroke:rgba(255,255,255,.5);stroke-width:2}
-.gps-mini-node.highlight circle{filter:drop-shadow(0 0 8px rgba(255,255,255,.45))}
-.gps-mini-node text{fill:#dce8ed;text-anchor:middle;font:600 11px "DM Mono",monospace;paint-order:stroke;stroke:#07111c;stroke-width:4}
-.gps-mini-loading{fill:#dce8ed;font:600 15px "Manrope",sans-serif}.gps-mini-loading.small{fill:#9cabb8;font-size:11px}
-.gps-mini-caption{margin:0;text-align:center;color:var(--muted);font:.7rem "DM Mono",monospace}
+.gps-stick-bond{stroke-width:5;stroke-linecap:round}
+.gps-stick-atom circle{stroke:rgba(255,255,255,.32);stroke-width:.75}
+.gps-stick-label{
+  fill:#eaf2f6;font:600 10.5px "DM Mono",monospace;
+  paint-order:stroke;stroke:#07111c;stroke-width:3.5;stroke-linejoin:round
+}
+.gps-mini-guide{
+  stroke:#ffd60a;stroke-width:2.7;stroke-dasharray:2 7;stroke-linecap:round;opacity:.98
+}
+.gps-mini-loading{fill:#dce8ed;font:600 14px "Manrope",sans-serif}
+.gps-mini-loading.small{fill:#9cabb8;font-size:10px}
+.gps-element-legend{
+  display:flex;justify-content:center;flex-wrap:wrap;gap:8px 14px;margin-top:2px;
+  color:var(--muted);font:.65rem "DM Mono",monospace
+}
+.gps-element-legend span{display:flex;align-items:center;gap:5px}
+.gps-element-legend i{width:9px;height:9px;border-radius:50%;display:inline-block;border:1px solid rgba(255,255,255,.42)}
+.gps-element-legend i[data-element="C"]{background:#33cc66}
+.gps-element-legend i[data-element="O"]{background:#ff3b30}
+.gps-element-legend i[data-element="N"]{background:#2f6bff}
+.gps-element-legend i[data-element="H"]{background:#fff}
+.gps-element-legend i[data-element="P"]{background:#ff9f0a}
+.gps-mini-caption{
+  margin:8px 0 0;text-align:center;color:#788b99;font:600 .65rem "DM Mono",monospace
+}
+
+/* Keep the learning sections out of standalone Analyze pages. */
+body:not([data-page-mode="journey"]) #guidedSecondaryLesson{display:none!important}
+
+@media(max-width:1050px){
+  .gps-pair-card-grid{grid-template-columns:1fr}
+  .gps-pair-card>p{min-height:0}
+  .gps-feature-layout{grid-template-columns:1fr}
+}
 @media(max-width:920px){
-  body[data-page-mode="journey"] .scene.guided-transition-active>.guided-transition{grid-template-columns:1fr}
-  .gps-transition-copy{border-right:0;border-bottom:1px solid var(--line);padding:30px 25px}
-  .gps-transition-visual{min-height:500px;padding:18px}
+  .guided-secondary-lesson,body[data-page-mode="journey"] #tertiaryLearning.guided-tertiary-lesson{padding:28px 24px 34px}
+  body[data-page-mode="journey"] #scene-tertiary .tertiary-stage{min-height:620px}
 }
 @media(max-width:560px){
-  .gps-feature-grid{grid-template-columns:1fr}
-  .gps-more-card{grid-template-columns:1fr}
-  .gps-arrow{transform:rotate(90deg)}
-}
-@media(prefers-reduced-motion:reduce){
-  .gps-fold-svg.animate *{animation:none!important}
-  .gps-fold-svg.shape-view .gps-chain-straight,.gps-fold-svg.shape-view .gps-fold-caption.straight{opacity:0}
-  .gps-fold-svg.shape-view .gps-chain-folded,.gps-fold-svg.shape-view .gps-fold-caption.folded{opacity:1}
-  .gps-fold-svg.pairing-view .gps-fold-pair-group{opacity:1}
+  .gps-mini-toolbar{align-items:flex-start}
+  #gpsMini3D{min-height:330px;height:430px}
 }
