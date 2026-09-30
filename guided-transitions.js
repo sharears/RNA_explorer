@@ -1,5 +1,5 @@
 const GuidedStructureTransitions = (() => {
-  const state={secondaryReady:false,tertiaryReady:false,miniFeature:"glycosidic",yaw:-0.55,pitch:0.34,dragging:false,lastX:0,lastY:0,
+  const state={secondaryReady:true,tertiaryReady:true,miniFeature:"glycosidic",yaw:-0.55,pitch:0.34,zoom:1,panX:0,panY:0,dragging:false,dragMode:"rotate",lastX:0,lastY:0,labelsOn:true,
     realPairKey:"gc",realPairModels:null,realPairPromise:null};
 
   const PAIR_LESSONS={
@@ -225,7 +225,9 @@ const GuidedStructureTransitions = (() => {
       (l.left.kind==="purine"?'<polygon class="gps-base-ring left small" points="'+poly(47,86,36,5,-Math.PI/2)+'"/>':'')+
       '<polygon class="gps-base-ring right" points="'+poly(308,85,55,6,-Math.PI/6)+'"/>'+
       bonds+labels+
-      '<text class="gps-base-name" x="92" y="162">'+l.left.name+'</text><text class="gps-base-name" x="308" y="162">'+l.right.name+'</text></svg>';
+      '<line class="gps-sugar-link" x1="92" y1="132" x2="92" y2="145"/><line class="gps-sugar-link" x1="308" y1="132" x2="308" y2="145"/>'+
+      '<text class="gps-sugar-label" x="92" y="158">Sugar</text><text class="gps-sugar-label" x="308" y="158">Sugar</text>'+
+      '<text class="gps-base-name" x="92" y="174">'+l.left.name+'</text><text class="gps-base-name" x="308" y="174">'+l.right.name+'</text></svg>';
   }
 
   function secondaryTransitionMarkup(){
@@ -249,14 +251,21 @@ const GuidedStructureTransitions = (() => {
       '<div class="gps-transition-visual"><div class="gps-mini-toolbar"><span>Drag to rotate</span><button type="button" id="gpsMiniReset">Reset view</button></div><div class="gps-real-pair-tabs" id="gpsRealPairTabs" hidden><button type="button" class="active" data-gps-real-pair="gc">G–C</button><button type="button" data-gps-real-pair="au">A–U</button><button type="button" data-gps-real-pair="gu">G–U</button></div><svg id="gpsMini3D" viewBox="0 0 640 520" role="img" aria-label="Interactive 3D teaching model"></svg><div class="gps-element-legend" aria-label="Element colors"><span><i data-element="C"></i>Carbon</span><span><i data-element="O"></i>Oxygen</span><span><i data-element="N"></i>Nitrogen</span><span><i data-element="H"></i>Hydrogen</span><span><i data-element="P"></i>Phosphorus</span></div><p class="gps-mini-caption" id="gpsMiniCaption">Interactive teaching model</p></div></section>';
   }
 
-  function buildSecondaryTransition(){
-    const scene=$("scene-secondary");if(!scene||$("guidedSecondaryTransition"))return;
-    scene.insertAdjacentHTML("afterbegin",secondaryTransitionMarkup());
-    $("gpsContinueSecondary").addEventListener("click",()=>showSecondaryWorkspace());
-    document.querySelectorAll("[data-gps-secondary-step]").forEach(b=>b.addEventListener("click",()=>renderSecondaryStep(b.dataset.gpsSecondaryStep)));
-    renderSecondaryStep("fold");
+  function secondaryInlineMarkup(){
+    return '<section class="guided-inline-lesson secondary-inline-lesson" id="guidedSecondaryLesson" aria-labelledby="guidedSecondaryLessonTitle">'+
+      '<div class="guided-inline-heading"><span class="fact-label">BASE PAIRS IN THIS SECONDARY STRUCTURE</span><h3 id="guidedSecondaryLessonTitle">What do the connections between residues mean?</h3>'+
+      '<p>The radial structure above shows which residues are paired. Start with three common RNA pair types. We can add a larger non-standard base-pair library later.</p></div>'+
+      '<div class="guided-basepair-grid"><div class="guided-basepair-copy">'+
+      '<div class="gps-pair-tabs"><button type="button" data-gps-pair="au" class="active">A–U · Watson–Crick</button><button type="button" data-gps-pair="gc">G–C · Watson–Crick</button><button type="button" data-gps-pair="gu">G–U · wobble</button></div>'+
+      '<div id="gpsPairText"></div><p class="guided-nonstandard-note"><strong>RNA can do more.</strong> Many non-Watson–Crick base pairs use different nucleobase edges and orientations; that deeper library can be added here later.</p></div>'+
+      '<div class="gps-pair-stage" id="gpsPairStage"></div></div></section>';
   }
-
+  function buildSecondaryTransition(){
+    const scene=$("scene-secondary");if(!scene||$("guidedSecondaryLesson")||!isJourney())return;
+    scene.insertAdjacentHTML("beforeend",secondaryInlineMarkup());
+    document.querySelectorAll("[data-gps-pair]").forEach(b=>b.addEventListener("click",()=>renderPair(b.dataset.gpsPair)));
+    renderPair("au");
+  }
   const FOLD_LETTERS=["U","A","G","G","A","G","C","A","U","G","U","U","C","A","G","U"];
   const FOLDED_POINTS=[[70,220],[100,205],[132,186],[162,162],[184,132],[190,100],[200,70],[225,48],[258,40],[291,48],[316,70],[326,100],[332,132],[354,162],[384,186],[416,205]];
   const STRAIGHT_POINTS=FOLDED_POINTS.map((_,i)=>[48+i*33,125]);
@@ -311,19 +320,43 @@ const GuidedStructureTransitions = (() => {
   }
 
   function buildTertiaryTransition(){
-    const scene=$("scene-tertiary");if(!scene||$("guidedTertiaryTransition"))return;
-    scene.insertAdjacentHTML("afterbegin",tertiaryTransitionMarkup());
-    document.querySelectorAll("[data-gps-mini-feature]").forEach(b=>b.addEventListener("click",()=>{state.miniFeature=b.dataset.gpsMiniFeature;renderMiniLesson();}));
+    const scene=$("scene-tertiary"),learning=$("tertiaryLearning");if(!scene||!learning||!isJourney())return;
+    if(!learning.classList.contains("guided-inline-lesson")){
+      learning.classList.add("guided-inline-lesson","tertiary-inline-lesson");
+      scene.appendChild(learning);
+      const title=$("tertiaryLearningTitle"),intro=learning.querySelector(".tertiary-learning-intro"),show=$("teLearningShow");
+      if(title)title.textContent="Explore the structural features inside this 3D RNA";
+      if(intro)intro.textContent="The full 3D structure above is the RNA you just saw in 2D. Choose a feature below to study it with a small interactive model, then use “Show me in the 3D structure” to highlight a representative example in the full RNA.";
+      if(show)show.textContent="Show me in the 3D structure";
+      const card=learning.querySelector(".tertiary-learning-card");
+      const mini=document.createElement("div");mini.className="gps-inline-mini-shell";mini.id="gpsInlineMiniShell";
+      mini.innerHTML='<div class="gps-mini-toolbar inline"><span>Left drag: rotate · Right/Ctrl drag: pan · Wheel: zoom</span><div><button type="button" id="gpsLabelsToggle">Labels: on</button><button type="button" id="gpsMiniReset">Reset view</button></div></div>'+
+        '<div class="gps-real-pair-tabs" id="gpsRealPairTabs" hidden><button type="button" class="active" data-gps-real-pair="gc">G–C</button><button type="button" data-gps-real-pair="au">A–U</button><button type="button" data-gps-real-pair="gu">G–U</button></div>'+
+        '<svg id="gpsMini3D" viewBox="0 0 640 520" role="img" aria-label="Interactive molecular teaching model"></svg>'+
+        '<div class="gps-element-legend" aria-label="Element colors"><span><i data-element="C"></i>Carbon</span><span><i data-element="O"></i>Oxygen</span><span><i data-element="N"></i>Nitrogen</span><span><i data-element="H"></i>Hydrogen</span><span><i data-element="P"></i>Phosphorus</span><span class="gps-hbond-key"><i></i>H-bond</span></div>'+
+        '<p class="gps-mini-caption" id="gpsMiniCaption">Interactive stick model</p>';
+      learning.insertBefore(mini,card);
+    }
+    document.querySelectorAll("[data-learning-feature]").forEach(b=>b.addEventListener("click",()=>{state.miniFeature=b.dataset.learningFeature;renderMiniLesson();}));
     document.querySelectorAll("[data-gps-real-pair]").forEach(b=>b.addEventListener("click",()=>{state.realPairKey=b.dataset.gpsRealPair;renderMiniLesson();}));
-    $("gpsMiniReset").addEventListener("click",()=>{state.yaw=-.55;state.pitch=.34;renderMiniModel();});
-    $("gpsContinueTertiary").addEventListener("click",()=>showTertiaryWorkspace());
+    $("gpsMiniReset")?.addEventListener("click",()=>{state.yaw=-.55;state.pitch=.34;state.zoom=1;state.panX=0;state.panY=0;renderMiniModel();});
+    $("gpsLabelsToggle")?.addEventListener("click",()=>{state.labelsOn=!state.labelsOn;$("gpsLabelsToggle").textContent="Labels: "+(state.labelsOn?"on":"off");renderMiniModel();});
     const svg=$("gpsMini3D");
-    svg.addEventListener("pointerdown",e=>{state.dragging=true;state.lastX=e.clientX;state.lastY=e.clientY;svg.setPointerCapture(e.pointerId);});
-    svg.addEventListener("pointermove",e=>{if(!state.dragging)return;state.yaw+=(e.clientX-state.lastX)*.012;state.pitch+=(e.clientY-state.lastY)*.012;state.pitch=Math.max(-1.3,Math.min(1.3,state.pitch));state.lastX=e.clientX;state.lastY=e.clientY;renderMiniModel();});
-    const end=()=>{state.dragging=false;};svg.addEventListener("pointerup",end);svg.addEventListener("pointercancel",end);
+    if(svg&&!svg.dataset.interactionsReady){
+      svg.dataset.interactionsReady="true";
+      svg.addEventListener("contextmenu",e=>e.preventDefault());
+      svg.addEventListener("wheel",e=>{e.preventDefault();state.zoom=Math.max(.45,Math.min(2.8,state.zoom*(e.deltaY<0?1.12:.89)));renderMiniModel();},{passive:false});
+      svg.addEventListener("pointerdown",e=>{
+        state.dragging=true;state.dragMode=(e.button===2||e.ctrlKey||e.metaKey||e.button===1)?"pan":"rotate";state.lastX=e.clientX;state.lastY=e.clientY;svg.setPointerCapture(e.pointerId);
+      });
+      svg.addEventListener("pointermove",e=>{if(!state.dragging)return;const dx=e.clientX-state.lastX,dy=e.clientY-state.lastY;
+        if(state.dragMode==="pan"){state.panX+=dx;state.panY+=dy;}else{state.yaw+=dx*.012;state.pitch=Math.max(-1.3,Math.min(1.3,state.pitch+dy*.012));}
+        state.lastX=e.clientX;state.lastY=e.clientY;renderMiniModel();
+      });
+      const end=()=>{state.dragging=false;};svg.addEventListener("pointerup",end);svg.addEventListener("pointercancel",end);
+    }
     renderMiniLesson();
   }
-
   function modelForLesson(){
     const lesson=MINI_LESSONS[state.miniFeature]||MINI_LESSONS.glycosidic;
     if(lesson.generator==="realpair")return state.realPairModels?.[state.realPairKey]||{...lesson,points:[],bonds:[],guide:[],highlight:[]};
@@ -340,21 +373,28 @@ const GuidedStructureTransitions = (() => {
   function renderMiniModel(){
     const svg=$("gpsMini3D");if(!svg)return;const model=modelForLesson();
     if(!model.points?.length){
-      svg.innerHTML='<text x="320" y="260" text-anchor="middle" class="gps-mini-loading">Loading atom-level nucleotide coordinates…</text>';
+      svg.innerHTML='<text x="320" y="260" text-anchor="middle" class="gps-mini-loading">Loading molecular coordinates…</text>';
       svg.dataset.feature=state.miniFeature;return;
     }
-    const pts=model.points.map(rotatePoint),map=new Map(pts.map(p=>[p.id,p])),scale=state.miniFeature==="basepair"?72:76,cx=320,cy=255;
-    const line=(a,b,cls)=>{const p=map.get(a),q=map.get(b);if(!p||!q)return"";return '<line class="'+cls+'" x1="'+(cx+p.rx*scale)+'" y1="'+(cy-p.ry*scale)+'" x2="'+(cx+q.rx*scale)+'" y2="'+(cy-q.ry*scale)+'"/>';};
-    const bonds=(model.bonds||[]).map(x=>line(x[0],x[1],"gps-mini-bond")).join("");
-    const guides=(model.guide||[]).map(x=>line(x[0],x[1],"gps-mini-guide")).join("");
+    const pts=model.points.map(rotatePoint),map=new Map(pts.map(p=>[p.id,p]));
+    const scale=(state.miniFeature==="basepair"?70:76)*state.zoom,cx=320+state.panX,cy=255+state.panY;
+    const screen=p=>({x:cx+p.rx*scale,y:cy-p.ry*scale});
+    const elementOf=p=>p.element||inferMiniElement(p.id);
+    const bond=(a,b)=>{
+      const p=map.get(a),q=map.get(b);if(!p||!q)return"";
+      const A=screen(p),B=screen(q),mx=(A.x+B.x)/2,my=(A.y+B.y)/2,ca=ELEMENT_COLORS[elementOf(p)]||"#33cc66",cb=ELEMENT_COLORS[elementOf(q)]||"#33cc66";
+      return '<line class="gps-stick-bond" x1="'+A.x+'" y1="'+A.y+'" x2="'+mx+'" y2="'+my+'" stroke="'+ca+'"/><line class="gps-stick-bond" x1="'+mx+'" y1="'+my+'" x2="'+B.x+'" y2="'+B.y+'" stroke="'+cb+'"/>';
+    };
+    const bonds=(model.bonds||[]).map(x=>bond(x[0],x[1])).join("");
+    const guides=(model.guide||[]).map(x=>{const p=map.get(x[0]),q=map.get(x[1]);if(!p||!q)return"";const A=screen(p),B=screen(q);return '<line class="gps-mini-guide" x1="'+A.x+'" y1="'+A.y+'" x2="'+B.x+'" y2="'+B.y+'"/>';}).join("");
     const nodes=pts.slice().sort((a,b)=>a.rz-b.rz).map(p=>{
-      const hi=(model.highlight||[]).includes(p.id),element=p.element||inferMiniElement(p.id),color=ELEMENT_COLORS[element]||"#33cc66";
-      const r=element==="H"?7:element==="P"?14:hi?11:9,op=Math.max(.58,Math.min(1,.82+p.rz*.06));
-      const label=p.showLabel===false?"":'<text y="'+(r+13)+'">'+String(p.id).split(":").pop()+'</text>';
-      return '<g class="gps-mini-node '+(hi?"highlight":"")+'" data-element="'+element+'" transform="translate('+(cx+p.rx*scale)+' '+(cy-p.ry*scale)+')" opacity="'+op+'"><circle r="'+r+'" fill="'+color+'"/>'+label+'</g>';
+      const S=screen(p),element=elementOf(p),color=ELEMENT_COLORS[element]||"#33cc66";
+      const dot=element==="H"?'<circle class="gps-stick-atom hydrogen" r="3.5" fill="'+color+'"/>':'<circle class="gps-stick-atom" r="1.8" fill="'+color+'"/>';
+      const label=state.labelsOn&&p.showLabel!==false?'<text class="gps-stick-label" y="-7">'+String(p.id).split(":").pop()+'</text>':"";
+      return '<g data-element="'+element+'" transform="translate('+S.x+' '+S.y+')">'+dot+label+'</g>';
     }).join("");
     svg.innerHTML='<g>'+bonds+guides+nodes+'</g>';
-    svg.dataset.feature=state.miniFeature;svg.dataset.yaw=state.yaw.toFixed(3);svg.dataset.pitch=state.pitch.toFixed(3);
+    svg.dataset.feature=state.miniFeature;svg.dataset.yaw=state.yaw.toFixed(3);svg.dataset.pitch=state.pitch.toFixed(3);svg.dataset.zoom=state.zoom.toFixed(3);
   }
   function renderMiniLesson(){
     const l=MINI_LESSONS[state.miniFeature]||MINI_LESSONS.glycosidic;
@@ -373,26 +413,15 @@ const GuidedStructureTransitions = (() => {
     }
   }
 
-  function activateOverlay(sceneName){
-    if(!isJourney())return;
-    const scene=$(sceneName==="secondary"?"scene-secondary":"scene-tertiary");if(!scene)return;
-    if(sceneName==="secondary"&&!state.secondaryReady)scene.classList.add("guided-transition-active");else if(sceneName==="tertiary"&&!state.tertiaryReady)scene.classList.add("guided-transition-active");
-  }
-  function showSecondaryWorkspace(){state.secondaryReady=true;$("scene-secondary")?.classList.remove("guided-transition-active");}
-  function showTertiaryWorkspace(){
-    state.tertiaryReady=true;$("scene-tertiary")?.classList.remove("guided-transition-active");
-    if(typeof TertiaryExplorer!=="undefined")TertiaryExplorer.render();
-  }
+  function activateOverlay(){/* Same-page teaching: no interstitial overlay. */}
+  function showSecondaryWorkspace(){state.secondaryReady=true;}
+  function showTertiaryWorkspace(){state.tertiaryReady=true;if(typeof TertiaryExplorer!=="undefined")TertiaryExplorer.render();}
   function enter(sceneName){
     if(!isJourney())return;
-    if(sceneName==="secondary"){buildSecondaryTransition();activateOverlay("secondary");}
-    if(sceneName==="tertiary"){buildTertiaryTransition();activateOverlay("tertiary");}
+    if(sceneName==="secondary")buildSecondaryTransition();
+    if(sceneName==="tertiary"){buildTertiaryTransition();if(typeof TertiaryExplorer!=="undefined")TertiaryExplorer.render();}
   }
-  function resetForJourney(){
-    state.secondaryReady=false;state.tertiaryReady=false;
-    $("scene-secondary")?.classList.remove("guided-transition-active");$("scene-tertiary")?.classList.remove("guided-transition-active");
-  }
-  function setup(){buildSecondaryTransition();buildTertiaryTransition();}
-
+  function resetForJourney(){state.secondaryReady=true;state.tertiaryReady=true;}
+  function setup(){if(!isJourney())return;buildSecondaryTransition();buildTertiaryTransition();}
   return {setup,enter,showSecondaryWorkspace,showTertiaryWorkspace,resetForJourney,getState:()=>({...state})};
 })();
