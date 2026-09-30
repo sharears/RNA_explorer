@@ -2,7 +2,7 @@ const GuidedStructureTransitions = (() => {
   const state={
     miniFeature:"glycosidic",realPairKey:"gc",realPairModels:null,realPairPromise:null,
     yaw:-0.55,pitch:0.34,zoom:1,panX:0,panY:0,dragging:false,dragMode:"rotate",lastX:0,lastY:0,
-    showLabels:true
+    showLabels:true,secondaryCopyOriginal:null,tertiaryCopyOriginal:null
   };
 
   const PAIR_LESSONS={
@@ -381,15 +381,31 @@ const GuidedStructureTransitions = (() => {
   }
 
   function enter(sceneName){
-    if(!isJourney())return;
+    const journey=isJourney();
     if(sceneName==="secondary"){
-      const radial=document.querySelector('[data-secondary-layout="radial"]');if(radial&&!radial.classList.contains("active"))radial.click();
-      buildSecondaryLesson();
+      const p=document.querySelector("#scene-secondary .scene-copy>p:not(.scene-number)");
+      if(p)p.textContent=journey
+        ?"This radial map shows the same tRNA sequence organized as a secondary structure. Paired residues form stems while unpaired regions form loops and connectors."
+        :state.secondaryCopyOriginal;
+      if(journey){
+        const radial=document.querySelector('[data-secondary-layout="radial"]');if(radial&&!radial.classList.contains("active"))radial.click();
+        buildSecondaryLesson();
+      }
     }
-    if(sceneName==="tertiary"){buildTertiaryLesson();renderMiniLesson();}
+    if(sceneName==="tertiary"){
+      const p=document.querySelector("#scene-tertiary .scene-copy>p:not(.scene-number)");
+      if(p)p.textContent=journey
+        ?"This is the three-dimensional structure of the same tRNA. Rotate and zoom the complete RNA first; the structural-feature lesson continues below the viewer."
+        :state.tertiaryCopyOriginal;
+      if(journey){buildTertiaryLesson();renderMiniLesson();}
+    }
   }
 
-  function setup(){buildSecondaryLesson();buildTertiaryLesson();}
+  function setup(){
+    state.secondaryCopyOriginal=document.querySelector("#scene-secondary .scene-copy>p:not(.scene-number)")?.textContent||"";
+    state.tertiaryCopyOriginal=document.querySelector("#scene-tertiary .scene-copy>p:not(.scene-number)")?.textContent||"";
+    buildSecondaryLesson();buildTertiaryLesson();
+  }
   function showSecondaryWorkspace(){}
   function showTertiaryWorkspace(){}
   function resetForJourney(){resetMiniView();}
