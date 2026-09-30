@@ -220,7 +220,7 @@ const GuidedStructureTransitions = (() => {
       return '<line class="gps-hbond" x1="145" y1="'+y+'" x2="255" y2="'+y+'"/>';
     }).join("");
     const labels=[...l.left.labels,...l.right.labels].map(([t,x,y])=>'<text class="gps-atom-label" x="'+x+'" y="'+y+'">'+t+'</text>').join("");
-    return '<svg viewBox="0 0 400 170" class="gps-pair-svg" role="img" aria-label="'+l.title+' atom-level teaching diagram">'+
+    return '<svg viewBox="0 0 400 190" class="gps-pair-svg" role="img" aria-label="'+l.title+' atom-level teaching diagram">'+
       '<polygon class="gps-base-ring left" points="'+poly(92,85,55,l.left.kind==="purine"?6:6,-Math.PI/6)+'"/>'+
       (l.left.kind==="purine"?'<polygon class="gps-base-ring left small" points="'+poly(47,86,36,5,-Math.PI/2)+'"/>':'')+
       '<polygon class="gps-base-ring right" points="'+poly(308,85,55,6,-Math.PI/6)+'"/>'+
@@ -398,13 +398,13 @@ const GuidedStructureTransitions = (() => {
   }
   function renderMiniLesson(){
     const l=MINI_LESSONS[state.miniFeature]||MINI_LESSONS.glycosidic;
-    document.querySelectorAll("[data-gps-mini-feature]").forEach(b=>b.classList.toggle("active",b.dataset.gpsMiniFeature===state.miniFeature));
     document.querySelectorAll("[data-gps-real-pair]").forEach(b=>b.classList.toggle("active",b.dataset.gpsRealPair===state.realPairKey));
     const pairMode=state.miniFeature==="basepair";
     if($("gpsRealPairTabs"))$("gpsRealPairTabs").hidden=!pairMode;
-    $("gpsMiniTitle").textContent=pairMode?(REAL_PAIR_DEFS[state.realPairKey]?.label||l.title):l.title;
-    $("gpsMiniDefinition").textContent=l.definition;$("gpsMiniNotice").textContent=l.notice;
-    if($("gpsMiniCaption"))$("gpsMiniCaption").textContent=pairMode?"Atom coordinates from PDB 1EHZ · teaching hydrogens added for donor–acceptor visualization":"Interactive teaching model · element-colored atoms";
+    const title=$("gpsMiniTitle"),definition=$("gpsMiniDefinition"),notice=$("gpsMiniNotice");
+    if(title)title.textContent=pairMode?(REAL_PAIR_DEFS[state.realPairKey]?.label||l.title):l.title;
+    if(definition)definition.textContent=l.definition;if(notice)notice.textContent=l.notice;
+    if($("gpsMiniCaption"))$("gpsMiniCaption").textContent=pairMode?"Stick model · atom coordinates from PDB 1EHZ · yellow dots = H-bonds":"Interactive stick model · element-colored atoms";
     renderMiniModel();
     if(pairMode&&!state.realPairModels){
       loadRealPairModels().then(()=>{if(state.miniFeature==="basepair")renderMiniLesson();}).catch(error=>{
