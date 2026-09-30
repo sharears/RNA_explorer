@@ -23,7 +23,7 @@ try{
   for(const key of features){
     await page.locator('[data-learning-feature="'+key+'"]').click();
     await page.waitForFunction(expected=>TertiaryExplorer.getDiagnostics().learningKey===expected,key,{timeout:10000});
-    if(TertiaryExplorer && await page.evaluate(()=>TertiaryExplorer.getDiagnostics().learningActive))throw new Error(key+" highlighted the full RNA before the user requested it.");
+    if(await page.evaluate(()=>TertiaryExplorer.getDiagnostics().learningActive))throw new Error(key+" highlighted the full RNA before the user requested it.");
     await page.locator("#teLearningShow").click();
     await page.waitForFunction(expected=>{
       const d=TertiaryExplorer.getDiagnostics();
