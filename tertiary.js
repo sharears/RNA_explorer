@@ -547,10 +547,17 @@ const TertiaryExplorer = (() => {
     const sel=selectorForResidue(r);
     if(guidedLearningActive()){
       // In Guided Journey, mute the complete molecule so the requested feature is unmistakable.
-      model.setStyle(sel,{stick:{radius:.08,color:"#435363",opacity:.16},sphere:{radius:.12,color:"#435363",opacity:.06}});
+      model.setStyle(sel,{stick:{radius:.08,color:"#435363",opacity:.16}});
       return;
     }
+    const journeyOverview=document.body?.dataset?.pageMode==="journey";
     const elementMode=state.colorMode==="element",color=residueColor(i,r);
+    if(journeyOverview){
+      // Cleaner overview: smooth-looking backbone sticks plus thin base lines.
+      model.setStyle(sel,{line:{linewidth:1.4,color,opacity:.72}});
+      model.addStyle({...sel,atom:BACKBONE_ATOMS},{stick:{radius:.11,color:"#9cabb8",opacity:.9}});
+      return;
+    }
     if(state.representation==="backbone"){
       const b={...sel,atom:BACKBONE_ATOMS};
       model.setStyle(b,{stick:{radius:.14,...(elementMode?{colorscheme:"Jmol"}:{color})}});
@@ -915,11 +922,18 @@ const TertiaryExplorer = (() => {
   function setupLearningPanel(){
     renderLearningPanel();
     document.querySelectorAll("[data-learning-feature]").forEach(button=>button.addEventListener("click",()=>{
+      cancelLearningPulse();
+      state.learning.key=LEARNING_LESSONS[button.dataset.learningFeature]?button.dataset.learningFeature:"glycosidic";
       state.learning.geometry=null;
-      showLearningFeature(button.dataset.learningFeature).catch(()=>{});
+      renderLearningPanel();
+      setLearningStatus("Study the small model, then choose “Show me in the 3D structure” to locate a representative example in the full RNA.");
+      if(viewer&&model){applyStyles(false);viewer.render();}
     }));
-    $("teLearningTorsion")?.addEventListener("change",event=>{state.learning.torsion=event.target.value;if(state.learning.key==="backbone"&&state.learning.geometry)showLearningFeature("backbone").catch(()=>{});});
-    $("teLearningShow")?.addEventListener("click",()=>showLearningFeature().catch(()=>{}));
+    $("teLearningTorsion")?.addEventListener("change",event=>{state.learning.torsion=event.target.value;renderLearningPanel();});
+    $("teLearningShow")?.addEventListener("click",async()=>{
+      await showLearningFeature().catch(()=>{});
+      if(document.body?.dataset?.pageMode==="journey")$("tertiaryViewport")?.scrollIntoView({behavior:"smooth",block:"center"});
+    });
     $("teLearningClear")?.addEventListener("click",clearLearningFeature);
   }
 
@@ -1666,6 +1680,7 @@ const TertiaryExplorer = (() => {
   function setup(config){
     if(setupDone)return;setupDone=true;
     state.defaultSequence=config.sequence;state.defaultStructure=config.structure;state.secondarySequence=config.sequence;state.structure=config.structure;state.colors=config.colors;state.names=config.names;state.onSelect=config.onSelect;
+    const journeyRequested=document.body?.dataset?.pageMode==="journey"||/[?&]page=journey(?:&|$)/.test(String(window.location?.search||""));if(journeyRequested){state.showIndices=false;state.showSelectedLabel=false;state.representation="backbone";}
     const parsed=parseStructure(state.structure,state.secondarySequence.length);pairs=parsed.pairs;partner=parsed.partner;
     setupControls();setupToolbar();setupLearningPanel();
     $("followButton")?.addEventListener("click",()=>{const n=activeResidues().length;if(n<2)return;let next=state.selected;while(next===state.selected)next=Math.floor(Math.random()*n);chooseResidue(next);});
