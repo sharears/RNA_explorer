@@ -1680,7 +1680,7 @@ const TertiaryExplorer = (() => {
   function setup(config){
     if(setupDone)return;setupDone=true;
     state.defaultSequence=config.sequence;state.defaultStructure=config.structure;state.secondarySequence=config.sequence;state.structure=config.structure;state.colors=config.colors;state.names=config.names;state.onSelect=config.onSelect;
-    if(document.body?.dataset?.pageMode==="journey"){state.showIndices=false;state.showSelectedLabel=false;state.representation="backbone";}
+    const journeyRequested=document.body?.dataset?.pageMode==="journey"||/[?&]page=journey(?:&|$)/.test(String(window.location?.search||""));if(journeyRequested){state.showIndices=false;state.showSelectedLabel=false;state.representation="backbone";}
     const parsed=parseStructure(state.structure,state.secondarySequence.length);pairs=parsed.pairs;partner=parsed.partner;
     setupControls();setupToolbar();setupLearningPanel();
     $("followButton")?.addEventListener("click",()=>{const n=activeResidues().length;if(n<2)return;let next=state.selected;while(next===state.selected)next=Math.floor(Math.random()*n);chooseResidue(next);});
