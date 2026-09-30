@@ -13,14 +13,14 @@ function growthDiagram(count) {
   const line=(x1,y1,x2,y2,cls='')=>`<line class="${cls}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
   const label=(x,y,t,cls='')=>`<text x="${x}" y="${y}" class="${cls}">${t}</text>`;
   const phosphate=(x,i)=>{
-    const px=x-86,py=222,ox=x-55,oy=180,topY=174,bottomY=270,leftX=px-39;
+    const px=x-86,py=222,ox=x-58,oy=182,topY=174,bottomY=270,leftX=px-39;
     const bits=[];
     bits.push('<g class="growth-phosphate-detail" data-phosphate="'+(i+1)+'">');
     bits.push(label(px,py,'P','growth-phosphate-center'));
     // P—O5′—ribose: the phosphate is visibly part of this nucleotide before chain linkage.
     bits.push(line(px+10,py-7,ox-7,oy+7,'phosphate-covalent'));
     bits.push(label(ox,oy,'O5′','growth-phosphate-atom'));
-    bits.push(line(ox+10,oy-7,x-52,150,'phosphate-ribose-link'));
+    bits.push(line(ox,oy-10,x-58,156,'phosphate-ribose-link'));
     // One double-bonded oxygen and one non-bridging oxygen are drawn explicitly.
     bits.push(line(px-3,py-12,px-3,topY+10,'phosphate-covalent'));
     bits.push(line(px+3,py-12,px+3,topY+10,'phosphate-covalent'));
@@ -39,6 +39,7 @@ function growthDiagram(count) {
     fragments.push(`<g class="growth-residue ${last?'arriving-residue':''}" data-position="${i+1}" data-nucleotide-phosphate="attached">
       <path d="M ${x-35} 120 L ${x} 95 L ${x+35} 120 L ${x+22} 165 L ${x-22} 165 Z"/>
       ${label(x,95,'O')}${label(x+35,120,'1′')}${label(x+22,165,'2′')}${label(x-22,165,'3′')}${label(x-35,120,'4′')}
+      ${line(x-35,120,x-58,145,'ribose-c5-bond')}${label(x-58,145,'C5′','growth-carbon-label')}
       ${line(x+35,120,x+55,70)}<circle cx="${x+55}" cy="55" r="23" style="fill:${BASE_COLORS[base]}"/>
       ${label(x+55,56,base,'growth-base')}${label(x+55,22,String(i+1),'growth-position')}
       ${line(x+22,165,x+22,194)}${label(x+22,205,'OH')}
