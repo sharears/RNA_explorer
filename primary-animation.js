@@ -6,44 +6,60 @@ function cancelPrimaryAnimation() {
   primaryGrowth.running = false;
 }
 
-// A connectivity diagram, not a reaction mechanism. Each incoming unit is already a nucleotide:
- // base + ribose + 5′ phosphate. Chain growth connects the previous 3′ oxygen to that nucleotide phosphate.
+// A connectivity diagram, not a reaction mechanism. Each incoming unit is already a nucleotide.
 function growthDiagram(count) {
   const visible = Math.min(count, 5);
   const fragments = [];
-  const line = (x1,y1,x2,y2,cls='')=>`<line class="${cls}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
-  const label = (x,y,t,cls='')=>`<text x="${x}" y="${y}" class="${cls}">${t}</text>`;
-  for(let i=0;i<visible;i++) {
-    const x=118+i*190, last=i===visible-1;
-    const base=RNA_SEQUENCE[i];
-    const phosphateX=x-72, phosphateY=205;
+  const line=(x1,y1,x2,y2,cls='')=>`<line class="${cls}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+  const label=(x,y,t,cls='')=>`<text x="${x}" y="${y}" class="${cls}">${t}</text>`;
+  const phosphate=(x,i)=>{
+    const px=x-86,py=222,ox=x-58,oy=182,topY=174,bottomY=270,leftX=px-39;
+    const bits=[];
+    bits.push('<g class="growth-phosphate-detail" data-phosphate="'+(i+1)+'">');
+    bits.push(label(px,py,'P','growth-phosphate-center'));
+    // P—O5′—ribose: the phosphate is visibly part of this nucleotide before chain linkage.
+    bits.push(line(px+10,py-7,ox-7,oy+7,'phosphate-covalent'));
+    bits.push(label(ox,oy,'O5′','growth-phosphate-atom'));
+    bits.push(line(ox,oy-10,x-58,156,'phosphate-ribose-link'));
+    // One double-bonded oxygen and one non-bridging oxygen are drawn explicitly.
+    bits.push(line(px-3,py-12,px-3,topY+10,'phosphate-covalent'));
+    bits.push(line(px+3,py-12,px+3,topY+10,'phosphate-covalent'));
+    bits.push(label(px,topY,'O','growth-phosphate-atom'));
+    bits.push(line(px,py+12,px,bottomY-12,'phosphate-covalent'));
+    bits.push(label(px,bottomY,'O⁻','growth-phosphate-atom'));
+    if(i===0){
+      bits.push(line(px-12,py,leftX+12,py,'phosphate-covalent'));
+      bits.push(label(leftX,py,'O⁻','growth-phosphate-atom'));
+    }
+    bits.push('</g>');
+    return bits.join('');
+  };
+  for(let i=0;i<visible;i++){
+    const x=125+i*190,last=i===visible-1,base=RNA_SEQUENCE[i];
     fragments.push(`<g class="growth-residue ${last?'arriving-residue':''}" data-position="${i+1}" data-nucleotide-phosphate="attached">
-      <g class="growth-phosphate" aria-label="5 prime phosphate already attached to nucleotide">
-        <circle cx="${phosphateX}" cy="${phosphateY}" r="18"/>${label(phosphateX,phosphateY,'P','growth-phosphate-label')}
-        ${line(phosphateX+18,phosphateY,x-55,177,'nucleotide-phosphate-bond')}
-      </g>
       <path d="M ${x-35} 120 L ${x} 95 L ${x+35} 120 L ${x+22} 165 L ${x-22} 165 Z"/>
       ${label(x,95,'O')}${label(x+35,120,'1′')}${label(x+22,165,'2′')}${label(x-22,165,'3′')}${label(x-35,120,'4′')}
+      ${line(x-35,120,x-58,145,'ribose-c5-bond')}${label(x-58,145,'C5′','growth-carbon-label')}
       ${line(x+35,120,x+55,70)}<circle cx="${x+55}" cy="55" r="23" style="fill:${BASE_COLORS[base]}"/>
       ${label(x+55,56,base,'growth-base')}${label(x+55,22,String(i+1),'growth-position')}
-      ${line(x+22,165,x+22,193)}${label(x+22,202,'OH')}
-      ${line(x-35,120,x-55,120)}${label(x-55,120,'5′')}${line(x-55,120,x-55,177)}${label(x-55,184,'O')}
-      ${line(x-22,165,x-22,247)}${label(x-22,253,last?'OH':'O')}
-      ${last?label(x-22,292,'3′ end','end-label'):''}
-      <title>Nucleotide ${i+1}: base + ribose + attached 5′ phosphate</title>
+      ${line(x+22,165,x+22,194)}${label(x+22,205,'OH')}
+      ${line(x-22,165,x-22,248)}${label(x-22,258,last?'OH':'O3′')}
+      ${phosphate(x,i)}
+      ${last?label(x-22,298,'3′ end','end-label'):''}
+      <title>Nucleotide ${i+1}: base + ribose + an explicitly bonded phosphate group</title>
     </g>`);
-    if(i>0) {
-      const prev=x-190;
+    if(i>0){
+      const prev=x-190,px=x-86,py=222;
       fragments.push(`<g class="growth-link ${last?'new-growth-link':''}" data-link="${i}-${i+1}">
-        ${line(prev-22,247,phosphateX-18,phosphateY,'inter-nucleotide-link')}
-        <title>Residue ${i} O3′ connects to the phosphate already attached to nucleotide ${i+1}, forming a 3′–5′ phosphodiester linkage.</title>
+        ${line(prev-22,248,px-12,py,'inter-nucleotide-link')}
+        <title>Residue ${i} O3′ connects to the phosphate of nucleotide ${i+1}, forming the new 3′–5′ phosphodiester linkage.</title>
       </g>`);
     }
   }
-  return `<svg viewBox="0 0 1030 345" class="growth-svg" role="img" aria-label="${visible} complete nucleotides connected from 5′ to 3′. Each nucleotide already carries its phosphate before the inter-nucleotide linkage forms.">
-    ${fragments.join('')}${label(32,292,'5′ end','end-label')}
-    <path class="growth-direction" d="M 160 323 L 900 323 L 885 316 M 900 323 L 885 330"/>
-    ${label(530,312,'Link nucleotides: 5′ → 3′','direction-label')}</svg>`;
+  return `<svg viewBox="0 0 1040 355" class="growth-svg" role="img" aria-label="${visible} complete nucleotides connected from 5′ to 3′. Each phosphate is shown with its oxygen atoms and covalent bonds, including its connection to ribose.">
+    ${fragments.join('')}${label(28,298,'5′ end','end-label')}
+    <path class="growth-direction" d="M 165 332 L 910 332 L 895 325 M 910 332 L 895 339"/>
+    ${label(540,319,'Link nucleotides: 5′ → 3′','direction-label')}</svg>`;
 }
 
 function renderPrimaryGrowth() {
@@ -116,7 +132,7 @@ function setupPrimaryAnimation() {
   const counter=document.createElement('p');counter.id='growthCount';animation.before(counter);
   stage.querySelector('.stage-note').remove();
   const note=document.createElement('p');note.className='chemical-note';
-  note.textContent='Schematic connectivity: each enlarged unit is already a nucleotide (base + ribose + phosphate). The animation only illustrates the new 3′–5′ linkage between nucleotides. In cells, RNA polymerases use nucleoside triphosphates and release pyrophosphate; this is not a reaction mechanism.';
+  note.textContent='Schematic connectivity: each enlarged unit is already a nucleotide. The phosphate group is shown with its O atoms and covalent bonds, including the O5′ connection to ribose. The animation then adds the new 3′–5′ linkage between nucleotides. In cells, RNA polymerases use nucleoside triphosphates and release pyrophosphate; this is not a reaction mechanism.';
   stage.appendChild(note);
   const replay=document.createElement('button');replay.id='growthReplay';replay.className='primary-action replay-connection';replay.type='button';replay.textContent='Replay animation';
   const copy=document.querySelector('#scene-primary .scene-copy');

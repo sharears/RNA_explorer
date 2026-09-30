@@ -543,14 +543,24 @@ const TertiaryExplorer = (() => {
   function guidedLearningActive(){
     return document.body?.dataset?.pageMode==="journey"&&!!state.learning.geometry;
   }
+  function guidedOverviewActive(){
+    return document.body?.dataset?.pageMode==="journey"&&!state.learning.geometry;
+  }
   function applyResidueRepresentation(r,i){
-    const sel=selectorForResidue(r);
+    const sel=selectorForResidue(r),base=normalizeBase(r.resn),color=residueColor(i,r);
     if(guidedLearningActive()){
-      // In Guided Journey, mute the complete molecule so the requested feature is unmistakable.
-      model.setStyle(sel,{stick:{radius:.08,color:"#435363",opacity:.16},sphere:{radius:.12,color:"#435363",opacity:.06}});
+      // Keep the complete molecule present but quiet while a teaching feature is highlighted.
+      model.setStyle(sel,{stick:{radius:.055,color:"#435363",opacity:.13}});
       return;
     }
-    const elementMode=state.colorMode==="element",color=residueColor(i,r);
+    if(guidedOverviewActive()){
+      // Guided Journey overview: a quiet sugar-phosphate trace plus simple base sticks.
+      model.setStyle({...sel,atom:BACKBONE_ATOMS},{stick:{radius:.105,color:"#6f8294",opacity:.8}});
+      const baseAtoms=[...(BASE_RING_ATOMS[base]||[]),"C1'","C1*"];
+      model.addStyle({...sel,atom:baseAtoms},{stick:{radius:.085,color,opacity:.96}});
+      return;
+    }
+    const elementMode=state.colorMode==="element";
     if(state.representation==="backbone"){
       const b={...sel,atom:BACKBONE_ATOMS};
       model.setStyle(b,{stick:{radius:.14,...(elementMode?{colorscheme:"Jmol"}:{color})}});
@@ -612,6 +622,7 @@ const TertiaryExplorer = (() => {
     });
   }
   function addIndices(){
+    if(document.body?.dataset?.pageMode==="journey")return;
     if(!viewer||!state.showIndices)return;
     const residues=activeResidues();
     state.indexSelection.forEach(i=>{
@@ -620,6 +631,7 @@ const TertiaryExplorer = (() => {
     });
   }
   function addSelectedLabel(){
+    if(document.body?.dataset?.pageMode==="journey")return;
     if(!state.showSelectedLabel)return;
     const r=activeResidues()[state.selected];if(!r?.coord||!isVisibleIndex(state.selected)||(!state.selectionIndices.has(state.selected)&&!selectedPairResidues().has(state.selected)))return;
     viewer.addLabel(baseAt(state.selected)+(state.selected+1)+(r.chain?" · "+r.chain:""),{position:r.coord,fontSize:13,fontColor:"#07111c",backgroundColor:"#ffffff",backgroundOpacity:.92,borderColor:"#d7e2e8",borderThickness:1,inFront:true});
@@ -880,7 +892,7 @@ const TertiaryExplorer = (() => {
     const g=state.learning.geometry;if(!g||!model)return;
     (g.groups||[]).forEach(group=>(group.indices||[]).forEach(i=>{
       const residue=activeResidues()[i];if(!residue)return;
-      model.setStyle(selectorForResidue(residue),{stick:{radius:.27,color,opacity:.99},sphere:{radius:.31,color,opacity:.32}});
+      model.setStyle(selectorForResidue(residue),{stick:{radius:.24,color,opacity:.99}});
     }));
     viewer?.render();
   }
@@ -915,8 +927,12 @@ const TertiaryExplorer = (() => {
   function setupLearningPanel(){
     renderLearningPanel();
     document.querySelectorAll("[data-learning-feature]").forEach(button=>button.addEventListener("click",()=>{
+      cancelLearningPulse();
       state.learning.geometry=null;
-      showLearningFeature(button.dataset.learningFeature).catch(()=>{});
+      state.learning.key=LEARNING_LESSONS[button.dataset.learningFeature]?button.dataset.learningFeature:"glycosidic";
+      renderLearningPanel();
+      setLearningStatus("Explore the small interactive model below, then choose “Show me in the 3D structure” to locate a representative example in the full RNA.");
+      if(viewer&&model){applyStyles(false);viewer.render();}
     }));
     $("teLearningTorsion")?.addEventListener("change",event=>{state.learning.torsion=event.target.value;if(state.learning.key==="backbone"&&state.learning.geometry)showLearningFeature("backbone").catch(()=>{});});
     $("teLearningShow")?.addEventListener("click",()=>showLearningFeature().catch(()=>{}));
