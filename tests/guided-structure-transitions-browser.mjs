@@ -76,8 +76,10 @@ try{
     if(await page.locator('#gpsMini3D .gps-stick-atom[data-element="'+element+'"]').count()<1)throw new Error("Missing "+element+" atoms from the real base-pair model.");
   }
   if(await page.locator("#gpsMini3D .gps-stick-bond").count()<20)throw new Error("Base-pair model is not rendered as a detailed stick representation.");
-  const guideStyle=await page.locator("#gpsMini3D .gps-mini-guide").first().evaluate(el=>({stroke:getComputedStyle(el).stroke,dash:getComputedStyle(el).strokeDasharray}));
+  const guide=page.locator("#gpsMini3D .gps-mini-guide.hbond").first();
+  const guideStyle=await guide.evaluate(el=>({stroke:getComputedStyle(el).stroke,dash:getComputedStyle(el).strokeDasharray}));
   if(!guideStyle.dash||guideStyle.dash==="none")throw new Error("Hydrogen bonds are not dotted.");
+  if(!/255/.test(guideStyle.stroke))throw new Error("Hydrogen bonds are not rendered in the yellow teaching color.");
   for(const pair of ["gc","au","gu"]){
     await page.locator('[data-gps-real-pair="'+pair+'"]').click();
     await page.waitForFunction(expected=>document.querySelector('[data-gps-real-pair="'+expected+'"]')?.classList.contains("active"),pair);
