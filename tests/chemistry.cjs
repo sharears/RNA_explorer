@@ -59,6 +59,7 @@ assert.equal(document.querySelectorAll('.growth-phosphate-detail').length,5,'Eve
 assert.ok(document.querySelectorAll('.growth-phosphate-detail .growth-phosphate-atom').length>=15,'Phosphate oxygen atoms should be shown explicitly');
 assert.ok(document.querySelectorAll('.growth-phosphate-detail .phosphate-covalent').length>=10,'Phosphate covalent bonds should be shown explicitly');
 assert.equal(document.querySelectorAll('.growth-phosphate-detail .phosphate-ribose-link').length,5,'Each phosphate should be visibly connected to its ribose');
+assert.equal(document.querySelectorAll('.growth-residue .ribose-c5-bond').length,5,'Each nucleotide should explicitly show the ribose C5′ connection leading to O5′–P');
 assert.equal(document.querySelectorAll('.growth-residue[data-nucleotide-phosphate="attached"]').length,5,'Phosphate is part of the nucleotide before chain linkage');
 assert.equal(document.querySelectorAll('.growth-link').length,4,'Only inter-nucleotide phosphodiester connections are animated between complete nucleotides');
 assert.equal(document.getElementById('sequenceReveal').hidden,true);
