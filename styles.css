@@ -634,3 +634,248 @@ body[data-page-mode="journey"] #scene-tertiary .te-molecular-viewport::after{
   .tertiary-learning-picker button{font-size:.68rem;padding:7px 9px}
   .tertiary-learning-actions{display:grid;grid-template-columns:1fr 1fr}
 }
+
+
+/* Learn / Explore information architecture */
+.home-path-toggle{
+  min-width:150px;
+}
+.home-path-toggle[aria-expanded="true"]{
+  box-shadow:0 0 0 3px rgba(116,215,182,.16);
+}
+.home-path-reveal{
+  margin-top:16px;
+  padding:18px;
+  border:1px solid rgba(116,215,182,.24);
+  border-radius:12px;
+  background:rgba(5,13,23,.58);
+  animation:home-path-reveal-in .2s ease both;
+}
+.home-path-reveal[hidden]{display:none!important}
+.home-reveal-heading{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:20px;
+  margin-bottom:16px;
+}
+.home-reveal-heading h2{
+  margin:5px 0 0;
+  font-size:clamp(1.25rem,2vw,1.7rem);
+}
+.home-reveal-heading p{
+  margin:0;
+  max-width:360px;
+  color:var(--muted);
+  font-size:.82rem;
+  line-height:1.5;
+}
+.home-learning-path{
+  display:grid;
+  grid-template-columns:repeat(6,minmax(0,1fr));
+  gap:7px;
+}
+.home-learning-step,
+.home-explore-grid a{
+  position:relative;
+  min-width:0;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:rgba(255,255,255,.025);
+  color:var(--text);
+  text-decoration:none;
+  transition:border-color .18s,background .18s,transform .18s;
+}
+.home-learning-step{
+  display:grid;
+  gap:5px;
+  padding:12px 10px;
+}
+.home-learning-step span,
+.home-explore-grid a>span,
+.workspace-launch-number{
+  color:var(--mint);
+  font:600 .68rem "DM Mono",monospace;
+  letter-spacing:.08em;
+}
+.home-learning-step strong{font-size:.78rem}
+.home-learning-step small{color:var(--cream);font-size:.66rem}
+.home-learning-step:hover,
+.home-explore-grid a:hover{
+  border-color:var(--mint);
+  background:rgba(116,215,182,.07);
+  transform:translateY(-1px);
+}
+.home-learning-step.start{
+  border-color:rgba(116,215,182,.68);
+  background:rgba(116,215,182,.08);
+}
+.home-explore-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:9px;
+}
+.home-explore-grid a{
+  display:grid;
+  gap:6px;
+  padding:15px;
+}
+.home-explore-grid a strong{font-size:.94rem}
+.home-explore-grid a small{color:var(--muted);line-height:1.4}
+@keyframes home-path-reveal-in{
+  from{opacity:0;transform:translateY(-5px)}
+  to{opacity:1;transform:none}
+}
+
+/* Learning checkpoints: current step plus completed checkpoints. */
+body[data-page-mode="journey"] .scale-step.completed{
+  background:rgba(116,215,182,.08);
+  color:var(--mint);
+}
+body[data-page-mode="journey"] .scale-step.completed::after{
+  content:"✓";
+  margin-left:auto;
+  width:18px;
+  height:18px;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(116,215,182,.55);
+  border-radius:50%;
+  font:700 10px "DM Mono",monospace;
+}
+body[data-page-mode="journey"] .scale-step.active{
+  box-shadow:inset 0 -4px 0 var(--mint);
+}
+
+/* Explore landing pages */
+.workspace-launcher{
+  margin:34px auto 80px;
+  padding:clamp(24px,4vw,48px);
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:
+    radial-gradient(circle at 80% 10%,rgba(116,215,182,.09),transparent 25rem),
+    linear-gradient(145deg,rgba(15,29,45,.96),rgba(7,15,26,.93));
+}
+.workspace-launcher[hidden]{display:none!important}
+.workspace-launcher>p:not(.eyebrow){
+  max-width:720px;
+  margin:16px 0 28px;
+  color:var(--muted);
+  line-height:1.65;
+}
+.workspace-launcher-actions{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;
+}
+.workspace-launch-card{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  min-height:235px;
+  padding:24px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:rgba(255,255,255,.025);
+  color:var(--text);
+  text-decoration:none;
+}
+.workspace-launch-card:hover{
+  border-color:rgba(116,215,182,.6);
+  background:rgba(116,215,182,.055);
+}
+.workspace-launch-card h2{
+  margin:12px 0 8px;
+  font-size:clamp(1.35rem,2vw,1.8rem);
+}
+.workspace-launch-card p{
+  margin:0 0 22px;
+  color:var(--muted);
+  line-height:1.6;
+}
+.workspace-launch-card>strong{
+  margin-top:auto;
+  color:var(--mint);
+}
+.workspace-launch-card .primary-action{margin-top:auto}
+.workspace-template-label{
+  width:100%;
+  display:grid;
+  gap:6px;
+  margin:0 0 12px;
+  color:var(--cream);
+  font:600 .74rem "DM Mono",monospace;
+}
+.workspace-template-label select{
+  width:100%;
+  padding:10px 11px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:#091321;
+  color:var(--text);
+}
+body[data-page-mode="drawing"] .scale-nav,
+body[data-page-mode="drawing"] #explorer,
+body[data-page-mode="drawing"] .scene-footer{
+  display:none!important;
+}
+body[data-workspace-hub="true"] .scale-nav,
+body[data-workspace-hub="true"] #explorer,
+body[data-workspace-hub="true"] .scene-footer{
+  display:none!important;
+}
+
+/* Empty starts for user-supplied 2D/3D structures. */
+.workspace-empty-note{
+  margin:auto;
+  width:min(520px,calc(100% - 40px));
+  min-height:220px;
+  display:grid;
+  place-content:center;
+  gap:10px;
+  text-align:center;
+  border:1px dashed rgba(116,215,182,.42);
+  border-radius:14px;
+  background:rgba(7,17,29,.72);
+  color:var(--muted);
+  padding:32px;
+}
+.workspace-empty-note strong{
+  color:var(--cream);
+  font-size:1.15rem;
+}
+.workspace-empty-note span{line-height:1.55}
+body[data-workspace-blank="secondary"] #secondarySvg{display:none!important}
+body[data-workspace-blank="tertiary"] #tertiarySplitShell{display:none!important}
+
+/* More readable labels inside Learn dropdown. */
+.nav-menu-panel a strong{
+  display:inline-block;
+  min-width:2.2em;
+  color:var(--mint);
+  font:600 .7rem "DM Mono",monospace;
+}
+.nav-menu-panel a small{
+  margin-left:5px;
+  color:var(--cream);
+  font-size:.67rem;
+}
+
+@media(max-width:980px){
+  .home-learning-path{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  .home-reveal-heading{display:block}
+  .home-reveal-heading p{margin-top:8px}
+  .workspace-launcher{margin-top:22px;padding:22px}
+  .workspace-launcher-actions{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  .home-cover-actions{display:grid;grid-template-columns:1fr 1fr}
+  .home-path-toggle{min-width:0}
+  .home-learning-path{grid-template-columns:1fr}
+  .home-explore-grid{grid-template-columns:1fr}
+  .home-path-reveal{padding:14px}
+  .workspace-launch-card{min-height:0}
+}
