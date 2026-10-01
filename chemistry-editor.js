@@ -98,8 +98,41 @@ const MoleculeEditor = (() => {
     ];
     return {atoms,bonds,hbonds:[],leftIds,rightIds};
   }
+  function piecewiseY(value,anchors){
+    const a=anchors.slice().sort((x,y)=>x[0]-y[0]);
+    if(a.length<2)return value;
+    let lo=a[0],hi=a[1];
+    if(value>=a[a.length-1][0]){lo=a[a.length-2];hi=a[a.length-1];}
+    else if(value>a[0][0]){
+      for(let i=0;i<a.length-1;i++)if(value>=a[i][0]&&value<=a[i+1][0]){lo=a[i];hi=a[i+1];break;}
+    }
+    const span=hi[0]-lo[0]||1,t=(value-lo[0])/span;
+    return lo[1]+t*(hi[1]-lo[1]);
+  }
+  function alignPairTemplate(p,kind,left,right){
+    const targets={
+      AU:{A:[["N6",165],["N1",285]],U:[["O4",165],["N3",285]]},
+      GC:{G:[["O6",130],["N1",235],["N2",340]],C:[["N4",130],["N3",235],["O2",340]]},
+      GU:{G:[["O6",175],["N1",295]],U:[["N3",175],["O2",295]]}
+    }[kind]||{};
+    const apply=(side,baseName,idMap)=>{
+      const specs=targets[baseName];if(!specs||!idMap)return;
+      const anchors=specs.map(([name,target])=>{
+        const atom=p.atoms.find(a=>a.id===idMap.get(name));
+        return atom?[atom.y,target]:null;
+      }).filter(Boolean);
+      if(anchors.length<2)return;
+      p.atoms.filter(a=>a.id.startsWith(side+"_")).forEach(a=>a.y=piecewiseY(a.y,anchors));
+    };
+    apply("L",left,p.leftIds);apply("R",right,p.rightIds);
+    if(kind==="GU"){
+      const shift=left==="U"?45:-45;
+      p.atoms.filter(a=>a.id.startsWith(left==="U"?"L_":"R_")).forEach(a=>a.x+=shift);
+    }
+    return p;
+  }
   function pairTemplate(kind,left,right){
-    const p=mergePair(left,right);
+    const p=alignPairTemplate(mergePair(left,right),kind,left,right);
     const sideFor=baseName=>left===baseName?p.leftIds:right===baseName?p.rightIds:null;
     const add=(baseA,atomA,baseB,atomB)=>{
       const sa=sideFor(baseA),sb=sideFor(baseB);
@@ -118,7 +151,7 @@ const MoleculeEditor = (() => {
 
   let dialog=null,svg=null,status=null,title=null,mode="base",base="A",leftBase="G",rightBase="C";
   let graph={atoms:[],bonds:[],hbonds:[]},tool="select",element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,onSave=null;
-  let atomSerial=1,bondSerial=1,hbondSerial=1;
+  let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false;
 
   const atomById=id=>graph.atoms.find(a=>a.id===id);
   const bondBetween=(a,b)=>graph.bonds.find(x=>(x.a===a&&x.b===b)||(x.a===b&&x.b===a));
@@ -136,6 +169,7 @@ const MoleculeEditor = (() => {
           <button type="button" data-chem-tool="bond">Add bond</button>
           <button type="button" data-chem-tool="hbond">H-bond</button>
           <button type="button" data-chem-tool="delete">Delete</button>
+          <button type="button" id="chemAtomCirclesToggle" aria-pressed="false">Atom circles: off</button>
           <label>Element<select id="chemElement"><option>C</option><option>N</option><option>O</option><option>H</option><option>P</option><option>S</option><option>F</option><option>Cl</option><option>Br</option><option>I</option></select></label>
           <label>Bond order<select id="chemBondOrder"><option value="1">Single</option><option value="2">Double</option><option value="3">Triple</option></select></label>
           <button type="button" id="chemChargeMinus">Charge −</button><button type="button" id="chemChargePlus">Charge +</button>
@@ -191,6 +225,13 @@ const MoleculeEditor = (() => {
     dialog.querySelector("#chemBondOrder").addEventListener("change",e=>bondOrder=Number(e.target.value));
     dialog.querySelector("#chemChargeMinus").addEventListener("click",()=>changeCharge(-1));
     dialog.querySelector("#chemChargePlus").addEventListener("click",()=>changeCharge(1));
+    dialog.querySelector("#chemAtomCirclesToggle").addEventListener("click",()=>{
+      showAtomCircles=!showAtomCircles;
+      const button=dialog.querySelector("#chemAtomCirclesToggle");
+      button.setAttribute("aria-pressed",String(showAtomCircles));
+      button.textContent="Atom circles: "+(showAtomCircles?"on":"off");
+      render();
+    });
     dialog.querySelector("#chemExportScale").addEventListener("input",e=>dialog.querySelector("#chemExportScaleValue").textContent=e.target.value+"×");
     dialog.querySelector("#chemExportButton").addEventListener("click",async()=>{status.textContent="Preparing export…";try{await exportCurrentDrawing();}catch(error){status.textContent="Export failed: "+error.message;}});
     dialog.querySelector("#chemEditorReset").addEventListener("click",()=>loadCurrent());
@@ -366,10 +407,44 @@ const MoleculeEditor = (() => {
     const shifts=order===1?[0]:order===2?[-1,1]:[-1.4,0,1.4];
     return shifts.map(s=>({x1:ax+ox*s,y1:ay+oy*s,x2:bx+ox*s,y2:by+oy*s}));
   }
+  function atomCharge(a){
+    return a.charge===0?"":a.charge===1?"⁺":a.charge===-1?"⁻":a.charge>1?String(a.charge)+"⁺":String(Math.abs(a.charge))+"⁻";
+  }
   function atomText(a){
-    const charge=a.charge===0?"":a.charge===1?"⁺":a.charge===-1?"⁻":a.charge>1?String(a.charge)+"⁺":String(Math.abs(a.charge))+"⁻";
-    const label=(a.label&&a.label!==a.id?a.label:a.element)+charge;
-    return label;
+    const charge=atomCharge(a);
+    return (a.label&&a.label!==a.id?a.label:a.element)+charge;
+  }
+  function atomName(a){return String(a.label||a.id||"").replace(/^[LR]_/, "");}
+  function atomBase(a){
+    if(mode==="pair"){
+      if(String(a.id).startsWith("L_"))return leftBase;
+      if(String(a.id).startsWith("R_"))return rightBase;
+    }
+    return mode==="base"?base:"";
+  }
+  const CLEAN_LABELS={
+    A:{N6:"NH₂",N9:"N",N7:"N",N1:"N",N3:"N"},
+    G:{O6:"O",N1:"N–H",N2:"H₂N",N9:"N",N7:"N",N3:"N"},
+    C:{N4:"H₂N",N3:"N",O2:"O",N1:"N"},
+    U:{O4:"O",N3:"N–H",O2:"O",N1:"N"},
+    T:{O4:"O",N3:"N–H",O2:"O",N1:"N"}
+  };
+  function cleanAtomText(a){
+    const name=atomName(a),baseName=atomBase(a);
+    const explicit=CLEAN_LABELS[baseName]?.[name];
+    if(explicit)return explicit+atomCharge(a);
+    if(a.element!=="C")return a.element+atomCharge(a);
+    const degree=graph.bonds.reduce((n,b)=>n+(b.a===a.id||b.b===a.id?1:0),0);
+    return degree===0||selectedAtoms.has(a.id)||pendingAtom===a.id?"C"+atomCharge(a):"";
+  }
+  function appendPairRMarkers(layer){
+    if(mode!=="pair"||showAtomCircles)return;
+    [["L",leftBase],["R",rightBase]].forEach(([side,b])=>{
+      const atomId=side+"_"+(/[AG]/.test(b)?"N9":"N1"),a=atomById(atomId);if(!a)return;
+      const line=document.createElementNS(NS,"line");line.setAttribute("x1",a.x);line.setAttribute("y1",a.y+5);line.setAttribute("x2",a.x);line.setAttribute("y2",a.y+28);line.setAttribute("class","chem-glycosidic-r-link");
+      const text=document.createElementNS(NS,"text");text.setAttribute("x",a.x);text.setAttribute("y",a.y+45);text.setAttribute("class","chem-glycosidic-r-label");text.textContent="R";
+      layer.append(line,text);
+    });
   }
   function render(){
     if(!svg)return;
@@ -390,16 +465,18 @@ const MoleculeEditor = (() => {
       const a=atomById(h.a),b=atomById(h.b);if(!a||!b)return;
       const line=document.createElementNS(NS,"line");line.dataset.hbondId=h.id;line.setAttribute("x1",a.x);line.setAttribute("y1",a.y);line.setAttribute("x2",b.x);line.setAttribute("y2",b.y);hLayer.append(line);
     });
-    const atomLayer=document.createElementNS(NS,"g");atomLayer.setAttribute("class","chem-editor-atoms");
+    const atomLayer=document.createElementNS(NS,"g");atomLayer.setAttribute("class","chem-editor-atoms "+(showAtomCircles?"with-circles":"clean-structure"));
     graph.atoms.forEach(a=>{
       const g=document.createElementNS(NS,"g");g.dataset.atomId=a.id;g.setAttribute("transform",`translate(${a.x} ${a.y})`);
       g.setAttribute("class","chem-editor-atom"+(selectedAtoms.has(a.id)?" selected":"")+(pendingAtom===a.id?" pending":""));
-      const circle=document.createElementNS(NS,"circle");circle.setAttribute("r","18");g.append(circle);
-      const text=document.createElementNS(NS,"text");text.textContent=atomText(a);text.setAttribute("y","1");g.append(text);
-      const sub=document.createElementNS(NS,"text");sub.textContent=a.id;sub.setAttribute("class","chem-atom-id");sub.setAttribute("y","31");g.append(sub);
+      const circle=document.createElementNS(NS,"circle");circle.setAttribute("r","18");circle.setAttribute("class","chem-atom-circle");g.append(circle);
+      const textValue=showAtomCircles?atomText(a):cleanAtomText(a);
+      if(textValue){const text=document.createElementNS(NS,"text");text.textContent=textValue;text.setAttribute("y","1");g.append(text);}
+      if(showAtomCircles){const sub=document.createElementNS(NS,"text");sub.textContent=a.id;sub.setAttribute("class","chem-atom-id");sub.setAttribute("y","31");g.append(sub);}
       atomLayer.append(g);
     });
-    svg.append(bondLayer,hLayer,atomLayer);
+    const rLayer=document.createElementNS(NS,"g");rLayer.setAttribute("class","chem-editor-r-markers");appendPairRMarkers(rLayer);
+    svg.append(bondLayer,hLayer,rLayer,atomLayer);
     if(selectionBox){
       const x=Math.min(selectionBox.start.x,selectionBox.current.x),y=Math.min(selectionBox.start.y,selectionBox.current.y);
       const rect=document.createElementNS(NS,"rect");rect.setAttribute("class","chem-selection-box");rect.setAttribute("x",x);rect.setAttribute("y",y);
@@ -438,14 +515,19 @@ const MoleculeEditor = (() => {
     return warnings;
   }
 
+  function syncCircleButton(){
+    const button=dialog?.querySelector("#chemAtomCirclesToggle");if(!button)return;
+    button.setAttribute("aria-pressed",String(showAtomCircles));
+    button.textContent="Atom circles: "+(showAtomCircles?"on":"off");
+  }
   function openBase(selectedBase,callback){
-    ensureDialog();mode="base";base=selectedBase||"A";onSave=callback||null;
+    ensureDialog();mode="base";base=selectedBase||"A";onSave=callback||null;showAtomCircles=false;syncCircleButton();
     title.textContent="Edit "+((BASES[base]||{}).name||base);
     dialog.querySelector("#chemPairControls").hidden=true;
     graph=graphFromBase(base);renumber();render();validate();dialog.showModal();
   }
   function openPair(a,b,callback){
-    ensureDialog();mode="pair";leftBase=a||"G";rightBase=b||"C";onSave=callback||null;
+    ensureDialog();mode="pair";leftBase=a||"G";rightBase=b||"C";onSave=callback||null;showAtomCircles=false;syncCircleButton();
     title.textContent="Base-pair chemistry editor";
     dialog.querySelector("#chemPairControls").hidden=false;
     dialog.querySelector("#chemLeftBase").value=leftBase;dialog.querySelector("#chemRightBase").value=rightBase;
@@ -457,7 +539,7 @@ const MoleculeEditor = (() => {
     renumber();render();validate();dialog.showModal();
   }
   function openBlank(callback){
-    ensureDialog();mode="blank";onSave=callback||null;
+    ensureDialog();mode="blank";onSave=callback||null;showAtomCircles=false;syncCircleButton();
     title.textContent="New molecular drawing";
     dialog.querySelector("#chemPairControls").hidden=true;
     graph={atoms:[],bonds:[],hbonds:[]};renumber();render();validate();
