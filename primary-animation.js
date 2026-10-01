@@ -26,11 +26,11 @@ function growthDiagram(count) {
         ${line(phosphateX,phosphateY+8,pObottom[0],pObottom[1]-8,'phosphate-bond')}
         ${line(phosphateX+8,phosphateY-1,pObridge[0]-8,pObridge[1]+1,'phosphate-bond')}
         ${line(pObridge[0]+8,pObridge[1],x-55,177,'nucleotide-phosphate-bond')}
-        <circle class="phosphate-atom phosphorus" cx="${phosphateX}" cy="${phosphateY}" r="10"/>${label(phosphateX,phosphateY+4,'P','growth-phosphate-label')}
-        <circle class="phosphate-atom oxygen" cx="${pOtop[0]}" cy="${pOtop[1]}" r="8"/>${label(pOtop[0],pOtop[1]+4,'O','growth-oxygen-label')}
-        <circle class="phosphate-atom oxygen" cx="${pOleft[0]}" cy="${pOleft[1]}" r="8"/>${label(pOleft[0],pOleft[1]+4,'O⁻','growth-oxygen-label')}
-        <circle class="phosphate-atom oxygen" cx="${pObottom[0]}" cy="${pObottom[1]}" r="8"/>${label(pObottom[0],pObottom[1]+4,'O⁻','growth-oxygen-label')}
-        <circle class="phosphate-atom oxygen bridge" cx="${pObridge[0]}" cy="${pObridge[1]}" r="8"/>${label(pObridge[0],pObridge[1]+4,'O','growth-oxygen-label')}
+        ${label(phosphateX,phosphateY+4,'P','growth-phosphate-label')}
+        ${label(pOtop[0],pOtop[1]+4,'O','growth-oxygen-label')}
+        ${label(pOleft[0],pOleft[1]+4,'O⁻','growth-oxygen-label')}
+        ${label(pObottom[0],pObottom[1]+4,'O⁻','growth-oxygen-label')}
+        ${label(pObridge[0],pObridge[1]+4,'O','growth-oxygen-label')}
       </g>
       <path d="M ${x-35} 120 L ${x} 95 L ${x+35} 120 L ${x+22} 165 L ${x-22} 165 Z"/>
       ${label(x,95,'O')}${label(x+35,120,'1′')}${label(x+22,165,'2′')}${label(x-22,165,'3′')}${label(x-35,120,'4′')}
