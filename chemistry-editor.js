@@ -29,6 +29,21 @@ const MoleculeEditor = (() => {
       name:"Uracil",
       atoms:[["N1","N",220,245,0],["C2","C",290,280,0],["N3","N",355,245,0],["C4","C",355,170,0],["C5","C",290,135,0],["C6","C",220,170,0],["O2","O",295,350,0],["O4","O",420,135,0]],
       bonds:[["N1","C2",1],["C2","N3",1],["N3","C4",1],["C4","C5",1],["C5","C6",2],["C6","N1",1],["C2","O2",2],["C4","O4",2]]
+    },
+    T:{
+      name:"Thymine",
+      atoms:[["N1","N",220,245,0],["C2","C",290,280,0],["N3","N",355,245,0],["C4","C",355,170,0],["C5","C",290,135,0],["C6","C",220,170,0],["O2","O",295,350,0],["O4","O",420,135,0],["C5M","C",275,62,0]],
+      bonds:[["N1","C2",1],["C2","N3",1],["N3","C4",1],["C4","C5",1],["C5","C6",2],["C6","N1",1],["C2","O2",2],["C4","O4",2],["C5","C5M",1]]
+    },
+    RIBOSE:{
+      name:"Ribose",
+      atoms:[["O4'","O",270,125,0],["C1'","C",345,170,0],["C2'","C",330,255,0],["C3'","C",245,280,0],["C4'","C",195,205,0],["C5'","C",125,190,0],["O2'","O",390,305,0],["O3'","O",220,355,0],["O5'","O",65,160,0]],
+      bonds:[["O4'","C1'",1],["C1'","C2'",1],["C2'","C3'",1],["C3'","C4'",1],["C4'","O4'",1],["C4'","C5'",1],["C5'","O5'",1],["C2'","O2'",1],["C3'","O3'",1]]
+    },
+    PHOSPHATE:{
+      name:"Phosphate group",
+      atoms:[["P","P",300,220,0],["O1","O",300,125,0],["O2","O",390,220,-1],["O3","O",300,315,-1],["O4","O",210,220,0]],
+      bonds:[["P","O1",2],["P","O2",1],["P","O3",1],["P","O4",1]]
     }
   };
 
@@ -188,7 +203,7 @@ const MoleculeEditor = (() => {
         const dpi=Number(exportDialog.querySelector("#chemExportDpi").value)||96;
         const scale=(Number(exportDialog.querySelector("#chemExportScale").value)||1)*(dpi/96);
         const format=exportDialog.querySelector("#chemExportFormat").value,background=exportDialog.querySelector("#chemExportBackground").value;
-        const filename=mode==="pair"?"rna-base-pair-chemistry":"rna-"+base.toLowerCase()+"-chemistry";
+        const filename=mode==="pair"?"rna-base-pair-chemistry":mode==="blank"?"rna-molecular-drawing":"rna-"+base.toLowerCase()+"-chemistry";
         const result=await ExportTools.exportSvgElement(svg,{format,filename,scale,background,viewBox:svg.getAttribute("viewBox")||"0 0 820 470"});
         out.textContent=format.toUpperCase()+" exported"+(result?.width?" · "+result.width+" × "+result.height:"")+".";
       }catch(error){out.textContent="Export failed: "+error.message;}
@@ -196,7 +211,7 @@ const MoleculeEditor = (() => {
     dialog.querySelector("#chemEditorSave").addEventListener("click",()=>{
       if(mode==="base")storeBase(base,graph);
       if(onSave)onSave(clone(graph));
-      status.textContent=mode==="base"?"Saved edited "+base+" structure for this session.":"Saved custom base-pair drawing for this session.";
+      status.textContent=mode==="base"?"Saved edited "+base+" structure for this session.":mode==="pair"?"Saved custom base-pair drawing for this session.":"Drawing is ready in this session.";
     });
     dialog.querySelector("#chemLeftBase").addEventListener("change",e=>leftBase=e.target.value);
     dialog.querySelector("#chemRightBase").addEventListener("change",e=>rightBase=e.target.value);
@@ -253,7 +268,8 @@ const MoleculeEditor = (() => {
     return [...seen];
   }
   function loadCurrent(){
-    graph=mode==="base"?graphFromBase(base):mergePair(leftBase,rightBase);renumber();render();validate();
+    graph=mode==="base"?graphFromBase(base):mode==="pair"?mergePair(leftBase,rightBase):{atoms:[],bonds:[],hbonds:[]};
+    renumber();render();validate();
   }
   function changeCharge(delta){
     const ids=selectedAtoms.size?[...selectedAtoms]:(selectedAtom?[selectedAtom]:[]);
@@ -397,7 +413,7 @@ const MoleculeEditor = (() => {
     const oldSelected=new Set(selectedAtoms),oldAtom=selectedAtom,oldPending=pendingAtom,oldBox=selectionBox;
     selectedAtoms.clear();selectedAtom=null;pendingAtom=null;selectionBox=null;render();
     try{
-      const label=mode==="pair"?"rna-base-pair-"+leftBase+"-"+rightBase:"rna-nucleobase-"+base;
+      const label=mode==="pair"?"rna-base-pair-"+leftBase+"-"+rightBase:mode==="blank"?"rna-molecular-drawing":"rna-template-"+String(base).toLowerCase();
       await ExportTools.exportSvgElement(svg,{format,filename:label,scale,background,viewBox:"0 0 820 470"});
       status.textContent=format.toUpperCase()+" image exported.";
     }finally{
@@ -440,6 +456,14 @@ const MoleculeEditor = (() => {
       :mergePair(leftBase,rightBase);
     renumber();render();validate();dialog.showModal();
   }
+  function openBlank(callback){
+    ensureDialog();mode="blank";onSave=callback||null;
+    title.textContent="New molecular drawing";
+    dialog.querySelector("#chemPairControls").hidden=true;
+    graph={atoms:[],bonds:[],hbonds:[]};renumber();render();validate();
+    status.textContent="Blank canvas. Choose Add atom to begin, then connect atoms with Add bond.";
+    dialog.showModal();
+  }
 
   function setup(){
     ensureDialog();
@@ -465,7 +489,7 @@ const MoleculeEditor = (() => {
     return getSessionSnapshot();
   }
 
-  return {setup,openBase,openPair,getBaseGraph:graphFromBase,getSavedBase:b=>savedBases[b]?clone(savedBases[b]):null,pairTemplate,
+  return {setup,openBase,openPair,openBlank,getBaseGraph:graphFromBase,getSavedBase:b=>savedBases[b]?clone(savedBases[b]):null,pairTemplate,
     getSessionSnapshot,restoreSessionSnapshot,
     validateGraph:g=>{const old=graph;graph=clone(g);const w=validate();graph=old;return w;}};
 })();
