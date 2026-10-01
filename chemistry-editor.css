@@ -79,3 +79,45 @@
 .chem-export-dialog select,.chem-export-dialog input{border:1px solid var(--line);border-radius:7px;background:#091321;color:var(--text);padding:8px}
 .chem-export-dialog output{color:var(--mint);font-family:"DM Mono",monospace}
 #chemExportStatus{min-height:1.3em;color:var(--muted);font-size:.78rem}
+
+/* Clean chemical-drawing mode: atom circles remain as invisible hit targets. */
+.chem-editor-atoms.clean-structure .chem-atom-circle{
+  fill:transparent;
+  stroke:transparent;
+  pointer-events:all;
+}
+.chem-editor-atoms.clean-structure .chem-editor-atom.selected .chem-atom-circle,
+.chem-editor-atoms.clean-structure .chem-editor-atom.pending .chem-atom-circle{
+  fill:rgba(116,215,182,.06);
+  stroke:var(--mint);
+  stroke-width:2;
+}
+.chem-editor-atoms.clean-structure .chem-editor-atom text{
+  font-size:17px;
+  font-weight:650;
+  paint-order:stroke;
+  stroke:#08111e;
+  stroke-width:5px;
+}
+.chem-editor-atoms.with-circles .chem-atom-circle{
+  fill:#0d1b2b;
+  stroke:#60798d;
+  stroke-width:1.5;
+}
+.chem-glycosidic-r-link{
+  stroke:#dbe7ef;
+  stroke-width:2.1;
+  stroke-linecap:round;
+}
+.chem-glycosidic-r-label{
+  fill:#dbe7ef;
+  text-anchor:middle;
+  font:600 15px "DM Mono",monospace;
+  paint-order:stroke;
+  stroke:#08111e;
+  stroke-width:4px;
+}
+#chemAtomCirclesToggle[aria-pressed="true"]{
+  border-color:var(--mint);
+  color:var(--mint);
+}
