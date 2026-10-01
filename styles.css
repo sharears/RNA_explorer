@@ -846,8 +846,8 @@ body[data-workspace-hub="true"] .scene-footer{
   font-size:1.15rem;
 }
 .workspace-empty-note span{line-height:1.55}
-body[data-workspace-blank="secondary"] #secondarySvg{display:none!important}
-body[data-workspace-blank="tertiary"] #tertiarySplitShell{display:none!important}
+body[data-workspace-blank="secondary"] #scene-secondary .secondary-stage > :not(.workspace-empty-note){display:none!important}
+body[data-workspace-blank="tertiary"] #tertiaryStage > :not(.workspace-empty-note){display:none!important}
 
 /* More readable labels inside Learn dropdown. */
 .nav-menu-panel a strong{
