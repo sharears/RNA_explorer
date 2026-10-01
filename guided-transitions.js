@@ -42,7 +42,7 @@ const GuidedStructureTransitions = (() => {
     pucker:{
       title:"Sugar pucker",
       definition:"The five-membered ribose ring is not flat. Different ring atoms can lie above or below the average ring plane.",
-      notice:"Rotate the ring edge-on. C3′-endo and C2′-endo are two important pucker families; the key idea is that different ribose atoms can project to different sides of the average ring plane.",
+      notice:"The complete nucleotide stays visible while the five ribose-ring atoms are highlighted. Rotate it edge-on to see that the sugar is puckered rather than flat.",
       points:[
         {id:"O4′",x:-1.25,y:.75,z:0,c:"#87a9cc"},{id:"C1′",x:.2,y:1.15,z:.38,c:"#ffffff"},
         {id:"C2′",x:1.25,y:.15,z:-.46,c:"#f2c66d"},{id:"C3′",x:.65,y:-1.1,z:.52,c:"#74d7b6"},
@@ -54,7 +54,7 @@ const GuidedStructureTransitions = (() => {
     backbone:{
       title:"Backbone torsions α–ζ",
       definition:"Six torsion angles describe rotations along the phosphodiester backbone: α, β, γ, δ, ε and ζ.",
-      notice:"A torsion is defined by four atoms. This clean model shows the idea; in the full RNA viewer you can choose α, β, γ, δ, ε or ζ individually and highlight its defining atoms.",
+      notice:"The complete nucleotide stays visible while four atoms defining one backbone torsion are emphasized. In the full RNA viewer you can choose α, β, γ, δ, ε or ζ individually.",
       points:[
         {id:"O3′(i−1)",x:-2.1,y:-.4,z:.25,c:"#87a9cc"},{id:"P",x:-.8,y:.35,z:-.3,c:"#f2c66d"},
         {id:"O5′",x:.35,y:-.25,z:.4,c:"#ffffff"},{id:"C5′",x:1.5,y:.45,z:-.35,c:"#ffffff"},
@@ -66,7 +66,7 @@ const GuidedStructureTransitions = (() => {
     stacking:{
       title:"Base stacking",
       definition:"Neighboring nucleobases often pack with their approximately planar aromatic surfaces above one another.",
-      notice:"Rotate the model and look at the overlap between the two base planes. This face-to-face geometry is different from edge-to-edge base pairing.",
+      notice:"Both complete nucleotides remain visible while their bases are highlighted. Rotate them to see the face-to-face overlap that distinguishes stacking from edge-to-edge base pairing.",
       points:[
         {id:"A1",x:-1.2,y:.55,z:.5,c:"#f2c66d"},{id:"A2",x:0,y:1.05,z:.5,c:"#f2c66d"},{id:"A3",x:1.2,y:.55,z:.5,c:"#f2c66d"},
         {id:"A4",x:1.2,y:-.55,z:.5,c:"#f2c66d"},{id:"A5",x:0,y:-1.05,z:.5,c:"#f2c66d"},{id:"A6",x:-1.2,y:-.55,z:.5,c:"#f2c66d"},
@@ -451,7 +451,9 @@ const GuidedStructureTransitions = (() => {
   function modelForLesson(){
     const lesson=MINI_LESSONS[state.miniFeature]||MINI_LESSONS.glycosidic;
     if(lesson.generator==="realpair")return state.realPairModels?.[state.realPairKey]||{...lesson,points:[],bonds:[],guide:[],highlight:[]};
-    if(["glycosidic","pucker","backbone","stacking"].includes(state.miniFeature)&&state.realLessonModels?.[state.miniFeature])return {...lesson,...state.realLessonModels[state.miniFeature]};
+    if(["glycosidic","pucker","backbone","stacking"].includes(state.miniFeature){
+      return state.realLessonModels?.[state.miniFeature]?{...lesson,...state.realLessonModels[state.miniFeature]}:{...lesson,points:[],bonds:[],guide:[],highlight:[]};
+    }
     if(lesson.generator==="helix")return {...lesson,...helixModel()};
     if(lesson.generator==="junction")return {...lesson,...junctionModel()};
     if(lesson.generator==="contact")return {...lesson,...contactModel()};
