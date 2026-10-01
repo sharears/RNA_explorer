@@ -246,9 +246,11 @@ dialog a { color: var(--mint); }
 .growth-svg .growth-base { stroke:none; font-size:23px; }
 .growth-svg .end-label,.growth-svg .direction-label { fill:var(--mint); }
 .growth-link line { stroke:var(--mint); stroke-width:3; }
-.growth-phosphate .phosphate-atom.phosphorus{fill:#ff9f0a!important;stroke:#ffd08a!important;stroke-width:1.5!important}
-.growth-phosphate .phosphate-atom.oxygen{fill:#ff3b30!important;stroke:#ffb0aa!important;stroke-width:1.2!important}
-.growth-phosphate .growth-phosphate-label,.growth-phosphate .growth-oxygen-label{fill:#07111c;font-size:8px;font-weight:800}
+.growth-phosphate .phosphate-atom.phosphorus,.growth-phosphate .phosphate-atom.oxygen{display:none}
+.growth-phosphate .growth-phosphate-label,.growth-phosphate .growth-oxygen-label{
+  fill:var(--text);font-size:16px;font-weight:500;
+  stroke:#101b2d;stroke-width:6;paint-order:stroke;stroke-linejoin:round;
+}
 .growth-svg .phosphate-bond{stroke:#bfcbd4;stroke-width:2.4}
 .growth-svg .nucleotide-phosphate-bond{stroke:#bfcbd4;stroke-width:2.6}
 .growth-svg .inter-nucleotide-link{stroke:var(--mint);stroke-width:4;stroke-dasharray:120;animation:draw-growth-link .8s ease both}
