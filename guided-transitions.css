@@ -198,3 +198,67 @@ body[data-page-mode="journey"] #tertiaryLearning.guided-inline-lesson .tertiary-
   .gps-inline-mini-shell .gps-real-pair-tabs{position:static;margin-bottom:8px}
   #gpsMini3D{height:430px}
 }
+
+/* Conventional chemical base-pair drawings used in the Secondary learning lesson. */
+.gps-chemical-pair-svg{
+  width:100%;
+  max-height:410px;
+  overflow:visible;
+}
+.gps-chem-bond{
+  stroke:#dbe7ef;
+  stroke-width:2.3;
+  stroke-linecap:round;
+}
+.gps-chem-hbond{
+  stroke:#f4f7fa;
+  stroke-width:2.2;
+  stroke-dasharray:7 7;
+  stroke-linecap:round;
+}
+.gps-chem-label{
+  fill:#f7fbff;
+  text-anchor:middle;
+  font:650 17px "DM Mono",monospace;
+  paint-order:stroke;
+  stroke:#07111c;
+  stroke-width:5px;
+}
+.gps-chem-r-link{
+  stroke:#dbe7ef;
+  stroke-width:2;
+  stroke-linecap:round;
+}
+.gps-chem-r{
+  fill:#dbe7ef;
+  text-anchor:middle;
+  font:650 15px "DM Mono",monospace;
+}
+.gps-base-symbol{
+  fill:rgba(245,233,200,.72);
+  text-anchor:middle;
+  font:700 22px "Manrope",sans-serif;
+  pointer-events:none;
+}
+.gps-chemical-pair-svg .gps-base-name{
+  font-size:14px;
+}
+
+/* Whole-nucleotide context in the Tertiary learning examples. */
+.gps-stick-node.context-node,
+.gps-context-bond{
+  transition:opacity .12s ease;
+}
+.gps-stick-atom.feature-highlight{
+  stroke:#f5e9c8;
+  stroke-width:2.2;
+  filter:drop-shadow(0 0 7px rgba(245,233,200,.85));
+}
+.gps-feature-bond .gps-stick-bond{
+  stroke-width:7.5;
+  filter:drop-shadow(0 0 3px rgba(245,233,200,.38));
+}
+.gps-stick-node.feature-highlight .gps-stick-label{
+  fill:#fff;
+  font-weight:750;
+}
