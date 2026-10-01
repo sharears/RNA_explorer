@@ -11,9 +11,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=guided-learning-3" />
-  <link rel="stylesheet" href="secondary.css?v=secondary-19" />
-  <link rel="stylesheet" href="tertiary.css?v=tertiary-10" />
+  <link rel="stylesheet" href="styles.css?v=learn-explore-1" />
+  <link rel="stylesheet" href="secondary.css?v=secondary-20" />
+  <link rel="stylesheet" href="tertiary.css?v=tertiary-11" />
   <link rel="stylesheet" href="guided-transitions.css?v=guided-4" />
   <link rel="stylesheet" href="chemistry-editor.css?v=chem-editor-4" />
 </head>
@@ -30,8 +30,20 @@
         <div class="nav-menu" id="learnNavMenu">
           <button type="button" aria-haspopup="true" aria-expanded="false">Learn</button>
           <div class="nav-menu-panel">
-            <a href="?page=journey">Start guided journey</a>
-            <a href="?page=example">Open example tRNA</a>
+            <a href="?page=journey&scene=blocks"><strong>01</strong> Building blocks <small>Start here</small></a>
+            <a href="?page=journey&scene=nucleoside"><strong>02</strong> Nucleoside</a>
+            <a href="?page=journey&scene=nucleotide"><strong>03</strong> Nucleotide</a>
+            <a href="?page=journey&scene=primary"><strong>04</strong> Primary structure</a>
+            <a href="?page=journey&scene=secondary"><strong>05</strong> Secondary structure</a>
+            <a href="?page=journey&scene=tertiary"><strong>06</strong> Tertiary structure</a>
+          </div>
+        </div>
+        <div class="nav-menu" id="exploreNavMenu">
+          <button type="button" aria-haspopup="true" aria-expanded="false">Explore</button>
+          <div class="nav-menu-panel">
+            <a href="?page=drawing">Molecular Drawing</a>
+            <a href="?page=secondary">Secondary Structure</a>
+            <a href="?page=tertiary">Tertiary Structure</a>
           </div>
         </div>
         <a class="nav-feedback" id="workspaceFeedbackLink" href="mailto:sharearsaon@outlook.com?subject=RNA%20Structure%20Explorer%20Feedback%20or%20Question">Feedback &amp; Questions</a>
@@ -52,25 +64,44 @@
           <p class="eyebrow">RNA Structure Explorer</p>
           <h1 id="pageTitle">Build, view, and explore RNA.</h1>
         </div>
-        <p>Choose a guided learning path or open an analysis workspace.</p>
+        <p>Choose a guided learning path or open an exploration workspace.</p>
       </section>
 
       <section class="home-cover" aria-labelledby="homeCoverTitle">
         <div class="home-cover-copy">
-          <p class="home-cover-kicker">EXPLORE · EDIT · ANALYZE</p>
+          <p class="home-cover-kicker">LEARN · DRAW · VISUALIZE</p>
           <h1 id="homeCoverTitle">RNA structure,<br><span>minus the fuss.</span></h1>
-          <p class="home-cover-lede">Learn the chemistry, edit 2D structure, inspect 3D coordinates, measure what matters, and export what you need — all in your browser.</p>
-          <div class="home-cover-actions">
-            <a class="home-solid-action" href="?page=journey">Learn RNA structure</a>
-            <div class="home-analyze-group">
-              <button class="home-solid-action home-analyze-action" id="homeAnalyzeToggle" type="button" aria-expanded="false" aria-controls="homeAnalyzeFork">Analyze RNA structure</button>
-              <div class="home-analyze-fork" id="homeAnalyzeFork" hidden>
-                <a href="?page=secondary" aria-label="Open 2D RNA structure workspace"><strong>2D</strong></a>
-                <a href="?page=tertiary" aria-label="Open 3D RNA structure workspace"><strong>3D</strong></a>
-              </div>
+          <p class="home-cover-lede">Learn RNA from its chemical building blocks, or explore molecules and structures in editable 2D and interactive 3D workspaces — all in your browser.</p>
+          <div class="home-cover-actions" aria-label="Choose how to use RNA Structure Explorer">
+            <button class="home-solid-action home-path-toggle" type="button" data-home-path-toggle="learn" aria-expanded="false" aria-controls="homeLearnPanel">Learn</button>
+            <button class="home-solid-action home-path-toggle" type="button" data-home-path-toggle="explore" aria-expanded="false" aria-controls="homeExplorePanel">Explore</button>
+          </div>
+          <div class="home-path-reveal home-learn-reveal" id="homeLearnPanel" hidden>
+            <div class="home-reveal-heading">
+              <div><span class="home-path-kicker">GUIDED PATH</span><h2>Learn RNA structure</h2></div>
+              <p>New to RNA? Start with Building blocks. Every checkpoint is also available directly.</p>
+            </div>
+            <div class="home-learning-path" aria-label="RNA learning checkpoints">
+              <a class="home-learning-step start" href="?page=journey&scene=blocks"><span>01</span><strong>Building blocks</strong><small>Start here</small></a>
+              <a class="home-learning-step" href="?page=journey&scene=nucleoside"><span>02</span><strong>Nucleoside</strong></a>
+              <a class="home-learning-step" href="?page=journey&scene=nucleotide"><span>03</span><strong>Nucleotide</strong></a>
+              <a class="home-learning-step" href="?page=journey&scene=primary"><span>04</span><strong>Primary</strong></a>
+              <a class="home-learning-step" href="?page=journey&scene=secondary"><span>05</span><strong>Secondary</strong></a>
+              <a class="home-learning-step" href="?page=journey&scene=tertiary"><span>06</span><strong>Tertiary</strong></a>
             </div>
           </div>
-          <p class="home-cover-note">No account required · Bring a sequence, a structure file, or just a PDB ID.</p>
+          <div class="home-path-reveal home-explore-reveal" id="homeExplorePanel" hidden>
+            <div class="home-reveal-heading">
+              <div><span class="home-path-kicker">OPEN WORKSPACES</span><h2>Explore RNA</h2></div>
+              <p>Choose a tool. There is no required order.</p>
+            </div>
+            <div class="home-explore-grid">
+              <a href="?page=drawing"><span>01</span><strong>Molecular Drawing</strong><small>Draw or edit chemical structures</small></a>
+              <a href="?page=secondary"><span>02</span><strong>Secondary Structure</strong><small>Build and visualize 2D RNA</small></a>
+              <a href="?page=tertiary"><span>03</span><strong>Tertiary Structure</strong><small>Inspect interactive 3D RNA</small></a>
+            </div>
+          </div>
+          <p class="home-cover-note">No account required · Learn from the beginning, jump to a checkpoint, or open an exploration workspace.</p>
         </div>
         <figure class="home-cover-art">
           <img src="assets/rna-home-cover.webp" alt="A playful painted scientist carefully examining a colorful RNA structure beside a microscope and RNA sketches." width="500" height="559" loading="eager" decoding="async">
@@ -79,7 +110,14 @@
         </figure>
       </section>
 
-      <nav class="scale-nav" aria-label="RNA structural scale">
+      <section class="workspace-launcher" id="workspaceLauncher" aria-labelledby="workspaceLauncherTitle" hidden>
+        <p class="eyebrow">Explore</p>
+        <h1 id="workspaceLauncherTitle">Choose how to begin</h1>
+        <p id="workspaceLauncherDescription"></p>
+        <div class="workspace-launcher-actions" id="workspaceLauncherActions"></div>
+      </section>
+
+      <nav class="scale-nav" aria-label="RNA learning checkpoints">
         <button class="scale-step active" data-scene="blocks" aria-current="step"><span>01</span><b>Building blocks</b></button>
         <button class="scale-step" data-scene="nucleoside"><span>02</span><b>Nucleoside</b></button>
         <button class="scale-step" data-scene="nucleotide"><span>03</span><b>Nucleotide</b></button>
@@ -325,13 +363,13 @@
 
   <script src="export-tools.js?v=1"></script>
   <script src="chemistry.js"></script>
-  <script src="chemistry-editor.js?v=chem-editor-5"></script>
+  <script src="chemistry-editor.js?v=chem-editor-6"></script>
   <script src="journey.js?v=guided-2"></script>
   <script src="primary-animation.js?v=primary-3"></script>
   <script src="guided-transitions.js?v=guided-3"></script>
   <script src="secondary.js?v=secondary-19"></script>
   <script src="tertiary.js?v=tertiary-15"></script>
   <script src="project-session.js?v=project-1"></script>
-  <script src="app.js?v=guided-2"></script>
+  <script src="app.js?v=learn-explore-1"></script>
 </body>
 </html>
