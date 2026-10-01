@@ -451,7 +451,7 @@ const GuidedStructureTransitions = (() => {
   function modelForLesson(){
     const lesson=MINI_LESSONS[state.miniFeature]||MINI_LESSONS.glycosidic;
     if(lesson.generator==="realpair")return state.realPairModels?.[state.realPairKey]||{...lesson,points:[],bonds:[],guide:[],highlight:[]};
-    if(["glycosidic","pucker","backbone","stacking"].includes(state.miniFeature){
+    if(["glycosidic","pucker","backbone","stacking"].includes(state.miniFeature)){
       return state.realLessonModels?.[state.miniFeature]?{...lesson,...state.realLessonModels[state.miniFeature]}:{...lesson,points:[],bonds:[],guide:[],highlight:[]};
     }
     if(lesson.generator==="helix")return {...lesson,...helixModel()};
