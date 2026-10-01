@@ -32,7 +32,7 @@
 #teIndexChoices label { display:flex; justify-content:flex-start; gap:5px; margin:2px; font:12px "DM Mono",monospace; }
 
 #scene-tertiary .tertiary-stage {
-  position:sticky; top:12px; display:flex; flex-direction:column; align-items:stretch;
+  position:relative; top:auto; align-self:start; display:flex; flex-direction:column; align-items:stretch;
   min-height:720px; padding:22px; gap:12px; cursor:default;
 }
 .te-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; z-index:4; }
