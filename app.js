@@ -5,6 +5,7 @@ const BASE_COLORS = { A: "#b55d6a", G: "#2f6b57", C: "#c89b4a", U: "#5d7fa3" };
 const SCENES = ["blocks", "nucleoside", "nucleotide", "primary", "secondary", "tertiary"];
 const SCENE_LABELS = ["Building blocks", "Nucleoside", "Nucleotide", "Primary", "Secondary", "Tertiary"];
 const SITE_SEARCH_ITEMS = [
+  {label:"Molecular Drawing",description:"Draw or edit nucleobases, ribose, phosphate, and base-pair chemistry",page:"drawing",scene:null,target:"#workspaceLauncher",keywords:"molecule molecular drawing chemistry editor atoms bonds charges chemdraw"},
   {label:"Building blocks",description:"RNA phosphate, ribose, and nucleobase basics",page:"journey",scene:"blocks",target:"#scene-blocks",keywords:"parts chemistry phosphate sugar ribose base"},
   {label:"Nucleoside",description:"Explore the sugar + base unit",page:"journey",scene:"nucleoside",target:"#scene-nucleoside",keywords:"nucleoside sugar base"},
   {label:"Nucleotide",description:"Explore phosphate + nucleoside",page:"journey",scene:"nucleotide",target:"#scene-nucleotide",keywords:"nucleotide phosphate"},
@@ -126,9 +127,11 @@ function showScene(index) {
     panel.classList.toggle("active", active);
   });
 
+  const learningMode = document.body.dataset.pageMode === "journey";
   document.querySelectorAll(".scale-step").forEach((button, i) => {
     const active = i === state.sceneIndex;
     button.classList.toggle("active", active);
+    button.classList.toggle("completed", learningMode && i < state.sceneIndex);
     if (active) button.setAttribute("aria-current", "step");
     else button.removeAttribute("aria-current");
   });
@@ -139,7 +142,7 @@ function showScene(index) {
   nextButton.disabled = state.sceneIndex === SCENES.length - 1;
   previousButton.innerHTML = state.sceneIndex > 0 ? `<span>←</span> ${SCENE_LABELS[state.sceneIndex - 1]}` : "<span>←</span> Previous";
   nextButton.innerHTML = state.sceneIndex < SCENES.length - 1 ? `Next: ${SCENE_LABELS[state.sceneIndex + 1]} <span>→</span>` : `Journey complete <span>✓</span>`;
-  document.getElementById("progressText").textContent = `${state.sceneIndex + 1} of ${SCENES.length}`;
+  document.getElementById("progressText").textContent = `Checkpoint ${state.sceneIndex + 1} of ${SCENES.length}`;
 
   if (activeName === "tertiary" && typeof TertiaryExplorer !== "undefined") TertiaryExplorer.render(state.selectedResidue);
   enterChemicalScene(activeName);
@@ -156,14 +159,24 @@ function setupNavigation() {
 }
 
 function setupHomePaths() {
-  const analyze=document.getElementById("homeAnalyzeToggle"),fork=document.getElementById("homeAnalyzeFork");
-  if(analyze&&fork){
-    analyze.addEventListener("click",()=>{
-      const open=analyze.getAttribute("aria-expanded")==="true";
-      analyze.setAttribute("aria-expanded",String(!open));fork.hidden=open;
-      if(!open)fork.querySelector("a")?.focus({preventScroll:true});
+  const homeToggles=[...document.querySelectorAll("[data-home-path-toggle]")];
+  homeToggles.forEach(button=>{
+    button.addEventListener("click",()=>{
+      const name=button.dataset.homePathToggle;
+      const panel=document.getElementById(name==="learn"?"homeLearnPanel":"homeExplorePanel");
+      const willOpen=button.getAttribute("aria-expanded")!=="true";
+      homeToggles.forEach(other=>{
+        const otherName=other.dataset.homePathToggle;
+        const otherPanel=document.getElementById(otherName==="learn"?"homeLearnPanel":"homeExplorePanel");
+        other.setAttribute("aria-expanded","false");
+        if(otherPanel)otherPanel.hidden=true;
+      });
+      button.setAttribute("aria-expanded",String(willOpen));
+      if(panel)panel.hidden=!willOpen;
+      if(willOpen)panel?.scrollIntoView({behavior:"smooth",block:"nearest"});
     });
-  }
+  });
+
   // Workspace navigation menus use the same progressive-disclosure pattern.
   document.querySelectorAll(".nav-menu > button").forEach(button=>{
     button.addEventListener("click",()=>{
@@ -215,6 +228,8 @@ function revealSearchTarget(item) {
 function navigateToSearchItem(item) {
   const url=new URL(window.location.href);
   url.searchParams.set("page",item.page);
+  if(item.page==="secondary"||item.page==="tertiary")url.searchParams.set("start","example");
+  else url.searchParams.delete("start");
   history.pushState({page:item.page},"",url);
   applyPageMode();
   revealSearchTarget(item);
@@ -263,7 +278,7 @@ function setupSiteSearch() {
 function arrangeTopbar(page){
   const inner=document.getElementById("innerNav"),actions=document.getElementById("topbarActions");
   const save=document.getElementById("saveProjectButton"),open=document.getElementById("openProjectButton"),search=document.getElementById("siteSearchButton");
-  const learn=document.getElementById("learnNavMenu"),feedback=document.getElementById("workspaceFeedbackLink");
+  const explore=document.getElementById("exploreNavMenu"),feedback=document.getElementById("workspaceFeedbackLink");
   if(!inner||!actions||!save||!open||!search)return;
   if(page==="home"){
     actions.hidden=false;
@@ -272,34 +287,213 @@ function arrangeTopbar(page){
     return;
   }
   inner.hidden=false;actions.hidden=true;
-  if(learn){
-    inner.insertBefore(save,learn);
-    inner.insertBefore(open,learn);
+  if(explore){
+    explore.after(save);
+    save.after(open);
+  }else{
+    inner.append(save,open);
   }
   if(feedback)feedback.after(search);else inner.append(search);
 }
 
+function hideWorkspaceLauncher(){
+  const launcher=document.getElementById("workspaceLauncher");
+  if(launcher)launcher.hidden=true;
+  delete document.body.dataset.workspaceHub;
+}
+
+function renderWorkspaceLauncher(page){
+  const launcher=document.getElementById("workspaceLauncher");
+  const title=document.getElementById("workspaceLauncherTitle");
+  const description=document.getElementById("workspaceLauncherDescription");
+  const actions=document.getElementById("workspaceLauncherActions");
+  if(!launcher||!title||!description||!actions)return;
+  document.body.dataset.workspaceHub="true";
+  launcher.hidden=false;
+  actions.replaceChildren();
+
+  if(page==="drawing"){
+    title.textContent="Molecular Drawing";
+    description.textContent="Start from a familiar chemical template or open a completely blank canvas.";
+    actions.innerHTML=`
+      <article class="workspace-launch-card">
+        <span class="workspace-launch-number">01</span>
+        <h2>Load a template</h2>
+        <p>Begin with a nucleobase, ribose, phosphate, or a common RNA base pair, then edit atoms, bonds, bond orders, and charges.</p>
+        <label class="workspace-template-label">Template
+          <select id="drawingTemplateSelect">
+            <option value="A">Adenine</option>
+            <option value="G">Guanine</option>
+            <option value="C">Cytosine</option>
+            <option value="U">Uracil</option>
+            <option value="T">Thymine</option>
+            <option value="RIBOSE">Ribose</option>
+            <option value="PHOSPHATE">Phosphate group</option>
+            <option value="pair:GC">G–C Watson–Crick pair</option>
+            <option value="pair:AU">A–U Watson–Crick pair</option>
+            <option value="pair:GU">G–U wobble pair</option>
+          </select>
+        </label>
+        <button class="primary-action" id="drawingOpenTemplate" type="button">Open template</button>
+      </article>
+      <article class="workspace-launch-card">
+        <span class="workspace-launch-number">02</span>
+        <h2>Draw your own</h2>
+        <p>Open an empty molecular canvas and build the structure yourself from atoms and bonds.</p>
+        <button class="primary-action" id="drawingOpenBlank" type="button">Start with a blank canvas</button>
+      </article>`;
+    document.getElementById("drawingOpenTemplate")?.addEventListener("click",()=>{
+      const value=document.getElementById("drawingTemplateSelect")?.value||"A";
+      if(value.startsWith("pair:")){
+        const pair=value.slice(5);
+        MoleculeEditor.openPair(pair[0],pair[1]);
+      }else MoleculeEditor.openBase(value);
+    });
+    document.getElementById("drawingOpenBlank")?.addEventListener("click",()=>MoleculeEditor.openBlank());
+    return;
+  }
+
+  if(page==="secondary"){
+    title.textContent="Secondary Structure";
+    description.textContent="Open the example tRNA to explore immediately, or begin with an empty 2D workspace for your own RNA.";
+    actions.innerHTML=`
+      <a class="workspace-launch-card" href="?page=secondary&start=example">
+        <span class="workspace-launch-number">01</span><h2>Load example</h2>
+        <p>Open the default 76-residue tRNA secondary structure associated with PDB 1EHZ. You can edit it after loading.</p>
+        <strong>Open example tRNA →</strong>
+      </a>
+      <a class="workspace-launch-card" href="?page=secondary&start=custom">
+        <span class="workspace-launch-number">02</span><h2>Build your own</h2>
+        <p>Start with an empty 2D canvas, then enter your own RNA sequence and dot-bracket structure.</p>
+        <strong>Start empty →</strong>
+      </a>`;
+    return;
+  }
+
+  title.textContent="Tertiary Structure";
+  description.textContent="Open the 1EHZ example or begin from an empty 3D workspace and load your own coordinates.";
+  actions.innerHTML=`
+    <a class="workspace-launch-card" href="?page=tertiary&start=example">
+      <span class="workspace-launch-number">01</span><h2>Load example</h2>
+      <p>Open the experimentally determined yeast tRNA-Phe structure from PDB 1EHZ.</p>
+      <strong>Open 1EHZ →</strong>
+    </a>
+    <a class="workspace-launch-card" href="?page=tertiary&start=custom">
+      <span class="workspace-launch-number">02</span><h2>Load your own</h2>
+      <p>Start without a visible structure, then upload a PDB/mmCIF file or enter a PDB ID.</p>
+      <strong>Start empty →</strong>
+    </a>`;
+}
+
+function clearSecondaryBlankState(){
+  if(document.body.dataset.workspaceBlank!=="secondary")return;
+  delete document.body.dataset.workspaceBlank;
+  document.querySelector(".secondary-layout-picker")?.removeAttribute("hidden");
+  document.querySelector("#scene-secondary .workspace-empty-note")?.remove();
+}
+
+function prepareSecondaryCustomStart(){
+  document.body.dataset.workspaceBlank="secondary";
+  const sequence=document.getElementById("secondarySequence");
+  const structure=document.getElementById("secondaryDotBracket");
+  const svg=document.getElementById("secondarySvg");
+  const picker=document.querySelector(".secondary-layout-picker");
+  const stage=document.querySelector("#scene-secondary .secondary-stage");
+  const status=document.getElementById("secondaryInputStatus");
+  if(sequence)sequence.value="";
+  if(structure)structure.value="";
+  if(svg)svg.replaceChildren();
+  if(picker)picker.hidden=true;
+  document.querySelector("#scene-secondary .workspace-empty-note")?.remove();
+  if(stage){
+    const note=document.createElement("div");
+    note.className="workspace-empty-note";
+    note.innerHTML="<strong>Start with your RNA</strong><span>Enter a sequence and matching dot-bracket structure, then choose Render structure.</span>";
+    stage.append(note);
+  }
+  if(status){status.textContent="Enter your RNA sequence and dot-bracket structure to begin.";status.classList.remove("error");}
+}
+
+function clearTertiaryBlankState(){
+  if(document.body.dataset.workspaceBlank!=="tertiary")return;
+  delete document.body.dataset.workspaceBlank;
+  ["#scene-tertiary .te-toolbar","#tertiarySplitShell","#scene-tertiary .te-legend-row","#scene-tertiary .te-interaction-help","#scene-tertiary .stage-note"].forEach(selector=>document.querySelector(selector)?.removeAttribute("hidden"));
+  document.querySelector("#scene-tertiary .workspace-empty-note")?.remove();
+  if(typeof TertiaryExplorer!=="undefined")TertiaryExplorer.render();
+}
+
+function prepareTertiaryCustomStart(){
+  document.body.dataset.workspaceBlank="tertiary";
+  ["#scene-tertiary .te-toolbar","#tertiarySplitShell","#scene-tertiary .te-legend-row","#scene-tertiary .te-interaction-help","#scene-tertiary .stage-note"].forEach(selector=>{
+    const el=document.querySelector(selector);if(el)el.hidden=true;
+  });
+  const stage=document.getElementById("tertiaryStage");
+  document.querySelector("#scene-tertiary .workspace-empty-note")?.remove();
+  if(stage){
+    const note=document.createElement("div");
+    note.className="workspace-empty-note";
+    note.innerHTML="<strong>Load a 3D RNA structure</strong><span>Use the import controls to upload PDB/mmCIF coordinates or enter a PDB ID.</span>";
+    stage.append(note);
+  }
+}
+
+function setupExploreWorkspaceHooks(){
+  document.getElementById("renderSecondaryButton")?.addEventListener("click",()=>setTimeout(()=>{
+    const status=document.getElementById("secondaryInputStatus");
+    if(status&&!status.classList.contains("error")&&document.getElementById("secondarySvg")?.childNodes.length)clearSecondaryBlankState();
+  },0));
+  document.getElementById("restoreTrnaButton")?.addEventListener("click",()=>setTimeout(clearSecondaryBlankState,0));
+  document.getElementById("teStructureFile")?.addEventListener("change",event=>{
+    if(event.target.files?.length)setTimeout(clearTertiaryBlankState,120);
+  });
+  document.getElementById("teLoadPdbId")?.addEventListener("click",()=>setTimeout(clearTertiaryBlankState,220));
+  document.getElementById("teRestoreStructure")?.addEventListener("click",()=>setTimeout(clearTertiaryBlankState,120));
+}
+
 function applyPageMode() {
-  const search=String(window.location&&window.location.search||"");
-  const match=search.match(/[?&]page=([^&]+)/);
-  const mode=match?decodeURIComponent(match[1]):"home";
-  const valid=["home","journey","example","secondary","tertiary"];
+  const url=new URL(window.location.href);
+  const mode=url.searchParams.get("page")||"home";
+  const valid=["home","journey","example","drawing","secondary","tertiary"];
   const page=valid.includes(mode)?mode:"home";
+  const start=url.searchParams.get("start")||"";
   document.body.dataset.pageMode=page;
+  delete document.body.dataset.workspaceBlank;
+  hideWorkspaceLauncher();
   arrangeTopbar(page);
 
   if(page==="home"){
     showScene(0);
     return;
   }
-  if(page==="journey"){showScene(0);return;}
+  if(page==="journey"){
+    const requested=url.searchParams.get("scene");
+    const index=SCENES.indexOf(requested);
+    showScene(index>=0?index:0);
+    return;
+  }
+  if(page==="drawing"){
+    renderWorkspaceLauncher("drawing");
+    if(start==="blank")requestAnimationFrame(()=>MoleculeEditor.openBlank());
+    return;
+  }
   if(page==="example"){
     showScene(4);
     document.getElementById("restoreTrnaButton")?.click();
     return;
   }
-  if(page==="secondary"){showScene(4);return;}
-  if(page==="tertiary"){showScene(5);return;}
+  if(page==="secondary"){
+    if(!start){renderWorkspaceLauncher("secondary");return;}
+    showScene(4);
+    if(start==="custom")prepareSecondaryCustomStart();
+    else document.getElementById("restoreTrnaButton")?.click();
+    return;
+  }
+  if(page==="tertiary"){
+    if(!start){renderWorkspaceLauncher("tertiary");return;}
+    showScene(5);
+    if(start==="custom")prepareTertiaryCustomStart();
+    return;
+  }
 }
 
 
@@ -503,6 +697,7 @@ function initialize() {
     names: BASE_NAMES,
     onSelect: index => selectResidue(index)
   });
+  setupExploreWorkspaceHooks();
   setupDialog();
   registerWebMCPTools();
   selectResidue(0);
