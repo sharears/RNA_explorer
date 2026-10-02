@@ -48,6 +48,11 @@ jobs:
           from pathlib import Path
           p=Path('tests/chemistry.cjs')
           s=p.read_text()
+          old='window.matchMedia=()=>({matches:false});'
+          new="window.location={href:'http://localhost/'};\nwindow.matchMedia=()=>({matches:false});"
+          if old not in s:
+              raise SystemExit('chemistry location harness signature changed')
+          s=s.replace(old,new,1)
           old='const ctx=vm.createContext({document,window,console,CustomEvent:window.CustomEvent,Option:OptionCtor,'
           new='const ctx=vm.createContext({document,window,URL,console,CustomEvent:window.CustomEvent,Option:OptionCtor,'
           if old not in s:
