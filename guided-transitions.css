@@ -262,3 +262,123 @@ body[data-page-mode="journey"] #tertiaryLearning.guided-inline-lesson .tertiary-
   fill:#fff;
   font-weight:750;
 }
+
+
+/* Beginner-first Learn mode additions */
+body[data-page-mode="journey"] #scene-secondary.learning-simplified:not(.learning-tools-open) .secondary-inputs,
+body[data-page-mode="journey"] #scene-secondary.learning-simplified:not(.learning-tools-open) .se-controls,
+body[data-page-mode="journey"] #scene-secondary.learning-simplified:not(.learning-tools-open) .se-toolbar,
+body[data-page-mode="journey"] #scene-secondary.learning-simplified:not(.learning-tools-open) .se-export-status,
+body[data-page-mode="journey"] #scene-secondary.learning-simplified:not(.learning-tools-open) .secondary-layout-picker{
+  display:none!important;
+}
+body[data-page-mode="journey"] #scene-tertiary.learning-simplified:not(.learning-tools-open) #followButton,
+body[data-page-mode="journey"] #scene-tertiary.learning-simplified:not(.learning-tools-open) #tertiaryControls{
+  display:none!important;
+}
+.gps-customize-toggle{
+  width:100%;
+  margin:18px 0;
+  border-style:dashed!important;
+}
+.gps-customize-toggle[aria-expanded="false"]::after{content:"  · optional";color:var(--muted);font-size:.72rem}
+.gps-customize-toggle[aria-expanded="true"]{border-color:var(--mint)!important;color:var(--mint)!important}
+
+.gps-primary-check{
+  margin:20px 0;
+  padding:16px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:rgba(255,255,255,.025);
+}
+.gps-primary-check h3{margin:5px 0 7px;font-size:1rem}
+.gps-primary-check>p{margin:6px 0;color:var(--muted);font-size:.84rem;line-height:1.5}
+.gps-primary-check>div{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0 8px}
+.gps-primary-check button,
+.gps-landmark-buttons button,
+.gps-bridge-actions button{
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:transparent;
+  color:var(--text);
+  padding:9px 12px;
+  cursor:pointer;
+}
+.gps-primary-check button:hover,
+.gps-primary-check button.active,
+.gps-landmark-buttons button:hover,
+.gps-landmark-buttons button.active,
+.gps-bridge-actions button:hover,
+.gps-bridge-actions button.active{
+  border-color:var(--mint);
+  color:var(--mint);
+  background:rgba(116,215,182,.07);
+}
+
+.gps-secondary-landmarks{
+  padding:34px 38px 38px;
+}
+.gps-landmark-layout{
+  display:grid;
+  grid-template-columns:minmax(220px,.65fr) minmax(300px,1.35fr);
+  gap:18px;
+  align-items:start;
+}
+.gps-landmark-buttons{
+  display:grid;
+  gap:8px;
+}
+.gps-landmark-buttons button{text-align:left}
+.gps-landmark-copy{
+  min-height:122px;
+  padding:18px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:rgba(255,255,255,.025);
+}
+.gps-landmark-copy strong{color:var(--cream)}
+.gps-landmark-copy p,
+.gps-other-motifs,
+.gps-bridge-status{
+  color:var(--muted);
+  font-size:.87rem;
+  line-height:1.6;
+}
+.gps-other-motifs{
+  margin:18px 0 16px;
+  padding-top:15px;
+  border-top:1px solid var(--line);
+}
+.gps-other-motifs strong{color:var(--cream)}
+.gps-to-3d{margin-top:2px}
+
+.gps-linked-bridge{
+  width:auto;
+  padding:34px 38px 36px;
+  border-top:1px solid var(--line);
+  background:linear-gradient(135deg,rgba(116,215,182,.055),rgba(8,17,29,.95));
+}
+.gps-bridge-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin:18px 0 12px;
+}
+.gps-bridge-actions .secondary-action{margin:0}
+.gps-bridge-status{
+  margin:0;
+  padding:12px 14px;
+  border-left:3px solid var(--mint);
+  background:rgba(255,255,255,.025);
+}
+body[data-page-mode="journey"] #tertiarySplitShell.linked{
+  min-height:620px;
+}
+body[data-page-mode="journey"] #tertiaryMiniPanel:not([hidden]){
+  border-color:rgba(116,215,182,.45);
+}
+
+@media(max-width:760px){
+  .gps-secondary-landmarks,.gps-linked-bridge{padding:26px 22px 30px}
+  .gps-landmark-layout{grid-template-columns:1fr}
+}
