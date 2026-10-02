@@ -1209,6 +1209,13 @@ const SecondaryExplorer = (() => {
     followDefault(index){if(index>=0&&index<seq.length){selected=index;panel();render();}},
     followExternal(index,selectedState){if(index>=0&&index<seq.length){selected=index;if(selectedState===true)selectedResidues.add(index);else if(selectedState===false)selectedResidues.delete(index);panel();render();}},
     followPairExternal(a,b,selectedState){const key=keyOf(a,b);if(selectedState===true){selectedPairKeys.add(key);selectedPairKey=key;}else if(selectedState===false){selectedPairKeys.delete(key);if(selectedPairKey===key)selectedPairKey=[...selectedPairKeys].at(-1)||null;}selected=a;panel();render();},
+    highlightResidues(indices=[]){
+      const clean=[...new Set((Array.isArray(indices)?indices:[]).filter(i=>Number.isInteger(i)&&i>=0&&i<seq.length))];
+      selectedResidues=new Set(clean);selectedPairKeys.clear();selectedPairKey=null;
+      if(clean.length)selected=clean[0];
+      panel();render();return clean;
+    },
+    clearHighlights(){selectedResidues.clear();selectedPairKeys.clear();selectedPairKey=null;panel();render();},
     getContext(){return getContextSnapshot();}
   };
 })();
