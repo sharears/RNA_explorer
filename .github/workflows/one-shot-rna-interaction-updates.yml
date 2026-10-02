@@ -40,6 +40,10 @@ jobs:
       - name: Focused regression checks
         run: |
           npm install --no-save linkedom
+          mkdir -p dist
+          cp index.html *.js *.css dist/
+          cp -r data dist/data
+          cp -r assets dist/assets
           node tests/chemistry-editor.cjs
           node tests/secondary-v7.cjs
           node tests/chemistry.cjs
