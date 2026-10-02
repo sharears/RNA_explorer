@@ -2,6 +2,27 @@ const GuidedStructureTransitions = (() => {
   const state={secondaryReady:true,tertiaryReady:true,miniFeature:"glycosidic",yaw:-0.55,pitch:0.34,zoom:1,panX:0,panY:0,dragging:false,dragMode:"rotate",lastX:0,lastY:0,labelsOn:true,
     realPairKey:"gc",realPairModels:null,realLessonModels:null,realPairPromise:null};
 
+  const LEARNING_LANDMARKS={
+    stem:{
+      label:"Stem",
+      title:"A stem is a run of paired residues",
+      copy:"Several neighboring base pairs create a short double-stranded region. This example highlights the acceptor stem of the tRNA.",
+      indices:[0,1,2,3,4,5,6,65,66,67,68,69,70,71]
+    },
+    hairpin:{
+      label:"Hairpin loop",
+      title:"A hairpin turns the chain back on itself",
+      copy:"A stem can end in an unpaired loop. Here the anticodon loop is highlighted together with the short stem that supports it.",
+      indices:[26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42]
+    },
+    junction:{
+      label:"Junction / core",
+      title:"A junction connects structural arms",
+      copy:"In a folded RNA, several helical arms can meet through a compact connecting region. This highlights the central connector region of the tRNA cloverleaf.",
+      indices:[7,8,9,24,25,26,43,44,45,46,47,48]
+    }
+  };
+
   const PAIR_LESSONS={
     au:{
       title:"A–U Watson–Crick pair",
@@ -336,6 +357,17 @@ const GuidedStructureTransitions = (() => {
       '<div class="gps-transition-visual"><div class="gps-mini-toolbar"><span>Drag to rotate</span><button type="button" id="gpsMiniReset">Reset view</button></div><div class="gps-real-pair-tabs" id="gpsRealPairTabs" hidden><button type="button" class="active" data-gps-real-pair="gc">G–C</button><button type="button" data-gps-real-pair="au">A–U</button><button type="button" data-gps-real-pair="gu">G–U</button></div><svg id="gpsMini3D" viewBox="0 0 640 520" role="img" aria-label="Interactive 3D teaching model"></svg><div class="gps-element-legend" aria-label="Element colors"><span><i data-element="C"></i>Carbon</span><span><i data-element="O"></i>Oxygen</span><span><i data-element="N"></i>Nitrogen</span><span><i data-element="H"></i>Hydrogen</span><span><i data-element="P"></i>Phosphorus</span></div><p class="gps-mini-caption" id="gpsMiniCaption">Interactive teaching model</p></div></section>';
   }
 
+  function secondaryLandmarksMarkup(){
+    return '<section class="guided-inline-lesson gps-secondary-landmarks" id="gpsSecondaryLandmarks" aria-labelledby="gpsSecondaryLandmarksTitle">'+
+      '<div class="guided-inline-heading"><span class="fact-label">READ THE 2D MAP</span><h3 id="gpsSecondaryLandmarksTitle">Can you recognize the parts of a secondary structure?</h3>'+
+      '<p>Choose a feature and RNA Explorer will point out one example in this tRNA. The goal is recognition, not memorizing residue numbers.</p></div>'+
+      '<div class="gps-landmark-layout"><div class="gps-landmark-buttons">'+
+      Object.entries(LEARNING_LANDMARKS).map(([key,v])=>'<button type="button" data-gps-landmark="'+key+'">'+v.label+'</button>').join("")+
+      '</div><article class="gps-landmark-copy" id="gpsLandmarkCopy"><strong>Try one</strong><p>Start with Stem, then compare it with a loop and the central junction.</p></article></div>'+
+      '<p class="gps-other-motifs"><strong>Other common RNA motifs:</strong> bulges and internal loops interrupt otherwise paired regions. They are worth recognizing too, but this example tRNA does not provide a clean teaching example of every motif.</p>'+
+      '<button type="button" class="primary-action gps-to-3d" id="gpsGoToLinked3D">See one of these features in 3D →</button>'+
+      '</section>';
+  }
   function secondaryInlineMarkup(){
     return '<section class="guided-inline-lesson secondary-inline-lesson" id="guidedSecondaryLesson" aria-labelledby="guidedSecondaryLessonTitle">'+
       '<div class="guided-inline-heading"><span class="fact-label">BASE PAIRS IN THIS SECONDARY STRUCTURE</span><h3 id="guidedSecondaryLessonTitle">What do the connections between residues mean?</h3>'+
@@ -345,10 +377,24 @@ const GuidedStructureTransitions = (() => {
       '<div id="gpsPairText"></div><p class="guided-nonstandard-note"><strong>RNA can do more.</strong> Many non-Watson–Crick base pairs use different nucleobase edges and orientations; that deeper library can be added here later.</p></div>'+
       '<div class="gps-pair-stage" id="gpsPairStage"></div></div></section>';
   }
+  function highlightSecondaryLandmark(key){
+    const item=LEARNING_LANDMARKS[key]||LEARNING_LANDMARKS.stem;
+    document.querySelectorAll("[data-gps-landmark]").forEach(b=>b.classList.toggle("active",b.dataset.gpsLandmark===key));
+    if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.highlightResidues)SecondaryExplorer.highlightResidues(item.indices);
+    const copy=$("gpsLandmarkCopy");if(copy)copy.innerHTML='<strong>'+item.title+'</strong><p>'+item.copy+'</p>';
+  }
   function buildSecondaryTransition(){
-    const scene=$("scene-secondary");if(!scene||$("guidedSecondaryLesson")||!isJourney())return;
-    scene.insertAdjacentHTML("beforeend",secondaryInlineMarkup());
-    document.querySelectorAll("[data-gps-pair]").forEach(b=>b.addEventListener("click",()=>renderPair(b.dataset.gpsPair)));
+    const scene=$("scene-secondary");if(!scene||!isJourney())return;
+    if(!$("gpsSecondaryLandmarks"))scene.insertAdjacentHTML("beforeend",secondaryLandmarksMarkup());
+    if(!$("guidedSecondaryLesson"))scene.insertAdjacentHTML("beforeend",secondaryInlineMarkup());
+    document.querySelectorAll("[data-gps-landmark]").forEach(b=>{
+      if(b.dataset.ready)return;b.dataset.ready="true";b.addEventListener("click",()=>highlightSecondaryLandmark(b.dataset.gpsLandmark));
+    });
+    const to3d=$("gpsGoToLinked3D");
+    if(to3d&&!to3d.dataset.ready){to3d.dataset.ready="true";to3d.addEventListener("click",()=>{if(typeof showScene==="function")showScene(5);setTimeout(()=>showLinkedLandmark("stem"),220);});}
+    document.querySelectorAll("[data-gps-pair]").forEach(b=>{
+      if(b.dataset.ready)return;b.dataset.ready="true";b.addEventListener("click",()=>renderPair(b.dataset.gpsPair));
+    });
     renderPair("au");
   }
   const FOLD_LETTERS=["U","A","G","G","A","G","C","A","U","G","U","U","C","A","G","U"];
@@ -404,6 +450,29 @@ const GuidedStructureTransitions = (() => {
     if(text)text.innerHTML='<strong>'+lesson.title+'</strong><p>'+lesson.copy+'</p><ul>'+lesson.bonds.map(x=>'<li>'+x[0]+' ··· '+x[1]+'</li>').join("")+'</ul>';
   }
 
+  function linkedBridgeMarkup(){
+    return '<section class="guided-inline-lesson gps-linked-bridge" id="gpsLinkedBridge" aria-labelledby="gpsLinkedBridgeTitle">'+
+      '<div class="guided-inline-heading"><span class="fact-label">2D → 3D BRIDGE</span><h3 id="gpsLinkedBridgeTitle">Where does a secondary-structure feature go in the folded RNA?</h3>'+
+      '<p>Use the same residues in both views. Choose a familiar 2D feature below; the linked view will highlight it in the secondary map and in the experimental 3D structure.</p></div>'+
+      '<div class="gps-bridge-actions">'+Object.entries(LEARNING_LANDMARKS).map(([key,v])=>'<button type="button" data-gps-linked-landmark="'+key+'">'+v.label+'</button>').join("")+
+      '<button type="button" class="secondary-action" id="gpsClearLinkedLandmark">Clear</button></div>'+
+      '<p class="gps-bridge-status" id="gpsBridgeStatus">Start with a stem. After it appears, click individual residues in the 2D map to follow them in 3D.</p>'+
+      '</section>';
+  }
+  async function showLinkedLandmark(key){
+    const item=LEARNING_LANDMARKS[key]||LEARNING_LANDMARKS.stem;
+    document.querySelectorAll("[data-gps-linked-landmark]").forEach(b=>b.classList.toggle("active",b.dataset.gpsLinkedLandmark===key));
+    if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.highlightResidues)SecondaryExplorer.highlightResidues(item.indices);
+    const status=$("gpsBridgeStatus");if(status)status.textContent="Opening the linked 2D + 3D view for "+item.label.toLowerCase()+"…";
+    try{
+      if(typeof TertiaryExplorer!=="undefined"&&TertiaryExplorer.showLinkedRegion){
+        const result=await TertiaryExplorer.showLinkedRegion(item.indices,{focusView:true});
+        if(status)status.textContent=result.mappingEnabled
+          ?item.copy+" The same residues are highlighted in both views."
+          :"The feature is selected, but 2D/3D mapping is not available for the current structure.";
+      }
+    }catch(error){if(status)status.textContent="Could not open the linked example: "+String(error.message||error);}
+  }
   function buildTertiaryTransition(){
     const scene=$("scene-tertiary"),learning=$("tertiaryLearning");if(!scene||!learning||!isJourney())return;
     if(!learning.classList.contains("guided-inline-lesson")){
@@ -421,6 +490,20 @@ const GuidedStructureTransitions = (() => {
         '<div class="gps-element-legend" aria-label="Element colors"><span><i data-element="C"></i>Carbon</span><span><i data-element="O"></i>Oxygen</span><span><i data-element="N"></i>Nitrogen</span><span><i data-element="H"></i>Hydrogen</span><span><i data-element="P"></i>Phosphorus</span><span class="gps-hbond-key"><i></i>H-bond</span></div>'+
         '<p class="gps-mini-caption" id="gpsMiniCaption">Interactive stick model</p>';
       learning.insertBefore(mini,card);
+    }
+    if(!$("gpsLinkedBridge"))learning.insertAdjacentHTML("beforebegin",linkedBridgeMarkup());
+    document.querySelectorAll("[data-gps-linked-landmark]").forEach(b=>{
+      if(b.dataset.ready)return;b.dataset.ready="true";b.addEventListener("click",()=>showLinkedLandmark(b.dataset.gpsLinkedLandmark));
+    });
+    const clearLinked=$("gpsClearLinkedLandmark");
+    if(clearLinked&&!clearLinked.dataset.ready){
+      clearLinked.dataset.ready="true";
+      clearLinked.addEventListener("click",()=>{
+        document.querySelectorAll("[data-gps-linked-landmark]").forEach(b=>b.classList.remove("active"));
+        if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.clearHighlights)SecondaryExplorer.clearHighlights();
+        if(typeof TertiaryExplorer!=="undefined"&&TertiaryExplorer.clearLinkedRegion)TertiaryExplorer.clearLinkedRegion();
+        const status=$("gpsBridgeStatus");if(status)status.textContent="Selection cleared. Choose another feature or click a residue in the linked 2D map.";
+      });
     }
     document.querySelectorAll("[data-learning-feature]").forEach(b=>b.addEventListener("click",()=>{state.miniFeature=b.dataset.learningFeature;resetMiniView();renderMiniLesson();}));
     document.querySelectorAll("[data-gps-real-pair]").forEach(b=>b.addEventListener("click",()=>{state.realPairKey=b.dataset.gpsRealPair;resetMiniView("basepair");renderMiniLesson();}));
@@ -514,15 +597,50 @@ const GuidedStructureTransitions = (() => {
     }
   }
 
+  function buildPrimaryDirectionLesson(){
+    const scene=$("scene-primary"),copy=scene?.querySelector(".scene-copy");if(!scene||!copy||$("gpsPrimaryDirection"))return;
+    const box=document.createElement("section");box.id="gpsPrimaryDirection";box.className="gps-primary-check";
+    box.innerHTML='<span class="fact-label">QUICK CHECK</span><h3>Which direction is an RNA sequence written?</h3><p>Look at the enlarged backbone and choose the conventional direction.</p>'+
+      '<div><button type="button" data-gps-direction="53">5′ → 3′</button><button type="button" data-gps-direction="35">3′ → 5′</button></div><p id="gpsDirectionFeedback" role="status">Choose one.</p>';
+    const fact=copy.querySelector(".fact-panel");if(fact)copy.insertBefore(box,fact);else copy.append(box);
+    box.querySelectorAll("[data-gps-direction]").forEach(b=>b.addEventListener("click",()=>{
+      box.querySelectorAll("[data-gps-direction]").forEach(x=>x.classList.toggle("active",x===b));
+      const feedback=$("gpsDirectionFeedback");
+      if(feedback)feedback.textContent=b.dataset.gpsDirection==="53"
+        ?"Yes. RNA sequences are conventionally written and read from the 5′ end toward the 3′ end."
+        :"Not this one. The conventional sequence direction is 5′ → 3′.";
+    }));
+  }
+  function configureLearningControls(sceneName){
+    if(sceneName==="secondary"){
+      const scene=$("scene-secondary");if(!scene)return;scene.classList.add("learning-simplified");
+      let button=$("gpsSecondaryCustomize");
+      if(!button){
+        button=document.createElement("button");button.id="gpsSecondaryCustomize";button.type="button";button.className="secondary-action gps-customize-toggle";button.setAttribute("aria-expanded","false");button.textContent="Edit / customize structure";
+        const copy=scene.querySelector(".scene-copy"),inputs=scene.querySelector(".secondary-inputs");if(copy&&inputs)copy.insertBefore(button,inputs);
+        button.addEventListener("click",()=>{const open=scene.classList.toggle("learning-tools-open");button.setAttribute("aria-expanded",String(open));button.textContent=open?"Hide editing tools":"Edit / customize structure";});
+      }
+    }
+    if(sceneName==="tertiary"){
+      const scene=$("scene-tertiary");if(!scene)return;scene.classList.add("learning-simplified");
+      let button=$("gpsTertiaryCustomize");
+      if(!button){
+        button=document.createElement("button");button.id="gpsTertiaryCustomize";button.type="button";button.className="secondary-action gps-customize-toggle";button.setAttribute("aria-expanded","false");button.textContent="Open advanced 3D controls";
+        const controls=$("tertiaryControls"),copy=scene.querySelector(".scene-copy");if(copy&&controls)copy.insertBefore(button,controls);
+        button.addEventListener("click",()=>{const open=scene.classList.toggle("learning-tools-open");button.setAttribute("aria-expanded",String(open));button.textContent=open?"Hide advanced 3D controls":"Open advanced 3D controls";});
+      }
+    }
+  }
   function activateOverlay(){/* Same-page teaching: no interstitial overlay. */}
   function showSecondaryWorkspace(){state.secondaryReady=true;}
   function showTertiaryWorkspace(){state.tertiaryReady=true;if(typeof TertiaryExplorer!=="undefined")TertiaryExplorer.render();}
   function enter(sceneName){
     if(!isJourney())return;
-    if(sceneName==="secondary")buildSecondaryTransition();
-    if(sceneName==="tertiary"){buildTertiaryTransition();if(typeof TertiaryExplorer!=="undefined")TertiaryExplorer.render();}
+    if(sceneName==="primary")buildPrimaryDirectionLesson();
+    if(sceneName==="secondary"){buildSecondaryTransition();configureLearningControls("secondary");}
+    if(sceneName==="tertiary"){buildTertiaryTransition();configureLearningControls("tertiary");if(typeof TertiaryExplorer!=="undefined")TertiaryExplorer.render();}
   }
   function resetForJourney(){state.secondaryReady=true;state.tertiaryReady=true;}
-  function setup(){if(!isJourney())return;buildSecondaryTransition();buildTertiaryTransition();}
-  return {setup,enter,showSecondaryWorkspace,showTertiaryWorkspace,resetForJourney,getState:()=>({...state})};
+  function setup(){if(!isJourney())return;buildPrimaryDirectionLesson();buildSecondaryTransition();buildTertiaryTransition();}
+  return {setup,enter,showSecondaryWorkspace,showTertiaryWorkspace,resetForJourney,showLinkedLandmark,getState:()=>({...state})};
 })();
