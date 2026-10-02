@@ -9,9 +9,9 @@ const MoleculeEditor = (() => {
     C:"4-aminopyrimidin-2(1H)-one",
     U:"1H-pyrimidine-2,4-dione",
     T:"5-methyl-1H-pyrimidine-2,4-dione",
-    RIBOSE:"(2R,3S,4R)-5-(hydroxymethyl)oxolane-2,3,4-triol"
+    RIBOSE:null
   };
-  const RING_NAMES={five:"cyclopentane",six:"cyclohexane",aromatic6:"benzene",fused56:"fused 5+6 carbon ring scaffold"};
+  const RING_NAMES={five:"cyclopentane",six:"cyclohexane",aromatic6:"benzene",fused56:null};
 
   const BASES={
     A:{
@@ -426,7 +426,7 @@ const MoleculeEditor = (() => {
   function ringInsertCenter(){
     if(!graph.atoms.length)return {x:410,y:235};
     const maxX=Math.max(...graph.atoms.map(a=>a.x)),minX=Math.min(...graph.atoms.map(a=>a.x));
-    if(maxX<650)return {x:Math.min(720,maxX+105),y:235};
+    if(maxX<650)return {x:Math.min(650,maxX+105),y:235};
     if(minX>170)return {x:Math.max(100,minX-105),y:235};
     return {x:410,y:235};
   }
@@ -470,7 +470,7 @@ const MoleculeEditor = (() => {
     const atomEl=e.target.closest?.("[data-atom-id]"),bondEl=e.target.closest?.("[data-bond-id]"),hEl=e.target.closest?.("[data-hbond-id]");
     if(tool==="delete"){
       if(atomEl)deleteAtom(atomEl.dataset.atomId);
-      else if(bondEl)graph.bonds=graph.bonds.filter(b=>b.id!==bondEl.dataset.bondId);
+      else if(bondEl){graph.bonds=graph.bonds.filter(b=>b.id!==bondEl.dataset.bondId);invalidateIupac();}
       else if(hEl)graph.hbonds=graph.hbonds.filter(h=>h.id!==hEl.dataset.hbondId);
       render();validate();return;
     }
@@ -590,7 +590,7 @@ const MoleculeEditor = (() => {
     if(explicit)return explicit+atomCharge(a);
     if(a.element!=="C")return a.element+atomCharge(a);
     const degree=graph.bonds.reduce((n,b)=>n+(b.a===a.id||b.b===a.id?1:0),0);
-    return degree===0||selectedAtoms.has(a.id)||pendingAtom===a.id?"C"+atomCharge(a):"";
+    return degree===0?"C"+atomCharge(a):"";
   }
   function appendPairRMarkers(layer){
     if(mode!=="pair"||showAtomCircles)return;
