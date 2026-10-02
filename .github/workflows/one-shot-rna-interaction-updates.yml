@@ -19,6 +19,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Align patch script with current Secondary source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/apply_rna_interaction_updates.py')
+          s=p.read_text()
+          s=s.replace("'circleColor:\"#c5d6e2\",circleWidth:1,letterColor:\"#fff\",letterSize:16,'", "'circleColor:\"#c5d6e2\",\\n    circleWidth:1, letterColor:\"#ffffff\", letterSize:16, font:\"monospace\",'")
+          s=s.replace("'circleColor:\"#c5d6e2\",circleWidth:1,circleVisible:true,letterColor:\"#fff\",letterSize:16,'", "'circleColor:\"#c5d6e2\",\\n    circleWidth:1, circleVisible:true, letterColor:\"#ffffff\", letterSize:16, font:\"monospace\",'")
+          p.write_text(s)
+          PY
       - name: Apply six requested updates
         run: python3 .github/apply_rna_interaction_updates.py
       - name: Syntax checks
