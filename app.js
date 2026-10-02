@@ -314,7 +314,7 @@ function renderWorkspaceLauncher(page){
 
   if(page==="drawing"){
     title.textContent="Molecular Drawing";
-    description.textContent="Start from a familiar chemical template or open a completely blank canvas.";
+    description.textContent="New to molecular drawing? Load a template first and explore it. When you are ready, start from a blank canvas.";
     actions.innerHTML=`
       <article class="workspace-launch-card">
         <span class="workspace-launch-number">01</span>
@@ -355,7 +355,7 @@ function renderWorkspaceLauncher(page){
 
   if(page==="secondary"){
     title.textContent="Secondary Structure";
-    description.textContent="Open the example tRNA to explore immediately, or begin with an empty 2D workspace for your own RNA.";
+    description.textContent="New to RNA secondary structure? Load the example first and explore it. When you are ready, open an empty workspace for your own RNA.";
     actions.innerHTML=`
       <a class="workspace-launch-card" href="?page=secondary&start=example">
         <span class="workspace-launch-number">01</span><h2>Load example</h2>
@@ -371,7 +371,7 @@ function renderWorkspaceLauncher(page){
   }
 
   title.textContent="Tertiary Structure";
-  description.textContent="Open the 1EHZ example or begin from an empty 3D workspace and load your own coordinates.";
+  description.textContent="New to 3D RNA? Open the 1EHZ example first and rotate, zoom, and inspect it. When you are ready, load your own coordinates.";
   actions.innerHTML=`
     <a class="workspace-launch-card" href="?page=tertiary&start=example">
       <span class="workspace-launch-number">01</span><h2>Load example</h2>
