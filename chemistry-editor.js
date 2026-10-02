@@ -175,7 +175,7 @@ const MoleculeEditor = (() => {
   }
 
   let dialog=null,svg=null,status=null,title=null,mode="base",base="A",leftBase="G",rightBase="C";
-  let graph={atoms:[],bonds:[],hbonds:[]},tool="select",element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,lasso=null,onSave=null;
+  let graph={atoms:[],bonds:[],hbonds:[]},tool="select",element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,lasso=null,transformDrag=null,pendingFuseBond=null,onSave=null;
   let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false,showAtomLabels=true,showAtomNumbers=false;
   let textDefaults={...DEFAULT_TEXT_STYLE};
 
@@ -193,7 +193,7 @@ const MoleculeEditor = (() => {
           <button type="button" data-chem-tool="lasso">Lasso select</button>
           <button type="button" id="chemSelectAll">Select all</button>
           <button type="button" data-chem-tool="atom">Add atom</button>
-          <button type="button" data-chem-tool="bond">Add bond</button>
+          <button type="button" data-chem-tool="bond">Add bond</button><button type="button" data-chem-tool="fuse">Fuse rings</button>
           <button type="button" data-chem-tool="hbond">H-bond</button>
           <button type="button" data-chem-tool="delete">Delete</button>
           <label>Ring<select id="chemRingTemplate"><option value="five">5-membered</option><option value="six">6-membered</option><option value="aromatic6">Aromatic 6-membered</option><option value="fused56">Fused 5+6</option></select></label>
@@ -254,7 +254,7 @@ const MoleculeEditor = (() => {
     svg=dialog.querySelector("#chemEditorSvg");status=dialog.querySelector("#chemEditorStatus");title=dialog.querySelector("#chemEditorTitle");
     dialog.querySelector("#chemEditorClose").addEventListener("click",()=>dialog.close());
     dialog.querySelectorAll("[data-chem-tool]").forEach(b=>b.addEventListener("click",()=>{
-      tool=b.dataset.chemTool;pendingAtom=null;selectionBox=null;lasso=null;
+      tool=b.dataset.chemTool;pendingAtom=null;pendingFuseBond=null;transformDrag=null;selectionBox=null;lasso=null;
       dialog.querySelectorAll("[data-chem-tool]").forEach(x=>x.classList.toggle("active",x===b));render();
     }));
     dialog.querySelector("#chemSelectAll").addEventListener("click",()=>{selectAtoms(graph.atoms.map(a=>a.id));render();});
@@ -334,7 +334,7 @@ const MoleculeEditor = (() => {
 
   function renumber(){
     atomSerial=graph.atoms.length+1;bondSerial=graph.bonds.length+1;hbondSerial=graph.hbonds.length+1;
-    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;drag=null;selectionBox=null;lasso=null;
+    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionBox=null;lasso=null;
   }
   function selectAtoms(ids,activeId=null){
     selectedAtoms=new Set(ids.filter(id=>atomById(id)));
@@ -419,7 +419,7 @@ const MoleculeEditor = (() => {
       return {points:[[-52,-30],[0,-60],[52,-30],[52,30],[0,60],[-52,30],[105,46],[132,0],[105,-46]],
         bonds:[[0,1,1],[1,2,1],[2,3,1],[3,4,1],[4,5,1],[5,0,1],[3,6,1],[6,7,1],[7,8,1],[8,2,1]],iupac:RING_NAMES.fused56};
     }
-    const n=kind==="five"?5:6,r=58,points=Array.from({length:n},(_,i)=>{const a=-Math.PI/2+i*Math.PI*2/n;return [Math.cos(a)*r,Math.sin(a)*r];});
+    const n=kind==="five"?5:6,bondLength=68,r=bondLength/(2*Math.sin(Math.PI/n)),points=Array.from({length:n},(_,i)=>{const a=-Math.PI/2+i*Math.PI*2/n;return [Math.cos(a)*r,Math.sin(a)*r];});
     const bonds=Array.from({length:n},(_,i)=>[i,(i+1)%n,kind==="aromatic6"?(i%2===0?2:1):1]);
     return {points,bonds,iupac:RING_NAMES[kind]||null};
   }
@@ -446,6 +446,82 @@ const MoleculeEditor = (() => {
     return inside;
   }
 
+  function selectedBounds(){
+    const atoms=[...selectedAtoms].map(atomById).filter(Boolean);if(!atoms.length)return null;
+    return {minX:Math.min(...atoms.map(a=>a.x)),maxX:Math.max(...atoms.map(a=>a.x)),minY:Math.min(...atoms.map(a=>a.y)),maxY:Math.max(...atoms.map(a=>a.y))};
+  }
+  function appendTransformOverlay(){
+    if(tool!=="select"||selectedAtoms.size<2||selectionBox||lasso||!svg)return;
+    const b=selectedBounds();if(!b)return;const pad=22,x=b.minX-pad,y=b.minY-pad,w=Math.max(24,b.maxX-b.minX+pad*2),h=Math.max(24,b.maxY-b.minY+pad*2),cx=x+w/2;
+    const layer=document.createElementNS(NS,"g");layer.setAttribute("class","chem-transform-overlay");layer.setAttribute("data-export-remove","");
+    const rect=document.createElementNS(NS,"rect");rect.setAttribute("x",x);rect.setAttribute("y",y);rect.setAttribute("width",w);rect.setAttribute("height",h);rect.setAttribute("rx","4");rect.style.fill="none";rect.style.stroke="#f2c66d";rect.style.strokeWidth="1.5";rect.style.strokeDasharray="6 4";rect.style.pointerEvents="none";layer.append(rect);
+    const stem=document.createElementNS(NS,"line");stem.setAttribute("x1",cx);stem.setAttribute("y1",y);stem.setAttribute("x2",cx);stem.setAttribute("y2",y-30);stem.style.stroke="#f2c66d";stem.style.strokeWidth="1.5";stem.style.pointerEvents="none";layer.append(stem);
+    [["nw",x,y],["ne",x+w,y],["se",x+w,y+h],["sw",x,y+h]].forEach(([name,hx,hy])=>{const c=document.createElementNS(NS,"circle");c.dataset.transformHandle=name;c.setAttribute("cx",hx);c.setAttribute("cy",hy);c.setAttribute("r","7");c.style.fill="#07111c";c.style.stroke="#f2c66d";c.style.strokeWidth="2";c.style.cursor=name+"-resize";layer.append(c);});
+    const rotate=document.createElementNS(NS,"circle");rotate.dataset.transformHandle="rotate";rotate.setAttribute("cx",cx);rotate.setAttribute("cy",y-30);rotate.setAttribute("r","8");rotate.style.fill="#f2c66d";rotate.style.stroke="#07111c";rotate.style.strokeWidth="2";rotate.style.cursor="grab";layer.append(rotate);svg.append(layer);
+  }
+  function beginSelectionTransform(handle,pointerId,start){
+    const bounds=selectedBounds();if(!bounds)return false;
+    const center={x:(bounds.minX+bounds.maxX)/2,y:(bounds.minY+bounds.maxY)/2},original=[...selectedAtoms].map(id=>{const a=atomById(id);return a?{id,x:a.x,y:a.y}:null;}).filter(Boolean);
+    const dx=start.x-center.x,dy=start.y-center.y;
+    transformDrag={pointer:pointerId,kind:handle==="rotate"?"rotate":"scale",center,original,startAngle:Math.atan2(dy,dx),startRadius:Math.max(8,Math.hypot(dx,dy))};return true;
+  }
+  function moveSelectionTransform(current){
+    if(!transformDrag)return;
+    const t=transformDrag,dx=current.x-t.center.x,dy=current.y-t.center.y;
+    if(t.kind==="rotate"){
+      const delta=Math.atan2(dy,dx)-t.startAngle,c=Math.cos(delta),s=Math.sin(delta);
+      t.original.forEach(o=>{const a=atomById(o.id);if(!a)return;const ox=o.x-t.center.x,oy=o.y-t.center.y;a.x=t.center.x+ox*c-oy*s;a.y=t.center.y+ox*s+oy*c;});
+    }else{
+      const scale=clamp(Math.hypot(dx,dy)/t.startRadius,.18,5);
+      t.original.forEach(o=>{const a=atomById(o.id);if(a){a.x=t.center.x+(o.x-t.center.x)*scale;a.y=t.center.y+(o.y-t.center.y)*scale;}});
+    }
+  }
+  function attachmentNeighbors(id){
+    return graph.bonds.filter(b=>b.a===id||b.b===id).map(b=>({bond:b,atom:atomById(b.a===id?b.b:b.a)})).filter(x=>x.atom);
+  }
+  function angularDistance(a,b){let d=Math.abs(a-b)%(Math.PI*2);return Math.min(d,Math.PI*2-d);}
+  function smartAttachmentPosition(originId,pointer){
+    const origin=atomById(originId);if(!origin)return pointer||{x:410,y:235};
+    const neighbors=attachmentNeighbors(originId),lengths=neighbors.map(({atom})=>Math.hypot(atom.x-origin.x,atom.y-origin.y)).filter(v=>v>20&&v<160).sort((a,b)=>a-b);
+    const length=lengths.length?lengths[Math.floor(lengths.length/2)]:68,targetAngle=pointer?Math.atan2(pointer.y-origin.y,pointer.x-origin.x):0;let angle=targetAngle;
+    if(neighbors.length===1){
+      const n=neighbors[0],baseAngle=Math.atan2(n.atom.y-origin.y,n.atom.x-origin.x);
+      if(Number(n.bond.order||1)>1)angle=baseAngle+Math.PI;
+      else{const options=[baseAngle+Math.PI*2/3,baseAngle-Math.PI*2/3];angle=pointer?options.sort((a,b)=>angularDistance(a,targetAngle)-angularDistance(b,targetAngle))[0]:options[0];}
+    }else if(neighbors.length>=2){
+      const angles=neighbors.map(({atom})=>{let a=Math.atan2(atom.y-origin.y,atom.x-origin.x);if(a<0)a+=Math.PI*2;return a;}).sort((a,b)=>a-b);let bestStart=angles[0],bestGap=-1;
+      for(let i=0;i<angles.length;i++){const start=angles[i],end=i===angles.length-1?angles[0]+Math.PI*2:angles[i+1],gap=end-start;if(gap>bestGap){bestGap=gap;bestStart=start;}}
+      angle=bestStart+bestGap/2;
+    }
+    return {x:clamp(origin.x+Math.cos(angle)*length,22,798),y:clamp(origin.y+Math.sin(angle)*length,22,448)};
+  }
+  function componentCentroid(ids){
+    const atoms=[...ids].map(atomById).filter(Boolean);if(!atoms.length)return {x:0,y:0};return {x:atoms.reduce((s,a)=>s+a.x,0)/atoms.length,y:atoms.reduce((s,a)=>s+a.y,0)/atoms.length};
+  }
+  function sideOfBond(p,a,b){return (b.x-a.x)*(p.y-a.y)-(b.y-a.y)*(p.x-a.x);}
+  function fuseBonds(firstId,secondId){
+    const first=graph.bonds.find(b=>b.id===firstId),second=graph.bonds.find(b=>b.id===secondId);if(!first||!second||first.id===second?.id){status.textContent="Choose two different ring bonds to fuse.";return false;}
+    const fixedIds=new Set(covalentComponent(first.a)),movingIds=new Set(covalentComponent(second.a));
+    if([...movingIds].some(id=>fixedIds.has(id))){status.textContent="Those bonds are already in the same covalent structure. Choose one bond from each separate ring.";return false;}
+    const fA=atomById(first.a),fB=atomById(first.b),sA=atomById(second.a),sB=atomById(second.b);if(!fA||!fB||!sA||!sB)return false;
+    const targetLen=Math.hypot(fB.x-fA.x,fB.y-fA.y),sourceLen=Math.hypot(sB.x-sA.x,sB.y-sA.y);if(targetLen<1||sourceLen<1)return false;
+    const fixedCenter=componentCentroid(fixedIds),movingCenter=componentCentroid(movingIds),fixedSide=sideOfBond(fixedCenter,fA,fB);
+    const candidate=reverse=>{
+      const src1=reverse?sB:sA,src2=reverse?sA:sB,sourceAngle=Math.atan2(src2.y-src1.y,src2.x-src1.x),targetAngle=Math.atan2(fB.y-fA.y,fB.x-fA.x),theta=targetAngle-sourceAngle,scale=targetLen/sourceLen,c=Math.cos(theta),s=Math.sin(theta);
+      const transform=p=>{const x=(p.x-src1.x)*scale,y=(p.y-src1.y)*scale;return {x:fA.x+x*c-y*s,y:fA.y+x*s+y*c};};
+      const movedCenter=transform(movingCenter),movingSide=sideOfBond(movedCenter,fA,fB),opposite=Math.abs(fixedSide)<1||fixedSide*movingSide<0;
+      return {reverse,transform,score:(opposite?100000:0)+Math.abs(movingSide)};
+    };
+    const best=[candidate(false),candidate(true)].sort((a,b)=>b.score-a.score)[0];
+    movingIds.forEach(id=>{const a=atomById(id);if(a){const p=best.transform(a);a.x=p.x;a.y=p.y;}});
+    const endpointMap=new Map(best.reverse?[[second.b,first.a],[second.a,first.b]]:[[second.a,first.a],[second.b,first.b]]),removed=new Set([second.a,second.b]);
+    graph.atoms=graph.atoms.filter(a=>!removed.has(a.id));
+    const seen=new Set(),newBonds=[];
+    graph.bonds.forEach(b=>{if(b.id===second.id)return;const a=endpointMap.get(b.a)||b.a,c=endpointMap.get(b.b)||b.b;if(a===c)return;const key=[a,c].sort().join("|");if(seen.has(key))return;seen.add(key);newBonds.push({...b,a,b:c});});graph.bonds=newBonds;
+    graph.hbonds=graph.hbonds.map(h=>({...h,a:endpointMap.get(h.a)||h.a,b:endpointMap.get(h.b)||h.b})).filter(h=>h.a!==h.b&&atomById(h.a)&&atomById(h.b));
+    const ids=[...fixedIds,...movingIds].map(id=>endpointMap.get(id)||id).filter(id=>atomById(id));selectAtoms([...new Set(ids)],first.a);pendingFuseBond=null;invalidateIupac();render();validate();status.textContent="Rings fused: the selected edges now share one pair of atoms and one bond.";return true;
+  }
+
   function loadCurrent(){
     graph=mode==="base"?graphFromBase(base):mode==="pair"?mergePair(leftBase,rightBase):{atoms:[],bonds:[],hbonds:[],iupac:null};
     renumber();render();validate();
@@ -467,6 +543,8 @@ const MoleculeEditor = (() => {
       const p=point(e);lasso={pointer:e.pointerId,points:[p],additive:e.shiftKey};selectionBox=null;
       svg.setPointerCapture?.(e.pointerId);render();return;
     }
+    const transformEl=e.target.closest?.("[data-transform-handle]");
+    if(tool==="select"&&transformEl&&selectedAtoms.size>=2){const p=point(e);if(beginSelectionTransform(transformEl.dataset.transformHandle,e.pointerId,p)){svg.setPointerCapture?.(e.pointerId);render();}return;}
     const atomEl=e.target.closest?.("[data-atom-id]"),bondEl=e.target.closest?.("[data-bond-id]"),hEl=e.target.closest?.("[data-hbond-id]");
     if(tool==="delete"){
       if(atomEl)deleteAtom(atomEl.dataset.atomId);
@@ -478,6 +556,14 @@ const MoleculeEditor = (() => {
       const p=point(e),id="X"+atomSerial++;
       graph.atoms.push({id,element,x:p.x,y:p.y,charge:0,label:element,textStyle:{...textDefaults}});
       invalidateIupac();selectAtoms([id],id);render();validate();return;
+    }
+    if(tool==="bond"&&pendingAtom&&!atomEl&&!bondEl&&!hEl){
+      const p=smartAttachmentPosition(pendingAtom,point(e)),id="X"+atomSerial++;
+      graph.atoms.push({id,element,x:p.x,y:p.y,charge:0,label:element,textStyle:{...textDefaults}});
+      graph.bonds.push({id:"b"+bondSerial++,a:pendingAtom,b:id,order:bondOrder});pendingAtom=null;invalidateIupac();selectAtoms([id],id);render();validate();status.textContent="New atom placed at a geometry-aware bond angle. Drag it if you want a different arrangement.";return;
+    }
+    if(tool==="fuse"&&bondEl){
+      const id=bondEl.dataset.bondId;if(!pendingFuseBond){pendingFuseBond=id;status.textContent="First fusion edge selected. Now click one bond on the other ring.";render();}else if(id===pendingFuseBond){pendingFuseBond=null;status.textContent="Fusion selection cleared.";render();}else fuseBonds(pendingFuseBond,id);return;
     }
     if(atomEl){
       const id=atomEl.dataset.atomId;
@@ -515,6 +601,7 @@ const MoleculeEditor = (() => {
     }
   }
   function canvasPointerMove(e){
+    if(transformDrag&&e.pointerId===transformDrag.pointer){moveSelectionTransform(point(e));render();return;}
     if(lasso&&e.pointerId===lasso.pointer){
       const p=point(e),last=lasso.points.at(-1);if(!last||Math.hypot(p.x-last.x,p.y-last.y)>3){lasso.points.push(p);render();}return;
     }
@@ -528,6 +615,7 @@ const MoleculeEditor = (() => {
     if(selectionBox&&e.pointerId===selectionBox.pointer){selectionBox.current=point(e);render();}
   }
   function canvasPointerUp(e){
+    if(transformDrag&&e.pointerId===transformDrag.pointer){transformDrag=null;if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);invalidateIupac();render();validate();return;}
     if(lasso&&e.pointerId===lasso.pointer){
       const current=lasso,poly=current.points;
       if(!current.additive)selectedAtoms.clear();
@@ -607,11 +695,11 @@ const MoleculeEditor = (() => {
     const bondLayer=document.createElementNS(NS,"g");bondLayer.setAttribute("class","chem-editor-bonds");
     graph.bonds.forEach(b=>{
       const a=atomById(b.a),c=atomById(b.b);if(!a||!c)return;
-      const g=document.createElementNS(NS,"g");g.dataset.bondId=b.id;g.setAttribute("class","chem-editor-bond");
+      const g=document.createElementNS(NS,"g");g.dataset.bondId=b.id;g.setAttribute("class","chem-editor-bond"+(pendingFuseBond===b.id?" pending-fuse":""));
       bondSegments(a,c,b.order).forEach(segment=>{
         const line=document.createElementNS(NS,"line");
         Object.entries(segment).forEach(([key,value])=>line.setAttribute(key,String(value)));
-        g.append(line);
+        if(pendingFuseBond===b.id){line.style.stroke="#f2c66d";line.style.strokeWidth="4";}g.append(line);
       });
       bondLayer.append(g);
     });
@@ -633,6 +721,7 @@ const MoleculeEditor = (() => {
     const rLayer=document.createElementNS(NS,"g");rLayer.setAttribute("class","chem-editor-r-markers");appendPairRMarkers(rLayer);
     rLayer.querySelectorAll("text").forEach(t=>setSvgTextStyle(t,textDefaults,.88));
     svg.append(bondLayer,hLayer,rLayer,atomLayer);
+    appendTransformOverlay();
     if(selectionBox){
       const x=Math.min(selectionBox.start.x,selectionBox.current.x),y=Math.min(selectionBox.start.y,selectionBox.current.y);
       const rect=document.createElementNS(NS,"rect");rect.setAttribute("class","chem-selection-box");rect.setAttribute("x",x);rect.setAttribute("y",y);
@@ -670,7 +759,7 @@ const MoleculeEditor = (() => {
       const a=atomById(h.a),b=atomById(h.b);
       if(a&&b&&!["N","O","S"].includes(a.element)&&!["N","O","S"].includes(b.element))warnings.push("An H-bond does not involve an N/O/S atom");
     });
-    status.textContent=warnings.length?warnings.join(" · "):"Ready. Select / move supports box selection; Lasso select lets you draw around atoms. Shift adds to a selection. Double-click an atom to select its whole covalent structure.";
+    status.textContent=warnings.length?warnings.join(" · "):"Ready. Select / move supports box selection; lasso selects freeform groups. Multi-atom selections get resize and rotate handles. Add bond can place a new atom at a geometry-aware angle; Fuse rings merges two selected ring edges.";
     status.classList.toggle("warning",warnings.length>0);
     return warnings;
   }

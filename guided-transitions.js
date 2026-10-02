@@ -73,9 +73,9 @@ const GuidedStructureTransitions = (() => {
       highlight:["O4′","C1′","C2′","C3′","C4′"]
     },
     backbone:{
-      title:"Backbone torsions α–ζ",
-      definition:"Six torsion angles describe rotations along the phosphodiester backbone: α, β, γ, δ, ε and ζ.",
-      notice:"The complete nucleotide stays visible while four atoms defining one backbone torsion are emphasized. In the full RNA viewer you can choose α, β, γ, δ, ε or ζ individually.",
+      title:"RNA torsion angles α–ζ and χ",
+      definition:"Six backbone torsions—α, β, γ, δ, ε and ζ—plus the glycosidic torsion χ describe local RNA geometry.",
+      notice:"The local nucleotide and backbone stay visible while labels mark the central bond associated with α, β, γ, δ, ε, ζ and χ. χ is the glycosidic torsion, not a phosphodiester-backbone torsion.",
       points:[
         {id:"O3′(i−1)",x:-2.1,y:-.4,z:.25,c:"#87a9cc"},{id:"P",x:-.8,y:.35,z:-.3,c:"#f2c66d"},
         {id:"O5′",x:.35,y:-.25,z:.4,c:"#ffffff"},{id:"C5′",x:1.5,y:.45,z:-.35,c:"#ffffff"},
@@ -234,7 +234,13 @@ const GuidedStructureTransitions = (() => {
     return {
       glycosidic:normalizeRealNucleotides(allAtoms,[["G",1,"G1"]],[["G1","O4'"],["G1","C1'"],["G1","N9"],["G1","C4"]],[["G1","C1'","G1","N9"]]),
       pucker:normalizeRealNucleotides(allAtoms,[["G",1,"G1"]],SUGAR_RING_NAMES.map(name=>["G1",name])),
-      backbone:normalizeRealNucleotides(allAtoms,[["C",2,"C2"]],[["C2","P"],["C2","O5'"],["C2","C5'"],["C2","C4'"]],[["C2","O5'","C2","C5'"]]),
+      backbone:(()=>{
+        const m=normalizeRealNucleotides(allAtoms,[["G",1,"G1"],["C",2,"C2"],["G",3,"G3"]],[["G1","O3'"],["C2","P"],["C2","O5'"],["C2","C5'"],["C2","C4'"],["C2","C3'"],["C2","O3'"],["G3","P"],["C2","C1'"],["C2","N1"]]);
+        m.torsionLabels=[
+          {symbol:"α",a:"C2:P",b:"C2:O5'"},{symbol:"β",a:"C2:O5'",b:"C2:C5'"},{symbol:"γ",a:"C2:C5'",b:"C2:C4'"},
+          {symbol:"δ",a:"C2:C4'",b:"C2:C3'"},{symbol:"ε",a:"C2:C3'",b:"C2:O3'"},{symbol:"ζ",a:"C2:O3'",b:"G3:P"},{symbol:"χ",a:"C2:C1'",b:"C2:N1"}
+        ];return m;
+      })(),
       stacking:normalizeRealNucleotides(allAtoms,[["G",1,"G1"],["C",2,"C2"]],[...ring("G","G1"),...ring("C","C2")])
     };
   }
@@ -484,7 +490,7 @@ const GuidedStructureTransitions = (() => {
       if(show)show.textContent="Show me in the 3D structure";
       const card=learning.querySelector(".tertiary-learning-card");
       const mini=document.createElement("div");mini.className="gps-inline-mini-shell";mini.id="gpsInlineMiniShell";
-      mini.innerHTML='<div class="gps-mini-toolbar inline"><span>Left drag: rotate · Right/Ctrl drag: pan · Wheel: zoom · Double-click: reset</span><div><button type="button" id="gpsLabelsToggle">Labels: on</button><button type="button" id="gpsMiniReset">Reset / center</button></div></div>'+
+      mini.innerHTML='<div class="gps-mini-toolbar inline"><span>Mouse/one finger: rotate · Right/Ctrl drag: pan · Wheel or pinch: zoom · Double-click: reset</span><div><button type="button" id="gpsMiniZoomOut" aria-label="Zoom out">−</button><button type="button" id="gpsMiniZoomIn" aria-label="Zoom in">+</button><button type="button" id="gpsLabelsToggle">Labels: on</button><button type="button" id="gpsMiniReset">Reset / center</button></div></div>'+
         '<div class="gps-real-pair-tabs" id="gpsRealPairTabs" hidden><button type="button" class="active" data-gps-real-pair="gc">G–C</button><button type="button" data-gps-real-pair="au">A–U</button><button type="button" data-gps-real-pair="gu">G–U</button></div>'+
         '<svg id="gpsMini3D" viewBox="0 0 640 520" role="img" aria-label="Interactive molecular teaching model"></svg>'+
         '<div class="gps-element-legend" aria-label="Element colors"><span><i data-element="C"></i>Carbon</span><span><i data-element="O"></i>Oxygen</span><span><i data-element="N"></i>Nitrogen</span><span><i data-element="H"></i>Hydrogen</span><span><i data-element="P"></i>Phosphorus</span><span class="gps-hbond-key"><i></i>H-bond</span></div>'+
@@ -508,22 +514,29 @@ const GuidedStructureTransitions = (() => {
     document.querySelectorAll("[data-learning-feature]").forEach(b=>b.addEventListener("click",()=>{state.miniFeature=b.dataset.learningFeature;resetMiniView();renderMiniLesson();}));
     document.querySelectorAll("[data-gps-real-pair]").forEach(b=>b.addEventListener("click",()=>{state.realPairKey=b.dataset.gpsRealPair;resetMiniView("basepair");renderMiniLesson();}));
     $("gpsMiniReset")?.addEventListener("click",()=>{resetMiniView();renderMiniModel();});
+    $("gpsMiniZoomOut")?.addEventListener("click",()=>{state.zoom=Math.max(.42,state.zoom*.82);renderMiniModel();});
+    $("gpsMiniZoomIn")?.addEventListener("click",()=>{state.zoom=Math.min(3.2,state.zoom*1.22);renderMiniModel();});
     $("gpsLabelsToggle")?.addEventListener("click",()=>{state.labelsOn=!state.labelsOn;$("gpsLabelsToggle").textContent="Labels: "+(state.labelsOn?"on":"off");renderMiniModel();});
     const svg=$("gpsMini3D");
     if(svg&&!svg.dataset.interactionsReady){
-      svg.dataset.interactionsReady="true";
+      svg.dataset.interactionsReady="true";svg.style.touchAction="none";
+      const pointers=new Map();let pinch=null;
+      const clampZoom=z=>Math.max(.42,Math.min(3.2,z));
+      const pointerCenter=()=>{const a=[...pointers.values()];return a.length<2?null:{x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2,d:Math.hypot(a[1].x-a[0].x,a[1].y-a[0].y)};};
       svg.addEventListener("contextmenu",e=>e.preventDefault());
-      svg.addEventListener("wheel",e=>{e.preventDefault();state.zoom=Math.max(.42,Math.min(3.2,state.zoom*(e.deltaY<0?1.1:.91)));renderMiniModel();},{passive:false});
-      svg.addEventListener("dblclick",e=>{e.preventDefault();resetMiniView();renderMiniModel();});
+      svg.addEventListener("wheel",e=>{e.preventDefault();state.zoom=clampZoom(state.zoom*(e.deltaY<0?1.1:.91));renderMiniModel();},{passive:false});
+      svg.addEventListener("dblclick",e=>{e.preventDefault();resetMiniView();pointers.clear();pinch=null;renderMiniModel();});
       svg.addEventListener("pointerdown",e=>{
-        if(![0,1,2].includes(e.button))return;
-        e.preventDefault();state.dragging=true;state.dragMode=(e.button===2||e.ctrlKey||e.metaKey||e.button===1)?"pan":"rotate";state.lastX=e.clientX;state.lastY=e.clientY;svg.setPointerCapture(e.pointerId);
+        if(e.pointerType==="mouse"&&![0,1,2].includes(e.button))return;e.preventDefault();pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});svg.setPointerCapture?.(e.pointerId);
+        if(pointers.size>=2){const c=pointerCenter();pinch={distance:Math.max(1,c.d),zoom:state.zoom,x:c.x,y:c.y,panX:state.panX,panY:state.panY};state.dragMode="pinch";}
+        else{state.dragging=true;state.dragMode=(e.pointerType==="mouse"&&(e.button===2||e.ctrlKey||e.metaKey||e.button===1))?"pan":"rotate";state.lastX=e.clientX;state.lastY=e.clientY;}
       });
-      svg.addEventListener("pointermove",e=>{if(!state.dragging)return;const dx=e.clientX-state.lastX,dy=e.clientY-state.lastY;
-        if(state.dragMode==="pan"){state.panX+=dx;state.panY+=dy;}else{state.yaw+=dx*.0085;state.pitch=Math.max(-1.48,Math.min(1.48,state.pitch+dy*.0085));}
-        state.lastX=e.clientX;state.lastY=e.clientY;renderMiniModel();
+      svg.addEventListener("pointermove",e=>{
+        if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+        if(pointers.size>=2){if(!pinch){const c=pointerCenter();pinch={distance:Math.max(1,c.d),zoom:state.zoom,x:c.x,y:c.y,panX:state.panX,panY:state.panY};}const c=pointerCenter();state.zoom=clampZoom(pinch.zoom*(c.d/pinch.distance));state.panX=pinch.panX+(c.x-pinch.x);state.panY=pinch.panY+(c.y-pinch.y);renderMiniModel();return;}
+        const dx=e.clientX-state.lastX,dy=e.clientY-state.lastY;if(state.dragMode==="pan"){state.panX+=dx;state.panY+=dy;}else{state.yaw+=dx*.0085;state.pitch=Math.max(-1.48,Math.min(1.48,state.pitch+dy*.0085));}state.lastX=e.clientX;state.lastY=e.clientY;renderMiniModel();
       });
-      const end=e=>{state.dragging=false;if(e?.pointerId!==undefined&&svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);};svg.addEventListener("pointerup",end);svg.addEventListener("pointercancel",end);
+      const end=e=>{pointers.delete(e.pointerId);if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);pinch=null;if(pointers.size===1){const p=[...pointers.values()][0];state.lastX=p.x;state.lastY=p.y;state.dragMode="rotate";state.dragging=true;}else if(!pointers.size)state.dragging=false;};svg.addEventListener("pointerup",end);svg.addEventListener("pointercancel",end);
     }
     renderMiniLesson();
   }
@@ -576,7 +589,8 @@ const GuidedStructureTransitions = (() => {
       const label=state.labelsOn&&p.showLabel!==false?'<text class="gps-stick-label" y="-8">'+String(p.id).split(":").pop()+'</text>':"";
       return '<g class="gps-stick-node '+(focus?"feature-highlight":"context-node")+'" opacity="'+(hasFocusedFeature&&!focus?".38":"1")+'" data-element="'+element+'" transform="translate('+S.x+' '+S.y+')">'+dot+label+'</g>';
     }).join("");
-    svg.innerHTML='<g>'+bonds+guides+nodes+'</g>';
+    const torsionLabels=(model.torsionLabels||[]).map(t=>{const p=map.get(t.a),q=map.get(t.b);if(!p||!q)return"";const A=screen(p),B=screen(q),dx=B.x-A.x,dy=B.y-A.y,len=Math.hypot(dx,dy)||1,x=(A.x+B.x)/2-dy/len*16,y=(A.y+B.y)/2+dx/len*16;return '<g class="gps-torsion-label" transform="translate('+x+' '+y+')"><circle r="11" fill="#07111c" stroke="#f2c66d" stroke-width="1.8"/><text y="4" text-anchor="middle" fill="#f7fbff" font-size="13" font-weight="800">'+t.symbol+'</text></g>';}).join("");
+    svg.innerHTML='<g>'+bonds+guides+nodes+torsionLabels+'</g>';
     svg.dataset.feature=state.miniFeature;svg.dataset.yaw=state.yaw.toFixed(3);svg.dataset.pitch=state.pitch.toFixed(3);svg.dataset.zoom=state.zoom.toFixed(3);
   }
   function renderMiniLesson(){
@@ -588,7 +602,7 @@ const GuidedStructureTransitions = (() => {
     if(title)title.textContent=pairMode?(REAL_PAIR_DEFS[state.realPairKey]?.label||l.title):l.title;
     if(definition)definition.textContent=l.definition;if(notice)notice.textContent=l.notice;
     const realContext=["glycosidic","pucker","backbone","stacking","basepair"].includes(state.miniFeature);
-    if($("gpsMiniCaption"))$("gpsMiniCaption").textContent=pairMode?"Complete nucleotides · PDB 1EHZ · yellow dotted lines = H-bonds":realContext?"Complete nucleotide context · PDB 1EHZ · highlighted atoms mark the feature":"Interactive stick model · element-colored atoms";
+    if($("gpsMiniCaption"))$("gpsMiniCaption").textContent=pairMode?"Complete nucleotides · PDB 1EHZ · yellow dotted lines = H-bonds":realContext?(state.miniFeature==="backbone"?"Complete local backbone · PDB 1EHZ · α β γ δ ε ζ label backbone torsions; χ labels the glycosidic torsion":"Complete nucleotide context · PDB 1EHZ · highlighted atoms mark the feature"):"Interactive stick model · element-colored atoms";
     renderMiniModel();
     if(realContext&&(!state.realPairModels||!state.realLessonModels)){
       loadRealPairModels().then(()=>{if(["glycosidic","pucker","backbone","stacking","basepair"].includes(state.miniFeature))renderMiniLesson();}).catch(error=>{

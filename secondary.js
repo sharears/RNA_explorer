@@ -6,7 +6,7 @@ const SecondaryExplorer = (() => {
   const colors = {A:"#b55d6a", G:"#2f6b57", C:"#c89b4a", U:"#5d7fa3"};
   const settings = {backColor:"#74d7b6", backWidth:2, backOpacity:0.8,
     pairColor:"#e8bb69", pairWidth:2, pairOpacity:1, circleColor:"#c5d6e2",
-    circleWidth:1, letterColor:"#ffffff", letterSize:16, font:"monospace",
+    circleWidth:1, circleVisible:true, letterColor:"#ffffff", letterSize:16, font:"monospace",
     fontStyle:"normal", mode:"uniform", legend:true};
   let seq="", db="", defaultSeq="", defaultDb="", pairs=[], partner=[], selected=0, selectedPairKey=null;
   let selectedResidues=new Set(), selectedPairKeys=new Set(), sourceNote="";
@@ -569,7 +569,7 @@ const SecondaryExplorer = (() => {
       const g=svg("g",{transform:`translate(${p.x} ${p.y})`,class:"se-node"+(pinnedResidues.has(i)?" pinned":"")+(selectedResidues.has(i)?" multi-selected":""),tabindex:0,role:"button","aria-pressed":String(selectedResidues.has(i)),"data-residue-index":i,"aria-label":`${seq[i]}${i+1}, ${partner[i]<0?"unpaired":"paired with "+(partner[i]+1)}`});
       const persistent=selectedResidues.has(i),current=i===selected,pairedFocus=i===partner[selected];
       if(persistent||current||pairedFocus) g.append(svg("circle",{"data-export-remove":"",r:persistent?22:20,fill:"none",stroke:persistent?"#f5e9c8":"#ffffff","stroke-width":persistent?3:1.5,"stroke-dasharray":persistent||current?"none":"3 3"}));
-      g.append(svg("circle",{r:16,fill:s.fillColor,stroke:s.circleColor,"stroke-width":s.circleWidth}));
+      if(s.circleVisible!==false)g.append(svg("circle",{r:16,fill:s.fillColor,stroke:s.circleColor,"stroke-width":s.circleWidth}));
       text(g,seq[i],{y:0,fill:s.letterColor,"font-family":s.font,"font-size":s.letterSize,"font-style":s.fontStyle==="italic"?"italic":"normal","font-weight":s.fontStyle==="bold"?"700":"400","text-anchor":"middle","dominant-baseline":"central"});
       const prev=pos[Math.max(0,i-1)],next=pos[Math.min(pos.length-1,i+1)];
       const away=partner[i]>=0?{x:p.x-pos[partner[i]].x,y:p.y-pos[partner[i]].y}
@@ -1069,7 +1069,7 @@ const SecondaryExplorer = (() => {
         <option value="lw">Leontis–Westhof symbols</option></select></label>
       <button type="button" id="seLegendToggle" aria-pressed="true">Hide base-pair legend</button>
       </details>
-      <details><summary>Nucleotide circles & letters</summary>
+      <details><summary>Nucleotide circles & letters</summary><label class="se-check"><input id="seCircleVisible" type="checkbox" checked> Show residue circles</label>
       ${input("circleColor","Circle outline color","color",settings.circleColor)}
       ${input("circleWidth","Circle outline thickness","number",1,0,8,.5)}
       ${input("letterColor","Font color","color",settings.letterColor)}
@@ -1096,6 +1096,7 @@ const SecondaryExplorer = (() => {
       <a href="https://rnajournal.cshlp.org/content/7/4/499.long" target="_blank" rel="noreferrer">Leontis & Westhof (2001)</a>`;
     copy.append(controls);
     reorganizeControls(controls);
+    if($("seCircleVisible")){$("seCircleVisible").checked=settings.circleVisible!==false;$("seCircleVisible").addEventListener("change",e=>{settings.circleVisible=e.target.checked;render();});}
     $("secondarySequence").value=sequence;$("secondaryDotBracket").value=structure;
     const stage=document.querySelector(".secondary-stage"),root=$("secondarySvg");
     const arcStyleControl=document.createElement("div");arcStyleControl.id="seArcPairStyle";arcStyleControl.className="se-arc-style";arcStyleControl.hidden=true;
