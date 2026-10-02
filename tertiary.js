@@ -1250,6 +1250,22 @@ const TertiaryExplorer = (() => {
     const chain=state.activeChain,resi=sels.map(r=>r.resi);viewer.zoomTo(chain?{chain,resi}:{resi},450);viewer.render();
   }
   function focusSelection(){focus([...state.selectionIndices]);}
+  async function showLinkedRegion(indices,{focusView=true}={}){
+    await ensureViewer();
+    evaluateMapping();
+    const n=state.mapping.enabled?state.secondarySequence.length:activeResidues().length;
+    const clean=[...new Set((Array.isArray(indices)?indices:[]).filter(i=>Number.isInteger(i)&&i>=0&&i<n))];
+    state.selectionIndices=new Set(clean);state.selectedPairs.clear();
+    if(clean.length)state.selected=clean[0];
+    if(state.mapping.enabled)state.split=true;
+    const split=$("teSplit");if(split){split.disabled=!state.mapping.enabled;split.checked=state.split;}
+    render();
+    if(focusView&&clean.length)setTimeout(()=>focus(clean),80);
+    return {indices:clean,linked:state.split,mappingEnabled:state.mapping.enabled};
+  }
+  function clearLinkedRegion(){
+    state.selectionIndices.clear();state.selectedPairs.clear();render();
+  }
   function saveView(){
     if(!viewer?.getView)return;const name=prompt("Name this view","View "+state.viewSerial);if(name===null)return;
     state.savedViews.push({id:state.viewSerial,name:name.trim()||("View "+state.viewSerial),view:viewer.getView().slice()});state.viewSerial++;renderSavedViews();
@@ -1695,7 +1711,7 @@ const TertiaryExplorer = (() => {
     render();
   }
 
-  return {setup,render,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,getWorkspaceSnapshot,restoreWorkspaceSnapshot,showLearningFeature,clearLearningFeature,
+  return {setup,render,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,getWorkspaceSnapshot,restoreWorkspaceSnapshot,showLearningFeature,clearLearningFeature,showLinkedRegion,clearLinkedRegion,
     getDiagnostics(){return {viewerReady:!!viewer,modelReady:!!model,atomCount:model?.selectedAtoms?model.selectedAtoms({}).length:0,representation:state.representation,colorMode:state.colorMode,split:state.split,mappingEnabled:state.mapping.enabled,source:state.currentFileName,derivedSecondary:state.derivedSecondary,
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
       selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
