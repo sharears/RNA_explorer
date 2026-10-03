@@ -21,6 +21,15 @@ jobs:
           node-version: "22"
       - name: Apply requested updates
         run: python3 .github/apply_secondary_3d2d_updates.py
+      - name: Preserve derived-structure copy compatibility
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tertiary.js')
+          s=p.read_text()
+          s=s.replace('Experimental cWW-only 3D → 2D · ','Derived from 3D coordinates · cWW only · experimental · ')
+          p.write_text(s)
+          PY
       - name: Syntax checks
         run: |
           node --check secondary.js
