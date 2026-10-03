@@ -505,7 +505,7 @@ body[data-page-mode="journey"] .home-paths { display:none !important; }
 .home-thought-bubble{
   position:absolute;
   z-index:3;
-  top:7%;
+  top:2%;
   right:6%;
   width:min(235px,40%);
   margin:0;
@@ -515,7 +515,8 @@ body[data-page-mode="journey"] .home-paths { display:none !important; }
   background:rgba(244,236,216,.94);
   color:#29231d;
   text-align:center;
-  font:italic 600 clamp(.76rem,1.1vw,.98rem)/1.45 Georgia,serif;
+  font:600 clamp(.76rem,1.1vw,.98rem)/1.45 "Comic Sans MS","Comic Sans",cursive;
+  font-style:normal;
   box-shadow:0 10px 28px rgba(0,0,0,.25);
   transform:rotate(-2deg);
 }
@@ -554,7 +555,7 @@ body[data-page-mode="home"] .home-path-card{
   .home-cover h1{font-size:clamp(2.35rem,12vw,3.55rem)}
   .home-cover-art{min-height:440px}
   .home-cover-art img{min-height:440px}
-  .home-thought-bubble{top:5%;right:4%;width:46%;padding:12px 13px;font-size:.72rem}
+  .home-thought-bubble{top:1%;right:4%;width:46%;padding:12px 13px;font-size:.72rem}
   .home-cover-art figcaption{display:none}
 }
 

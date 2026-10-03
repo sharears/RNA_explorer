@@ -47,6 +47,14 @@ const SecondaryExplorer = (() => {
   function residueStyle(i) {
     return {...settings,fillColor:heatEnabled&&metadata[i]?.value!=null?heatColor(metadata[i].value):settings.fillColor||colors[seq[i]],...residueOverrides[i]};
   }
+  function residueTextClearance(i) {
+    const s=residueStyle(i);
+    if(s.circleVisible!==false)return 0;
+    const size=Number(s.letterSize)||16;
+    // Scale the backbone gap with the residue label, but cap it so extreme
+    // font sizes do not erase whole backbone segments.
+    return Math.min(18,Math.max(7,size*.62+2));
+  }
   function probabilityColor(value) {
     const t=Math.max(0,Math.min(1,Number(value))),stops=palettes[pairProbTheme],x=t*(stops.length-1);
     const i=Math.min(stops.length-2,Math.floor(x)),f=x-i;
@@ -556,7 +564,10 @@ const SecondaryExplorer = (() => {
     for(let i=0;i<pos.length-1;i++){
       const a=pos[i],b=pos[i+1],bs={...settings,...backboneOverrides[i]};
       const g=svg("g",{class:"se-backbone",role:"button",tabindex:0,"aria-label":`Backbone ${i+1}–${i+2}`,"data-backbone":i});
-      g.append(svg("line",{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:bs.backColor,"stroke-width":bs.backWidth,opacity:bs.backOpacity}));
+      const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1;
+      let trimA=residueTextClearance(i),trimB=residueTextClearance(i+1);
+      if(trimA+trimB>len-4){const scale=Math.max(0,(len-4)/Math.max(1,trimA+trimB));trimA*=scale;trimB*=scale;}
+      g.append(svg("line",{x1:a.x+dx/len*trimA,y1:a.y+dy/len*trimA,x2:b.x-dx/len*trimB,y2:b.y-dy/len*trimB,stroke:bs.backColor,"stroke-width":bs.backWidth,opacity:bs.backOpacity,"data-backbone-visible":""}));
       g.append(svg("line",{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:"transparent","stroke-width":14,"pointer-events":"stroke","data-export-remove":""}));
       const choose=()=>{selectedBackbone=i;panel();};
       g.addEventListener("click",choose);
@@ -627,6 +638,7 @@ const SecondaryExplorer = (() => {
   }
 
   const residueFields=[
+    ["circleVisible","Show circle for selected residue","checkbox"],
     ["fillColor","Circle fill","color"],["circleColor","Circle outline color","color"],
     ["circleWidth","Circle outline thickness","number",0,8,.5],
     ["letterColor","Font color","color"],["letterSize","Font size","number",8,52,1],
@@ -637,6 +649,7 @@ const SecondaryExplorer = (() => {
   function localFields(fields,prefix){
     return fields.map(([k,label,type,min,max,step])=>'<label>'+label+(type==="select"
       ?'<select id="'+prefix+k+'">'+min.map(v=>'<option value="'+v+'">'+v+'</option>').join("")+'</select>'
+      :type==="checkbox"?'<input id="'+prefix+k+'" type="checkbox">'
       :'<input id="'+prefix+k+'" type="'+type+'" '+(type==="number"?'min="'+min+'" max="'+max+'" step="'+step+'"':'')+'>')+'</label>').join("");
   }
   function enhanceColorInputs(container){
@@ -735,7 +748,7 @@ const SecondaryExplorer = (() => {
     const bindLocal=(fields,prefix,target,index)=>fields.forEach(([k])=>$(prefix+k).addEventListener("input",e=>{
       if(!e.target.checkValidity())return;
       const collection=target(),i=index();collection[i]??={};
-      collection[i][k]=e.target.type==="number"?Number(e.target.value):e.target.value;render();
+      collection[i][k]=e.target.type==="checkbox"?e.target.checked:e.target.type==="number"?Number(e.target.value):e.target.value;render();
     }));
     bindLocal(backFields,"seBack-",()=>backboneOverrides,()=>selectedBackbone);
     bindLocal(residueFields,"seResidue-",()=>residueOverrides,()=>selected);
@@ -884,7 +897,7 @@ const SecondaryExplorer = (() => {
     $("seBackEditor").disabled=seq.length<2;
     const b={...settings,...backboneOverrides[selectedBackbone]},r=residueStyle(selected);
     backFields.forEach(([k])=>$("seBack-"+k).value=b[k]);
-    residueFields.forEach(([k])=>$("seResidue-"+k).value=r[k]);
+    residueFields.forEach(([k])=>{const el=$("seResidue-"+k);if(el.type==="checkbox")el.checked=r[k]!==false;else el.value=r[k];});
     $("seResidueSelected").textContent=(seq[selected]||"")+" · residue "+(selected+1);
     const m=metadata[selected];
     $("seResidueMetadata").textContent=m?"Residue ID: "+m.id+" · Information: "+(m.value??"No value"):"No metadata for this residue.";
@@ -1203,7 +1216,8 @@ const SecondaryExplorer = (() => {
       $("secondarySequence").value=cleanSeq;$("secondaryDotBracket").value=cleanDb;
       load(cleanSeq,cleanDb);
       const source=String(meta.source||"3D coordinates"),pairsDetected=Number(meta.pairCount);
-      setSourceNote("Derived from 3D coordinates · "+source+(Number.isFinite(pairsDetected)?" · "+pairsDetected+" base pairs":"")+". Browser geometry inference; verify with a dedicated annotation tool for publication-grade assignments.");
+      const detectedCww=Number(meta.detectedCwwCount),omitted=Number(meta.omittedPairCount);
+      setSourceNote("3D-derived · cWW only · experimental. This view contains only cWW pairs detected from the 3D coordinates"+(Number.isFinite(detectedCww)?" ("+detectedCww+" detected)":"")+(Number.isFinite(pairsDetected)?"; "+pairsDetected+" are displayed":"")+(Number.isFinite(omitted)&&omitted>0?" and "+omitted+" competing/crossing pair"+(omitted===1?" was":"s were")+" omitted for the current dot-bracket layout":"")+". The detector is still being evaluated for accuracy. Treat this as a rough visualization for learning and exploration, not as a publication-ready secondary-structure annotation.");
       const status=$("secondaryInputStatus");if(status){status.textContent=cleanSeq.length+" residues · "+pairs.length+" derived base pairs rendered.";status.classList.remove("error");}
       saveWorkspaceLocal();return {sequence:seq,structure:db,isDefault:false,selected,selectedPairKey,selectedResidues:[...selectedResidues],selectedPairKeys:[...selectedPairKeys],sourceNote};
     },
