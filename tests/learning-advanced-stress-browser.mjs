@@ -44,8 +44,10 @@ try{
   await tertiaryAdvanced.click();
   await page.waitForFunction(()=>document.getElementById("scene-tertiary")?.classList.contains("learning-tools-open"));
   if(!(await page.locator("#tertiaryControls").isVisible()))throw new Error("Tertiary Explore controls did not become visible in Learn mode.");
+  const teControls=page.locator("#tertiaryControls .te-controls");
+  if(await teControls.count()!==1)throw new Error("Inner Tertiary controls container is missing.");
 
-  const displaySummary=page.locator("#tertiaryControls > details > summary").filter({hasText:"Display"}).first();
+  const displaySummary=teControls.locator(":scope > details > summary").filter({hasText:"Display"}).first();
   await openDetails(displaySummary);
   const sticksLabel=((await page.locator('#teRepresentation option[value="sticks"]').textContent())||"").trim();
   if(sticksLabel!=="Sticks")throw new Error("Sticks representation is still labeled '"+sticksLabel+"'.");
@@ -64,7 +66,7 @@ try{
   await page.locator("#teSurface").uncheck();
 
   // Small-RNA stress test: 1HS8 is a 13-residue RNA hairpin.
-  const importSummary=page.locator("#tertiaryControls > details > summary").filter({hasText:"Import structure"}).first();
+  const importSummary=teControls.locator(":scope > details > summary").filter({hasText:"Import structure"}).first();
   await openDetails(importSummary);
   await page.fill("#tePdbId","1HS8");
   await page.click("#teLoadPdbId");
@@ -75,7 +77,7 @@ try{
 
   // The deeper Explore analysis groups remain progressively disclosed, so open
   // their shared container just as a user would before using them.
-  const deepAdvanced=page.locator("#tertiaryControls > .workspace-advanced-panel");
+  const deepAdvanced=teControls.locator(":scope > .workspace-advanced-panel");
   if(await deepAdvanced.count())await openDetails(deepAdvanced.locator(":scope > summary"));
 
   const selectSummary=page.locator("summary").filter({hasText:"Select · sequence & ranges"}).first();
