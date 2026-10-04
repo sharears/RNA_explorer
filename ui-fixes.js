@@ -76,12 +76,16 @@
     });
   }
 
+  function setTextIfChanged(element, text) {
+    if (element && element.textContent !== text) element.textContent = text;
+  }
+
   function syncLearningAdvancedControls() {
     const secondaryScene = document.getElementById("scene-secondary");
     const secondaryPanel = secondaryScene?.querySelector(".workspace-advanced-panel");
     if (secondaryPanel) {
       const summary = secondaryPanel.querySelector(":scope > summary");
-      if (summary) summary.textContent = "Advanced controls";
+      setTextIfChanged(summary, "Advanced controls");
       if (secondaryPanel.dataset.learningSyncReady !== "true") {
         secondaryPanel.dataset.learningSyncReady = "true";
         secondaryPanel.addEventListener("toggle", () => {
@@ -96,16 +100,16 @@
 
     const representation = document.getElementById("teRepresentation");
     const sticks = representation?.querySelector('option[value="sticks"]');
-    if (sticks) sticks.textContent = "Sticks";
+    setTextIfChanged(sticks, "Sticks");
 
     const tertiaryButton = document.getElementById("gpsTertiaryCustomize");
     if (tertiaryButton) {
-      tertiaryButton.textContent = "Advanced controls";
+      setTextIfChanged(tertiaryButton, "Advanced controls");
       if (tertiaryButton.dataset.simpleAdvancedReady !== "true") {
         tertiaryButton.dataset.simpleAdvancedReady = "true";
         tertiaryButton.addEventListener("click", () => {
           queueMicrotask(() => {
-            tertiaryButton.textContent = "Advanced controls";
+            setTextIfChanged(tertiaryButton, "Advanced controls");
             renderTertiaryWithAdvancedMode();
           });
         });
