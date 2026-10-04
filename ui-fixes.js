@@ -119,11 +119,58 @@
     setupTertiaryAdvancedEventBridge();
   }
 
+  function setupHomeCoverArtwork() {
+    const art = document.querySelector(".home-cover-art");
+    const image = art?.querySelector("img");
+    if (!art || !image) return;
+
+    // Force the newly regenerated artwork rather than a browser-cached older cover.
+    const desiredSource = "assets/rna-home-cover.webp?v=trna-craftsman-20261004";
+    if (!image.getAttribute("src")?.includes("trna-craftsman-20261004")) {
+      image.setAttribute("src", desiredSource);
+    }
+
+    if (!document.getElementById("home-cover-regenerated-blend")) {
+      const style = document.createElement("style");
+      style.id = "home-cover-regenerated-blend";
+      style.textContent = `
+        .home-cover-art {
+          background: transparent !important;
+          box-shadow: none !important;
+          border-radius: 0 !important;
+          overflow: visible !important;
+        }
+        .home-cover-art img {
+          -webkit-mask-image: radial-gradient(ellipse 91% 92% at 50% 50%, #000 0%, #000 54%, rgba(0,0,0,.98) 66%, rgba(0,0,0,.74) 79%, rgba(0,0,0,.30) 90%, transparent 100%) !important;
+          mask-image: radial-gradient(ellipse 91% 92% at 50% 50%, #000 0%, #000 54%, rgba(0,0,0,.98) 66%, rgba(0,0,0,.74) 79%, rgba(0,0,0,.30) 90%, transparent 100%) !important;
+        }
+        .home-cover-art::after {
+          inset: -1px !important;
+          background:
+            linear-gradient(to right, rgba(8,24,43,.92) 0%, rgba(8,24,43,.48) 5%, rgba(8,24,43,.10) 11%, transparent 18%, transparent 82%, rgba(8,24,43,.10) 89%, rgba(8,24,43,.48) 95%, rgba(8,24,43,.92) 100%),
+            linear-gradient(to bottom, rgba(8,24,43,.88) 0%, rgba(8,24,43,.42) 5%, rgba(8,24,43,.08) 11%, transparent 18%, transparent 82%, rgba(8,24,43,.08) 89%, rgba(8,24,43,.42) 95%, rgba(8,24,43,.88) 100%) !important;
+          pointer-events: none;
+        }
+        @media (max-width: 620px) {
+          .home-cover-art img {
+            -webkit-mask-image: radial-gradient(ellipse 94% 93% at 50% 50%, #000 0%, #000 58%, rgba(0,0,0,.94) 72%, rgba(0,0,0,.48) 87%, transparent 100%) !important;
+            mask-image: radial-gradient(ellipse 94% 93% at 50% 50%, #000 0%, #000 58%, rgba(0,0,0,.94) 72%, rgba(0,0,0,.48) 87%, transparent 100%) !important;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }
+
   function initializeUiFixes() {
     setupUtilityMenuHover();
     syncLearningAdvancedControls();
+    setupHomeCoverArtwork();
 
-    const observer = new MutationObserver(() => syncLearningAdvancedControls());
+    const observer = new MutationObserver(() => {
+      syncLearningAdvancedControls();
+      setupHomeCoverArtwork();
+    });
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
