@@ -124,9 +124,8 @@
     const image = art?.querySelector("img");
     if (!art || !image) return;
 
-    // Force the newly regenerated artwork rather than a browser-cached older cover.
-    const desiredSource = "assets/rna-home-cover.webp?v=trna-craftsman-20261004";
-    if (!image.getAttribute("src")?.includes("trna-craftsman-20261004")) {
+    const desiredSource = "assets/rna-home-cover.webp?v=trna-craftsman-20261004b";
+    if (!image.getAttribute("src")?.includes("trna-craftsman-20261004b")) {
       image.setAttribute("src", desiredSource);
     }
 
@@ -135,27 +134,43 @@
       style.id = "home-cover-regenerated-blend";
       style.textContent = `
         .home-cover-art {
-          background: transparent !important;
+          position: relative !important;
+          overflow: hidden !important;
+          border-radius: 18px !important;
+          background: rgb(8,24,43) !important;
           box-shadow: none !important;
-          border-radius: 0 !important;
-          overflow: visible !important;
         }
         .home-cover-art img {
-          -webkit-mask-image: radial-gradient(ellipse 91% 92% at 50% 50%, #000 0%, #000 54%, rgba(0,0,0,.98) 66%, rgba(0,0,0,.74) 79%, rgba(0,0,0,.30) 90%, transparent 100%) !important;
-          mask-image: radial-gradient(ellipse 91% 92% at 50% 50%, #000 0%, #000 54%, rgba(0,0,0,.98) 66%, rgba(0,0,0,.74) 79%, rgba(0,0,0,.30) 90%, transparent 100%) !important;
+          display: block !important;
+          width: 100% !important;
+          height: 100% !important;
+          min-height: 560px !important;
+          object-fit: cover !important;
+          object-position: center 46% !important;
+          opacity: 1 !important;
+          visibility: visible !important;
+          -webkit-mask-image: none !important;
+          mask-image: none !important;
         }
         .home-cover-art::after {
-          inset: -1px !important;
+          content: "" !important;
+          position: absolute !important;
+          inset: 0 !important;
+          z-index: 2 !important;
           background:
-            linear-gradient(to right, rgba(8,24,43,.92) 0%, rgba(8,24,43,.48) 5%, rgba(8,24,43,.10) 11%, transparent 18%, transparent 82%, rgba(8,24,43,.10) 89%, rgba(8,24,43,.48) 95%, rgba(8,24,43,.92) 100%),
-            linear-gradient(to bottom, rgba(8,24,43,.88) 0%, rgba(8,24,43,.42) 5%, rgba(8,24,43,.08) 11%, transparent 18%, transparent 82%, rgba(8,24,43,.08) 89%, rgba(8,24,43,.42) 95%, rgba(8,24,43,.88) 100%) !important;
-          pointer-events: none;
+            linear-gradient(to right, rgb(8,24,43) 0%, rgba(8,24,43,.72) 4%, rgba(8,24,43,.30) 9%, rgba(8,24,43,.08) 14%, transparent 20%, transparent 80%, rgba(8,24,43,.08) 86%, rgba(8,24,43,.30) 91%, rgba(8,24,43,.72) 96%, rgb(8,24,43) 100%),
+            linear-gradient(to bottom, rgb(8,24,43) 0%, rgba(8,24,43,.68) 4%, rgba(8,24,43,.26) 9%, rgba(8,24,43,.07) 14%, transparent 20%, transparent 80%, rgba(8,24,43,.07) 86%, rgba(8,24,43,.26) 91%, rgba(8,24,43,.68) 96%, rgb(8,24,43) 100%) !important;
+          pointer-events: none !important;
+        }
+        .home-thought-bubble,
+        .home-cover-art figcaption {
+          z-index: 3 !important;
+        }
+        @media (max-width: 980px) {
+          .home-cover-art img { min-height: 520px !important; object-position: center 42% !important; }
         }
         @media (max-width: 620px) {
-          .home-cover-art img {
-            -webkit-mask-image: radial-gradient(ellipse 94% 93% at 50% 50%, #000 0%, #000 58%, rgba(0,0,0,.94) 72%, rgba(0,0,0,.48) 87%, transparent 100%) !important;
-            mask-image: radial-gradient(ellipse 94% 93% at 50% 50%, #000 0%, #000 58%, rgba(0,0,0,.94) 72%, rgba(0,0,0,.48) 87%, transparent 100%) !important;
-          }
+          .home-cover-art img { min-height: 440px !important; }
         }
       `;
       document.head.appendChild(style);
