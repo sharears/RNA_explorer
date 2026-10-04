@@ -10,6 +10,10 @@ page.on("console",msg=>{if(msg.type()==="error")errors.push("console: "+msg.text
 const dispatchInput=async(locator,value)=>{
   await locator.evaluate((el,v)=>{el.value=String(v);el.dispatchEvent(new Event("input",{bubbles:true}));},value);
 };
+const openDetails=async summary=>{
+  const parent=summary.locator("..");
+  if(!(await parent.evaluate(el=>el.open)))await summary.click();
+};
 
 try{
   await page.goto(base,{waitUntil:"domcontentloaded",timeout:30000});
@@ -41,6 +45,8 @@ try{
   await page.waitForFunction(()=>document.getElementById("scene-tertiary")?.classList.contains("learning-tools-open"));
   if(!(await page.locator("#tertiaryControls").isVisible()))throw new Error("Tertiary Explore controls did not become visible in Learn mode.");
 
+  const displaySummary=page.locator("#tertiaryControls > details > summary").filter({hasText:"Display"}).first();
+  await openDetails(displaySummary);
   const sticksLabel=((await page.locator('#teRepresentation option[value="sticks"]').textContent())||"").trim();
   if(sticksLabel!=="Sticks")throw new Error("Sticks representation is still labeled '"+sticksLabel+"'.");
 
@@ -58,6 +64,8 @@ try{
   await page.locator("#teSurface").uncheck();
 
   // Small-RNA stress test: 1HS8 is a 13-residue RNA hairpin.
+  const importSummary=page.locator("#tertiaryControls > details > summary").filter({hasText:"Import structure"}).first();
+  await openDetails(importSummary);
   await page.fill("#tePdbId","1HS8");
   await page.click("#teLoadPdbId");
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().source.includes("1HS8"),{timeout:30000});
@@ -65,10 +73,15 @@ try{
   let d=await page.evaluate(()=>TertiaryExplorer.getDiagnostics());
   if(!d.modelReady||d.atomCount<150)throw new Error("1HS8 did not load as a usable small RNA model: "+JSON.stringify(d));
 
+  // The deeper Explore analysis groups remain progressively disclosed, so open
+  // their shared container just as a user would before using them.
+  const deepAdvanced=page.locator("#tertiaryControls > .workspace-advanced-panel");
+  if(await deepAdvanced.count())await openDetails(deepAdvanced.locator(":scope > summary"));
+
   const selectSummary=page.locator("summary").filter({hasText:"Select · sequence & ranges"}).first();
-  if(!(await selectSummary.evaluate(el=>el.parentElement.open)))await selectSummary.click();
+  await openDetails(selectSummary);
   const objectSummary=page.locator("summary").filter({hasText:"Saved objects"}).first();
-  if(!(await objectSummary.evaluate(el=>el.parentElement.open)))await objectSummary.click();
+  await openDetails(objectSummary);
 
   // Residue 1 -> thicker saved object.
   await page.locator("#teSequencePanel .te-seq-residue").nth(0).click();
@@ -100,7 +113,7 @@ try{
   // Real atom-picking distance measurement. Scan the visible canvas until two
   // distinct atoms are picked and a plausible non-zero distance is produced.
   const analyzeSummary=page.locator("summary").filter({hasText:"Analyze · measurements & contacts"}).first();
-  if(!(await analyzeSummary.evaluate(el=>el.parentElement.open)))await analyzeSummary.click();
+  await openDetails(analyzeSummary);
   await page.selectOption("#teMeasureMode","distance");
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().measurementMode==="distance");
   const canvas=page.locator("#tertiaryMolecularViewer canvas");
@@ -127,7 +140,7 @@ try{
 
   // One more non-representation control while Advanced is open.
   const clippingSummary=page.locator("summary").filter({hasText:"Clipping"}).first();
-  if(!(await clippingSummary.evaluate(el=>el.parentElement.open)))await clippingSummary.click();
+  await openDetails(clippingSummary);
   await page.locator("#teClipEnabled").check();
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().clipEnabled===true);
   await page.locator("#teClipEnabled").uncheck();
