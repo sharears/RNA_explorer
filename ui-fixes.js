@@ -35,6 +35,47 @@
     menu.addEventListener("focusout", scheduleClose);
   }
 
+  function renderTertiaryWithAdvancedMode() {
+    const scene = document.getElementById("scene-tertiary");
+    if (!scene?.classList.contains("learning-tools-open") || document.body.dataset.pageMode !== "journey") {
+      if (typeof TertiaryExplorer !== "undefined") TertiaryExplorer.render();
+      return;
+    }
+    document.body.dataset.pageMode = "journey-advanced";
+    try {
+      if (typeof TertiaryExplorer !== "undefined") TertiaryExplorer.render();
+    } finally {
+      queueMicrotask(() => {
+        if (document.body.dataset.pageMode === "journey-advanced") document.body.dataset.pageMode = "journey";
+      });
+    }
+  }
+
+  function setupTertiaryAdvancedEventBridge() {
+    const scene = document.getElementById("scene-tertiary");
+    if (!scene || scene.dataset.advancedEventBridgeReady === "true") return;
+    scene.dataset.advancedEventBridgeReady = "true";
+
+    const begin = () => {
+      if (!scene.classList.contains("learning-tools-open")) return;
+      if (document.body.dataset.pageMode !== "journey") return;
+      scene.dataset.restorePageMode = "journey";
+      document.body.dataset.pageMode = "journey-advanced";
+    };
+    const finish = () => {
+      if (!scene.dataset.restorePageMode) return;
+      delete scene.dataset.restorePageMode;
+      queueMicrotask(() => {
+        if (document.body.dataset.pageMode === "journey-advanced") document.body.dataset.pageMode = "journey";
+      });
+    };
+
+    ["click", "change", "input"].forEach(type => {
+      scene.addEventListener(type, begin, true);
+      scene.addEventListener(type, finish, false);
+    });
+  }
+
   function syncLearningAdvancedControls() {
     const secondaryScene = document.getElementById("scene-secondary");
     const secondaryPanel = secondaryScene?.querySelector(".workspace-advanced-panel");
@@ -53,6 +94,10 @@
     const legacySecondaryButton = document.getElementById("gpsSecondaryCustomize");
     if (legacySecondaryButton) legacySecondaryButton.hidden = true;
 
+    const representation = document.getElementById("teRepresentation");
+    const sticks = representation?.querySelector('option[value="sticks"]');
+    if (sticks) sticks.textContent = "Sticks";
+
     const tertiaryButton = document.getElementById("gpsTertiaryCustomize");
     if (tertiaryButton) {
       tertiaryButton.textContent = "Advanced controls";
@@ -61,11 +106,13 @@
         tertiaryButton.addEventListener("click", () => {
           queueMicrotask(() => {
             tertiaryButton.textContent = "Advanced controls";
-            if (typeof TertiaryExplorer !== "undefined") TertiaryExplorer.render();
+            renderTertiaryWithAdvancedMode();
           });
         });
       }
     }
+
+    setupTertiaryAdvancedEventBridge();
   }
 
   function initializeUiFixes() {
