@@ -18,9 +18,10 @@ jobs:
       - run: npm install --no-save playwright
       - run: npx playwright install --with-deps chromium
       - run: mkdir -p dist && cp index.html *.js *.css dist/ && cp -r data dist/data && cp -r assets dist/assets
-      - name: Guided Secondary/Tertiary advanced controls + 1HS8 stress test
+      - name: Guided controls, More-menu hover, and 1HS8 browser stress test
         run: |
           python3 -m http.server 4173 --directory dist > /tmp/rna-explorer-http.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID' EXIT
+          node tests/utility-hover-browser.mjs
           node tests/learning-advanced-stress-browser.mjs
