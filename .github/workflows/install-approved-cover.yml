@@ -1,0 +1,30 @@
+name: Install approved cover
+on:
+  push:
+    paths:
+      - '.cover-parts/**'
+      - '.github/workflows/install-approved-cover.yml'
+permissions:
+  contents: write
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble approved 1EHZ cover
+        run: |
+          cat .cover-parts/part-* > /tmp/cover.b64
+          base64 -d /tmp/cover.b64 > assets/rna-home-cover.webp
+          test "$(wc -c < assets/rna-home-cover.webp)" -eq 62146
+          echo "7bed6b9b2461b05ba1bb7459a02bd8780b8eea62428247117c4533a6c7ddb335  assets/rna-home-cover.webp" | sha256sum -c -
+          sed -i 's/trna-craftsman-20261004d/trna-craftsman-20261004e/g' index.html
+          sed -i 's/trna-craftsman-20261004c/trna-craftsman-20261004e/g' ui-fixes.js
+      - name: Commit approved cover
+        run: |
+          rm -rf .cover-parts
+          rm -f .github/workflows/install-approved-cover.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Install approved 1EHZ homepage cover"
+          git push
