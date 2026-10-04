@@ -24,4 +24,11 @@ jobs:
           SERVER_PID=$!
           trap 'kill $SERVER_PID' EXIT
           node tests/utility-hover-browser.mjs
-          node tests/learning-advanced-stress-browser.mjs
+          node tests/learning-advanced-complete-browser.mjs
+      - name: Upload 1HS8 styled screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 1HS8-styled-browser-proof
+          path: test-output/1HS8-styled.png
+          if-no-files-found: ignore
