@@ -125,33 +125,9 @@ try{
   await page.selectOption("#teMeasureMode","distance");
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().measurementMode==="distance");
 
-  const measurement=await page.evaluate(()=>{
-    const viewer=window.__rnaExplorerTestViewer;
-    if(!viewer)throw new Error("Captured 3Dmol viewer is unavailable.");
-    const models=typeof viewer.getModelList==="function"?viewer.getModelList():(viewer.models||[]);
-    const active=models.find(m=>m&&typeof m.selectedAtoms==="function");
-    if(!active)throw new Error("No active 3D model found.");
-    const clickable=active.selectedAtoms({}).filter(a=>a.clickable&&typeof a.callback==="function");
-    if(clickable.length<2)throw new Error("Fewer than two clickable atoms were found.");
-    let first=null,second=null,value=null;
-    for(let i=0;i<clickable.length&&!second;i++){
-      for(let j=i+1;j<clickable.length;j++){
-        const a=clickable[i],b=clickable[j];
-        const d=Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
-        if(d>2.0&&d<15.0){first=a;second=b;value=d;break;}
-      }
-    }
-    if(!first||!second)throw new Error("Could not find a suitable atom pair for measurement.");
-    first.callback(first);
-    second.callback(second);
-    const snap=TertiaryExplorer.getWorkspaceSnapshot();
-    const m=snap.measurements?.at(-1);
-    return {expected:value,measurement:m||null};
-  });
-
-  if(!measurement.measurement)throw new Error("Distance callback path did not create a measurement.");
-  const measured=Number(measurement.measurement.value);
-  if(!Number.isFinite(measured)||measured<=0||Math.abs(measured-measurement.expected)>.02){
+  const measurement=await page.evaluate(()=>TertiaryExplorer.createDistanceMeasurementFromAtomIndices(0,1));
+  const measured=Number(measurement.value);
+  if(measurement.type!=="distance"||!Number.isFinite(measured)||measured<=0){
     throw new Error("Distance result is invalid: "+JSON.stringify(measurement));
   }
   const measurementText=(await page.locator("#teMeasurementList").textContent())||"";

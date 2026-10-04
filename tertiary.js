@@ -1001,6 +1001,20 @@ const TertiaryExplorer = (() => {
     }
     render();
   }
+  function createDistanceMeasurementFromAtomIndices(firstIndex=0,secondIndex=1){
+    if(state.measurementMode!=="distance")throw new Error("Distance measurement mode must be active.");
+    if(!model?.selectedAtoms)throw new Error("No active 3D model is available.");
+    const atoms=model.selectedAtoms({});
+    const a=Number(firstIndex),b=Number(secondIndex);
+    if(!Number.isInteger(a)||!Number.isInteger(b)||a<0||b<0||a>=atoms.length||b>=atoms.length||a===b)throw new Error("Choose two different valid atom indices.");
+    const before=state.measurements.length;
+    state.measurementPicks=[];
+    handleAtomMeasurementClick(atoms[a]);
+    handleAtomMeasurementClick(atoms[b]);
+    const measurement=state.measurements.at(-1);
+    if(state.measurements.length!==before+1||!measurement||measurement.type!=="distance")throw new Error("Distance measurement was not created.");
+    return {id:measurement.id,type:measurement.type,value:measurement.value,points:measurement.points};
+  }
   function measurementCentroid(points){return points.reduce((o,p)=>({x:o.x+p.x/points.length,y:o.y+p.y/points.length,z:o.z+p.z/points.length}),{x:0,y:0,z:0});}
   function styleEditor(style,onChange,{label=true,fallback={}}={}){
     const wrap=document.createElement("div");wrap.className="te-style-editor";
@@ -1763,7 +1777,7 @@ const TertiaryExplorer = (() => {
     render();
   }
 
-  return {setup,render,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,getWorkspaceSnapshot,restoreWorkspaceSnapshot,showLearningFeature,clearLearningFeature,showLinkedRegion,clearLinkedRegion,
+  return {setup,render,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,getWorkspaceSnapshot,restoreWorkspaceSnapshot,showLearningFeature,clearLearningFeature,showLinkedRegion,clearLinkedRegion,createDistanceMeasurementFromAtomIndices,
     getDiagnostics(){return {viewerReady:!!viewer,modelReady:!!model,atomCount:model?.selectedAtoms?model.selectedAtoms({}).length:0,representation:state.representation,colorMode:state.colorMode,split:state.split,mappingEnabled:state.mapping.enabled,source:state.currentFileName,derivedSecondary:state.derivedSecondary,
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
       selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
