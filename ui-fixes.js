@@ -124,8 +124,8 @@
     const image = art?.querySelector("img");
     if (!art || !image) return;
 
-    const desiredSource = "assets/rna-home-cover.webp?v=trna-craftsman-20261004c";
-    if (!image.getAttribute("src")?.includes("trna-craftsman-20261004c")) {
+    const desiredSource = "assets/rna-home-cover.webp?v=trna-craftsman-20261004e";
+    if (!image.getAttribute("src")?.includes("trna-craftsman-20261004e")) {
       image.setAttribute("src", desiredSource);
     }
 
