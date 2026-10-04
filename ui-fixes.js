@@ -124,10 +124,17 @@
     const image = art?.querySelector("img");
     if (!art || !image) return;
 
-    const desiredSource = "assets/rna-home-cover.webp?v=trna-craftsman-20261004b";
-    if (!image.getAttribute("src")?.includes("trna-craftsman-20261004b")) {
+    const desiredSource = "assets/rna-home-cover.webp?v=trna-craftsman-20261004c";
+    if (!image.getAttribute("src")?.includes("trna-craftsman-20261004c")) {
       image.setAttribute("src", desiredSource);
     }
+
+    // Inline fail-safe: keep the artwork visible even if an older stylesheet is cached.
+    image.style.setProperty("display", "block", "important");
+    image.style.setProperty("opacity", "1", "important");
+    image.style.setProperty("visibility", "visible", "important");
+    image.style.setProperty("-webkit-mask-image", "none", "important");
+    image.style.setProperty("mask-image", "none", "important");
 
     if (!document.getElementById("home-cover-regenerated-blend")) {
       const style = document.createElement("style");
