@@ -277,23 +277,14 @@ function setupSiteSearch() {
 
 function arrangeTopbar(page){
   const inner=document.getElementById("innerNav"),actions=document.getElementById("topbarActions");
-  const save=document.getElementById("saveProjectButton"),open=document.getElementById("openProjectButton"),search=document.getElementById("siteSearchButton");
-  const explore=document.getElementById("exploreNavMenu"),feedback=document.getElementById("workspaceFeedbackLink");
-  if(!inner||!actions||!save||!open||!search)return;
-  if(page==="home"){
-    actions.hidden=false;
-    actions.append(save,open,search);
-    inner.hidden=true;
-    return;
-  }
-  inner.hidden=false;actions.hidden=true;
-  if(explore){
-    explore.after(save);
-    save.after(open);
-  }else{
-    inner.append(save,open);
-  }
-  if(feedback)feedback.after(search);else inner.append(search);
+  if(!inner||!actions)return;
+  // Keep the primary navigation stable everywhere. The logo is the Home action;
+  // Learn and Explore remain visible, while project/about/feedback live in More.
+  inner.hidden=false;actions.hidden=false;
+  const home=document.getElementById("workspaceHomeLink");
+  if(home)home.hidden=true;
+  const utility=document.getElementById("utilityMenu");
+  if(utility&&page==="home")utility.removeAttribute("open");
 }
 
 function hideWorkspaceLauncher(){
@@ -448,6 +439,40 @@ function setupExploreWorkspaceHooks(){
   });
   document.getElementById("teLoadPdbId")?.addEventListener("click",()=>setTimeout(clearTertiaryBlankState,220));
   document.getElementById("teRestoreStructure")?.addEventListener("click",()=>setTimeout(clearTertiaryBlankState,120));
+}
+
+function setupModernWorkspaceUi(){
+  document.querySelectorAll("[data-controls-toggle]").forEach(button=>{
+    const scene=document.getElementById("scene-"+button.dataset.controlsToggle);
+    if(!scene)return;
+    const sync=()=>{
+      const collapsed=scene.classList.contains("controls-collapsed");
+      button.setAttribute("aria-expanded",String(!collapsed));
+      const icon=button.querySelector("span"),label=button.querySelector("b");
+      if(icon)icon.textContent=collapsed?"›":"‹";
+      if(label)label.textContent=collapsed?"Show":"Controls";
+    };
+    button.addEventListener("click",()=>{scene.classList.toggle("controls-collapsed");sync();});
+    sync();
+  });
+
+  const secondaryControls=document.querySelector("#scene-secondary .se-controls");
+  if(secondaryControls&&!secondaryControls.closest(".workspace-advanced-panel")){
+    const advanced=document.createElement("details");advanced.className="workspace-advanced-panel";
+    const summary=document.createElement("summary");summary.textContent="Style & advanced controls";
+    secondaryControls.before(advanced);advanced.append(summary,secondaryControls);
+  }
+
+  const tertiaryControls=document.querySelector("#scene-tertiary .te-controls");
+  if(tertiaryControls&&!tertiaryControls.querySelector(":scope > .workspace-advanced-panel")){
+    const details=[...tertiaryControls.children].filter(el=>el.tagName==="DETAILS");
+    details.slice(0,2).forEach(el=>el.open=false);
+    if(details.length>2){
+      const advanced=document.createElement("details");advanced.className="workspace-advanced-panel";
+      const summary=document.createElement("summary");summary.textContent="Advanced tools";advanced.append(summary);
+      details.slice(2).forEach(el=>advanced.append(el));tertiaryControls.append(advanced);
+    }
+  }
 }
 
 function applyPageMode() {
@@ -698,6 +723,7 @@ function initialize() {
     onSelect: index => selectResidue(index)
   });
   setupExploreWorkspaceHooks();
+  setupModernWorkspaceUi();
   setupDialog();
   registerWebMCPTools();
   selectResidue(0);

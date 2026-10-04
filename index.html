@@ -11,9 +11,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=home-secondary-3" />
-  <link rel="stylesheet" href="secondary.css?v=secondary-20" />
-  <link rel="stylesheet" href="tertiary.css?v=tertiary-11" />
+  <link rel="stylesheet" href="styles.css?v=modern-ui-1" />
+  <link rel="stylesheet" href="secondary.css?v=secondary-23" />
+  <link rel="stylesheet" href="tertiary.css?v=tertiary-17" />
   <link rel="stylesheet" href="guided-transitions.css?v=guided-6" />
   <link rel="stylesheet" href="chemistry-editor.css?v=chem-editor-6" />
 </head>
@@ -46,14 +46,24 @@
             <a href="?page=tertiary">Tertiary Structure</a>
           </div>
         </div>
-        <a class="nav-feedback" id="workspaceFeedbackLink" href="mailto:sharearsaon@outlook.com?subject=RNA%20Structure%20Explorer%20Feedback%20or%20Question">Feedback &amp; Questions</a>
       </nav>
       <div class="topbar-actions" id="topbarActions">
-        <button class="project-button" id="saveProjectButton" type="button">Save Project</button>
-        <button class="project-button" id="openProjectButton" type="button">Open Project</button>
-        <input id="projectFileInput" type="file" accept=".json,.rnaexplorer.json,application/json" hidden>
-        <button class="site-search-button" id="siteSearchButton" type="button" aria-haspopup="dialog" aria-controls="siteSearchDialog">Search</button>
-        <button class="about-button" id="aboutButton" type="button">About</button>
+        <button class="site-search-button compact-icon-button" id="siteSearchButton" type="button" aria-haspopup="dialog" aria-controls="siteSearchDialog" aria-label="Search RNA Explorer">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg>
+          <span class="sr-only">Search</span>
+        </button>
+        <details class="utility-menu" id="utilityMenu">
+          <summary aria-label="More options" title="More options"><span aria-hidden="true">•••</span></summary>
+          <div class="utility-menu-panel">
+            <span class="utility-menu-label">Project</span>
+            <button class="project-button" id="saveProjectButton" type="button">Save Project</button>
+            <button class="project-button" id="openProjectButton" type="button">Open Project</button>
+            <input id="projectFileInput" type="file" accept=".json,.rnaexplorer.json,application/json" hidden>
+            <hr>
+            <button class="about-button" id="aboutButton" type="button">About RNA Explorer</button>
+            <a class="nav-feedback" id="workspaceFeedbackLink" href="mailto:sharearsaon@outlook.com?subject=RNA%20Structure%20Explorer%20Feedback%20or%20Question">Feedback &amp; Questions</a>
+          </div>
+        </details>
       </div>
       <p id="projectSessionStatus" class="project-session-status" role="status" aria-live="polite" hidden></p>
     </header>
@@ -216,6 +226,7 @@
         <section class="scene" id="scene-secondary" data-scene-panel="secondary" aria-labelledby="secondaryTitle" hidden>
           <div class="scene-copy">
             <p class="scene-number">05 / 06</p>
+            <button class="workspace-controls-toggle" type="button" data-controls-toggle="secondary" aria-expanded="true" aria-controls="secondaryControlContent"><span aria-hidden="true">‹</span><b>Controls</b></button>
             <h2 id="secondaryTitle">Secondary structure maps local pairing</h2>
             <p>Enter an RNA sequence and its dot-bracket structure, then compare three ways of viewing the same base pairs.</p>
             <div class="secondary-inputs" aria-label="RNA secondary-structure input">
@@ -254,6 +265,7 @@
         <section class="scene" id="scene-tertiary" data-scene-panel="tertiary" aria-labelledby="tertiaryTitle" hidden>
           <div class="scene-copy">
             <p class="scene-number">06 / 06</p>
+            <button class="workspace-controls-toggle" type="button" data-controls-toggle="tertiary" aria-expanded="true" aria-controls="tertiaryControls"><span aria-hidden="true">‹</span><b>Controls</b></button>
             <h2 id="tertiaryTitle">Tertiary structure is the 3D arrangement</h2>
             <p>See how the same residues and secondary-structure elements occupy three-dimensional space. Use the example 1EHZ structure or upload your own PDB/mmCIF file and validate it against the Secondary sequence before linking the views.</p>
             <div class="fact-panel residue-panel" aria-live="polite">
@@ -370,6 +382,6 @@
   <script src="secondary.js?v=secondary-22"></script>
   <script src="tertiary.js?v=tertiary-16"></script>
   <script src="project-session.js?v=project-1"></script>
-  <script src="app.js?v=learn-explore-2"></script>
+  <script src="app.js?v=modern-ui-1"></script>
 </body>
 </html>
