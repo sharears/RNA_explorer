@@ -1,0 +1,39 @@
+name: Run mini 3D interaction patch
+
+on:
+  push:
+    paths:
+      - .github/mini3d-patch-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply source patch
+        run: python3 scripts/patch-mini3d-trackball.py
+      - name: Validate JavaScript syntax
+        run: node --check guided-transitions.js && node --check tests/mini3d-trackball-browser.mjs
+      - name: Install browser test dependency
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Run mini 3D browser interaction test
+        run: |
+          python3 -m http.server 4173 > /tmp/rna-explorer-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID' EXIT
+          node tests/mini3d-trackball-browser.mjs
+      - name: Commit tested site update
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add guided-transitions.js index.html
+          git commit -m 'Make learning 3D models freely rotatable'
+          git push
