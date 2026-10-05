@@ -1,0 +1,147 @@
+name: Patch molecular drawing lasso and redo
+
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-molecular-drawing-history.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Patch molecular drawing history and lasso
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('chemistry-editor.js')
+          s = p.read_text()
+
+          # Replace one-way undo history with paired undo/redo history.
+          pattern = re.compile(r'''  let undoStack=\[\];\n  const UNDO_LIMIT=80;\n\n  function historySnapshot\(\)\{.*?\n  \}\n\n  const atomById=''', re.S)
+          replacement = '''  let undoStack=[],redoStack=[];\n  const HISTORY_LIMIT=80;\n\n  function historySnapshot(){\n    return JSON.stringify({graph,atomSerial,bondSerial,hbondSerial,textDefaults});\n  }\n  function syncUndoButton(){\n    const undoButton=dialog?.querySelector("#chemUndoButton"),redoButton=dialog?.querySelector("#chemRedoButton");\n    if(undoButton)undoButton.disabled=undoStack.length===0;\n    if(redoButton)redoButton.disabled=redoStack.length===0;\n  }\n  function resetUndoHistory(){undoStack=[];redoStack=[];syncUndoButton();}\n  function trimHistory(stack){if(stack.length>HISTORY_LIMIT)stack.splice(0,stack.length-HISTORY_LIMIT);}\n  function pushUndo(){\n    const snapshot=historySnapshot();\n    if(undoStack.at(-1)!==snapshot)undoStack.push(snapshot);\n    trimHistory(undoStack);\n    redoStack=[];\n    syncUndoButton();\n  }\n  function restoreHistorySnapshot(snapshot,message){\n    const state=JSON.parse(snapshot);\n    graph=state.graph;atomSerial=state.atomSerial;bondSerial=state.bondSerial;hbondSerial=state.hbondSerial;textDefaults=state.textDefaults||{...DEFAULT_TEXT_STYLE};\n    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionBox=null;lasso=null;\n    syncTextControls(textDefaults);render();validate();syncUndoButton();status.textContent=message;return true;\n  }\n  function undo(){\n    if(!undoStack.length){status.textContent="Nothing to undo.";syncUndoButton();return false;}\n    const current=historySnapshot();\n    let snapshot=null;\n    while(undoStack.length){const candidate=undoStack.pop();if(candidate!==current){snapshot=candidate;break;}}\n    if(!snapshot){status.textContent="Nothing to undo.";syncUndoButton();return false;}\n    if(redoStack.at(-1)!==current)redoStack.push(current);trimHistory(redoStack);\n    return restoreHistorySnapshot(snapshot,"Undid the last molecular drawing change.");\n  }\n  function redo(){\n    if(!redoStack.length){status.textContent="Nothing to redo.";syncUndoButton();return false;}\n    const current=historySnapshot();\n    let snapshot=null;\n    while(redoStack.length){const candidate=redoStack.pop();if(candidate!==current){snapshot=candidate;break;}}\n    if(!snapshot){status.textContent="Nothing to redo.";syncUndoButton();return false;}\n    if(undoStack.at(-1)!==current)undoStack.push(current);trimHistory(undoStack);\n    return restoreHistorySnapshot(snapshot,"Redid the molecular drawing change.");\n  }\n\n  const atomById='''
+          s2, n = pattern.subn(replacement, s, count=1)
+          if n != 1:
+              raise SystemExit(f'history replacement count={n}')
+          s = s2
+
+          old = '<button type="button" id="chemUndoButton" title="Undo (Ctrl+Z / ⌘Z)" aria-label="Undo last molecular drawing change" disabled>Undo</button>'
+          new = old + '\n          <button type="button" id="chemRedoButton" title="Redo (Ctrl+Y / Ctrl+Shift+Z / ⌘Shift+Z)" aria-label="Redo molecular drawing change" disabled>Redo</button>'
+          if old not in s: raise SystemExit('undo button marker not found')
+          s = s.replace(old, new, 1)
+
+          old = 'dialog.querySelector("#chemUndoButton").addEventListener("click",undo);'
+          new = old + '\n    dialog.querySelector("#chemRedoButton").addEventListener("click",redo);'
+          if old not in s: raise SystemExit('undo listener marker not found')
+          s = s.replace(old, new, 1)
+
+          old = '''      const modifier=e.metaKey||e.ctrlKey;\n      if(modifier&&!e.altKey&&String(e.key).toLowerCase()==="z"){e.preventDefault();undo();return;}'''
+          new = '''      const modifier=e.metaKey||e.ctrlKey,key=String(e.key).toLowerCase();\n      if(modifier&&!e.altKey){\n        if(key==="z"&&e.shiftKey){e.preventDefault();redo();return;}\n        if(key==="z"){e.preventDefault();undo();return;}\n        if(!e.metaKey&&key==="y"){e.preventDefault();redo();return;}\n      }'''
+          if old not in s: raise SystemExit('keyboard marker not found')
+          s = s.replace(old, new, 1)
+
+          # Add robust lasso geometry helpers after pointInPolygon.
+          marker = '''  function selectedBounds(){'''
+          helpers = '''  function distancePointToSegment(p,a,b){\n    const dx=b.x-a.x,dy=b.y-a.y,len2=dx*dx+dy*dy;if(len2<1e-9)return Math.hypot(p.x-a.x,p.y-a.y);\n    const t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/len2)),x=a.x+t*dx,y=a.y+t*dy;return Math.hypot(p.x-x,p.y-y);\n  }\n  function lassoContainsAtom(atom,poly,radius=19){\n    const center={x:atom.x,y:atom.y};\n    if(pointInPolygon(center,poly))return true;\n    for(let i=0;i<poly.length;i++)if(distancePointToSegment(center,poly[i],poly[(i+1)%poly.length])<=radius)return true;\n    return false;\n  }\n  function setActiveChemTool(name){\n    tool=name;pendingAtom=null;pendingFuseBond=null;transformDrag=null;selectionBox=null;lasso=null;\n    dialog?.querySelectorAll("[data-chem-tool]").forEach(button=>button.classList.toggle("active",button.dataset.chemTool===name));\n  }\n\n'''
+          if marker not in s: raise SystemExit('selectedBounds marker not found')
+          s = s.replace(marker, helpers + marker, 1)
+
+          old = '''    if(lasso&&e.pointerId===lasso.pointer){\n      const current=lasso,poly=current.points;\n      if(!current.additive)selectedAtoms.clear();\n      if(poly.length>=3){\n        graph.atoms.filter(a=>{\n          if(pointInPolygon({x:a.x,y:a.y},poly))return true;\n          const r=14;\n          return [[r,0],[-r,0],[0,r],[0,-r]].some(([dx,dy])=>pointInPolygon({x:a.x+dx,y:a.y+dy},poly));\n        }).forEach(a=>selectedAtoms.add(a.id));\n      }\n      selectedAtom=[...selectedAtoms].at(-1)||null;lasso=null;\n      if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);\n      if(selectedAtom){const a=atomById(selectedAtom);if(a)syncTextControls(a.textStyle||textDefaults);}\n      render();validate();return;\n    }'''
+          new = '''    if(lasso&&e.pointerId===lasso.pointer){\n      const current=lasso,end=point(e),last=current.points.at(-1);\n      if(!last||Math.hypot(end.x-last.x,end.y-last.y)>1)current.points.push(end);\n      const poly=current.points;\n      if(!current.additive)selectedAtoms.clear();\n      if(poly.length>=3)graph.atoms.filter(a=>lassoContainsAtom(a,poly)).forEach(a=>selectedAtoms.add(a.id));\n      selectedAtom=[...selectedAtoms].at(-1)||null;\n      if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);\n      const count=selectedAtoms.size;\n      if(selectedAtom){const a=atomById(selectedAtom);if(a)syncTextControls(a.textStyle||textDefaults);}\n      setActiveChemTool("select");\n      render();validate();\n      status.textContent=count?`Lasso selected ${count} atom${count===1?"":"s"}. Drag the selection or use the resize/rotate handles.`:"No atoms were inside the lasso. Try drawing a wider loop around the atom centers.";\n      return;\n    }'''
+          if old not in s: raise SystemExit('lasso pointerup marker not found')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
+
+          # Bump browser cache for the chemistry editor.
+          idx = Path('index.html')
+          t = idx.read_text()
+          if 'chemistry-editor.js?v=chem-editor-10' not in t: raise SystemExit('chemistry editor cache marker not found')
+          idx.write_text(t.replace('chemistry-editor.js?v=chem-editor-10','chemistry-editor.js?v=chem-editor-11',1))
+
+          test = r'''import { chromium } from "playwright";
+import assert from "node:assert/strict";
+
+const browser=await chromium.launch({headless:true});
+const page=await browser.newPage({viewport:{width:1280,height:900}});
+const errors=[];
+page.on("pageerror",error=>errors.push(String(error)));
+await page.goto("http://127.0.0.1:4173/?page=drawing",{waitUntil:"networkidle"});
+
+async function userToClient(x,y){
+  return page.evaluate(({x,y})=>{
+    const svg=document.querySelector("#chemEditorSvg"),pt=svg.createSVGPoint();pt.x=x;pt.y=y;
+    const out=pt.matrixTransform(svg.getScreenCTM());return {x:out.x,y:out.y};
+  },{x,y});
+}
+
+// Lasso a real adenine structure and verify it becomes an actionable selection.
+await page.evaluate(()=>MoleculeEditor.openBase("A"));
+await page.locator("#chemEditorDialog").waitFor({state:"visible"});
+await page.locator('[data-chem-tool="lasso"]').click();
+const polygon=[[135,30],[500,30],[500,320],[135,320],[135,30]];
+const first=await userToClient(...polygon[0]);
+await page.mouse.move(first.x,first.y);await page.mouse.down();
+for(let i=1;i<polygon.length;i++){
+  const [sx,sy]=polygon[i-1],[ex,ey]=polygon[i];
+  for(let k=1;k<=8;k++){
+    const p=await userToClient(sx+(ex-sx)*k/8,sy+(ey-sy)*k/8);await page.mouse.move(p.x,p.y);
+  }
+}
+await page.mouse.up();
+const lassoResult=await page.evaluate(()=>({selected:document.querySelectorAll("#chemEditorSvg .chem-editor-atom.selected").length,selectActive:document.querySelector('[data-chem-tool="select"]')?.classList.contains("active"),status:document.querySelector("#chemEditorStatus")?.textContent||""}));
+assert.ok(lassoResult.selected>=8,`Expected lasso to select most adenine atoms; got ${lassoResult.selected}. ${lassoResult.status}`);
+assert.equal(lassoResult.selectActive,true,"Lasso should return to Select / move so the selection is immediately usable.");
+
+// Verify Undo/Redo buttons and Windows + Mac keyboard conventions.
+await page.evaluate(()=>MoleculeEditor.openBlank());
+await page.locator('[data-chem-tool="atom"]').click();
+const center=await userToClient(410,235);await page.mouse.click(center.x,center.y);
+const atomCount=()=>page.locator("#chemEditorSvg .chem-editor-atom").count();
+assert.equal(await atomCount(),1,"Add atom should create one atom.");
+await page.keyboard.press("Control+z");assert.equal(await atomCount(),0,"Ctrl+Z should undo on Windows/Linux.");
+await page.keyboard.press("Control+y");assert.equal(await atomCount(),1,"Ctrl+Y should redo on Windows/Linux.");
+await page.keyboard.press("Meta+z");assert.equal(await atomCount(),0,"Command+Z should undo on Mac.");
+await page.keyboard.press("Meta+Shift+z");assert.equal(await atomCount(),1,"Command+Shift+Z should redo on Mac.");
+assert.equal(await page.locator("#chemRedoButton").count(),1,"Visible Redo button should exist.");
+assert.equal(errors.length,0,`Browser errors: ${errors.join(" | ")}`);
+console.log(JSON.stringify({result:"PASS",lassoSelected:lassoResult.selected,redoShortcuts:"PASS"},null,2));
+await browser.close();
+'''
+          Path('tests/molecular-editor-history-browser.mjs').write_text(test)
+
+          wf = Path('.github/workflows/learning-advanced-smoke.yml')
+          w = wf.read_text()
+          needle = '          node tests/utility-hover-browser.mjs\n          node tests/learning-advanced-complete-browser.mjs\n'
+          repl = '          node tests/utility-hover-browser.mjs\n          node tests/molecular-editor-history-browser.mjs\n          node tests/learning-advanced-complete-browser.mjs\n'
+          if needle not in w: raise SystemExit('browser workflow marker not found')
+          wf.write_text(w.replace(needle,repl,1))
+          PY
+      - name: Validate JavaScript syntax
+        run: node --check chemistry-editor.js && node --check tests/molecular-editor-history-browser.mjs
+      - name: Install browser test dependency
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Run molecular editor interaction browser test
+        run: |
+          python3 -m http.server 4173 > /tmp/rna-explorer-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID' EXIT
+          node tests/molecular-editor-history-browser.mjs
+      - name: Commit tested patch and remove temporary workflow
+        run: |
+          rm .github/workflows/patch-molecular-drawing-history.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add chemistry-editor.js index.html tests/molecular-editor-history-browser.mjs .github/workflows/learning-advanced-smoke.yml .github/workflows/patch-molecular-drawing-history.yml
+          git commit -m 'Fix molecular lasso selection and add redo history'
+          git push
