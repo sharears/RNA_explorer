@@ -1,0 +1,102 @@
+name: Patch molecular drawing undo and lasso
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Patch chemistry editor
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('chemistry-editor.js')
+          s=p.read_text()
+
+          old='''  let graph={atoms:[],bonds:[],hbonds:[]},tool="select",element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,lasso=null,transformDrag=null,pendingFuseBond=null,onSave=null;\n  let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false,showAtomLabels=true,showAtomNumbers=false;\n  let textDefaults={...DEFAULT_TEXT_STYLE};'''
+          new='''  let graph={atoms:[],bonds:[],hbonds:[]},tool="select",element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,lasso=null,transformDrag=null,pendingFuseBond=null,onSave=null;\n  let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false,showAtomLabels=true,showAtomNumbers=false;\n  let textDefaults={...DEFAULT_TEXT_STYLE};\n  let undoStack=[];\n  const UNDO_LIMIT=80;\n\n  function historySnapshot(){\n    return JSON.stringify({graph,atomSerial,bondSerial,hbondSerial,textDefaults});\n  }\n  function syncUndoButton(){\n    const button=dialog?.querySelector("#chemUndoButton");\n    if(button)button.disabled=undoStack.length===0;\n  }\n  function resetUndoHistory(){undoStack=[];syncUndoButton();}\n  function pushUndo(){\n    const snapshot=historySnapshot();\n    if(undoStack.at(-1)!==snapshot)undoStack.push(snapshot);\n    if(undoStack.length>UNDO_LIMIT)undoStack.splice(0,undoStack.length-UNDO_LIMIT);\n    syncUndoButton();\n  }\n  function undo(){\n    if(!undoStack.length){status.textContent="Nothing to undo.";syncUndoButton();return false;}\n    const current=historySnapshot();\n    let snapshot=null;\n    while(undoStack.length){\n      const candidate=undoStack.pop();\n      if(candidate!==current){snapshot=candidate;break;}\n    }\n    if(!snapshot){status.textContent="Nothing to undo.";syncUndoButton();return false;}\n    const state=JSON.parse(snapshot);\n    graph=state.graph;atomSerial=state.atomSerial;bondSerial=state.bondSerial;hbondSerial=state.hbondSerial;textDefaults=state.textDefaults||{...DEFAULT_TEXT_STYLE};\n    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionBox=null;lasso=null;\n    syncTextControls(textDefaults);render();validate();syncUndoButton();status.textContent="Undid the last molecular drawing change.";return true;\n  }'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='''          <button type="button" data-chem-tool="select" class="active">Select / move</button>\n          <button type="button" data-chem-tool="lasso">Lasso select</button>'''
+          new='''          <button type="button" id="chemUndoButton" title="Undo (Ctrl+Z / ⌘Z)" aria-label="Undo last molecular drawing change" disabled>Undo</button>\n          <button type="button" data-chem-tool="select" class="active">Select / move</button>\n          <button type="button" data-chem-tool="lasso">Lasso select</button>'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='''    dialog.querySelector("#chemEditorClose").addEventListener("click",()=>dialog.close());\n    dialog.querySelectorAll("[data-chem-tool]").forEach(b=>b.addEventListener("click",()=>{'''
+          new='''    dialog.querySelector("#chemEditorClose").addEventListener("click",()=>dialog.close());\n    dialog.querySelector("#chemUndoButton").addEventListener("click",undo);\n    dialog.querySelectorAll("[data-chem-tool]").forEach(b=>b.addEventListener("click",()=>{'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          s=s.replace('''    dialog.querySelector("#chemElement").addEventListener("change",e=>{\n      element=e.target.value;\n      if(selectedAtom){const a=atomById(selectedAtom);if(a){a.element=element;a.label=element;invalidateIupac();render();validate();}}\n    });''','''    dialog.querySelector("#chemElement").addEventListener("change",e=>{\n      element=e.target.value;\n      if(selectedAtom){const a=atomById(selectedAtom);if(a){pushUndo();a.element=element;a.label=element;invalidateIupac();render();validate();}}\n    });''',1)
+
+          s=s.replace('''    dialog.querySelector("#chemInsertRing").addEventListener("click",()=>insertRing(dialog.querySelector("#chemRingTemplate").value));''','''    dialog.querySelector("#chemInsertRing").addEventListener("click",()=>{pushUndo();insertRing(dialog.querySelector("#chemRingTemplate").value);});''',1)
+          s=s.replace('''    dialog.querySelector("#chemApplyTextStyle").addEventListener("click",applyTextStyleFromControls);''','''    dialog.querySelector("#chemApplyTextStyle").addEventListener("click",()=>{pushUndo();applyTextStyleFromControls();});''',1)
+          s=s.replace('''    dialog.querySelector("#chemEditorReset").addEventListener("click",()=>loadCurrent());''','''    dialog.querySelector("#chemEditorReset").addEventListener("click",()=>{pushUndo();loadCurrent();});''',1)
+          s=s.replace('''    dialog.querySelector("#chemLoadPair").addEventListener("click",()=>{graph=mergePair(leftBase,rightBase);renumber();render();validate();});''','''    dialog.querySelector("#chemLoadPair").addEventListener("click",()=>{pushUndo();graph=mergePair(leftBase,rightBase);renumber();render();validate();});''',1)
+          s=s.replace('''      graph=pairTemplate(k,leftBase,rightBase);renumber();render();validate();''','''      pushUndo();graph=pairTemplate(k,leftBase,rightBase);renumber();render();validate();''',1)
+
+          old='''    dialog.addEventListener("keydown",e=>{\n      if(e.key==="Escape"&&lasso){lasso=null;render();return;}'''
+          new='''    dialog.addEventListener("keydown",e=>{\n      const modifier=e.metaKey||e.ctrlKey;\n      if(modifier&&!e.altKey&&String(e.key).toLowerCase()==="z"){e.preventDefault();undo();return;}\n      if(e.key==="Escape"&&lasso){lasso=null;render();return;}'''
+          assert old in s
+          s=s.replace(old,new,1)
+          s=s.replace('''        e.preventDefault();deleteAtoms(selectedAtoms.size?[...selectedAtoms]:[selectedAtom]);selectedAtom=null;render();validate();''','''        e.preventDefault();pushUndo();deleteAtoms(selectedAtoms.size?[...selectedAtoms]:[selectedAtom]);selectedAtom=null;render();validate();''',1)
+
+          old='''  function point(event){\n    const rect=svg.getBoundingClientRect();\n    return {x:(event.clientX-rect.left)/rect.width*820,y:(event.clientY-rect.top)/rect.height*470};\n  }'''
+          new='''  function point(event){\n    // Convert pointer coordinates through the SVG transform itself. The previous\n    // rect-based mapping ignored preserveAspectRatio letterboxing, which made\n    // lasso geometry miss the atoms on many window sizes.\n    const ctm=svg.getScreenCTM?.();\n    if(ctm&&typeof DOMPoint!=="undefined"){\n      try{\n        const p=new DOMPoint(event.clientX,event.clientY).matrixTransform(ctm.inverse());\n        if(Number.isFinite(p.x)&&Number.isFinite(p.y))return {x:p.x,y:p.y};\n      }catch(_error){}\n    }\n    const rect=svg.getBoundingClientRect(),vb=svg.viewBox?.baseVal;\n    const width=vb?.width||820,height=vb?.height||470,x0=vb?.x||0,y0=vb?.y||0;\n    return {x:x0+(event.clientX-rect.left)/Math.max(1,rect.width)*width,y:y0+(event.clientY-rect.top)/Math.max(1,rect.height)*height};\n  }'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='''  function canvasPointerDown(e){\n    if(e.button!==0)return;\n    if(tool==="lasso"){'''
+          new='''  function canvasPointerDown(e){\n    if(e.button!==0)return;\n    if(tool==="lasso"){'''
+          assert old in s
+          # Insert checkpoint after lasso early-return block, before transforms/mutations.
+          marker='''      svg.setPointerCapture?.(e.pointerId);render();return;\n    }\n    const transformEl=e.target.closest?.("[data-transform-handle]");'''
+          replacement='''      svg.setPointerCapture?.(e.pointerId);render();return;\n    }\n    pushUndo();\n    const transformEl=e.target.closest?.("[data-transform-handle]");'''
+          assert marker in s
+          s=s.replace(marker,replacement,1)
+
+          # Make lasso more forgiving: include atom centers and atom-circle intersections, and close the visible polygon.
+          old='''      if(poly.length>=3)graph.atoms.filter(a=>pointInPolygon({x:a.x,y:a.y},poly)).forEach(a=>selectedAtoms.add(a.id));'''
+          new='''      if(poly.length>=3){\n        graph.atoms.filter(a=>{\n          if(pointInPolygon({x:a.x,y:a.y},poly))return true;\n          const r=14;\n          return [[r,0],[-r,0],[0,r],[0,-r]].some(([dx,dy])=>pointInPolygon({x:a.x+dx,y:a.y+dy},poly));\n        }).forEach(a=>selectedAtoms.add(a.id));\n      }'''
+          assert old in s
+          s=s.replace(old,new,1)
+          s=s.replace('''      path.setAttribute("points",lasso.points.map(p=>p.x+","+p.y).join(" "));svg.append(path);''','''      const pts=lasso.points;path.setAttribute("points",[...pts,pts[0]].map(p=>p.x+","+p.y).join(" "));svg.append(path);''',1)
+
+          old='''  function changeCharge(delta){\n    const ids=selectedAtoms.size?[...selectedAtoms]:(selectedAtom?[selectedAtom]:[]);\n    if(!ids.length){status.textContent="Select one or more atoms first.";return;}\n    ids.forEach(id=>{const a=atomById(id);if(a)a.charge=Math.max(-4,Math.min(4,(a.charge||0)+delta));});'''
+          new='''  function changeCharge(delta){\n    const ids=selectedAtoms.size?[...selectedAtoms]:(selectedAtom?[selectedAtom]:[]);\n    if(!ids.length){status.textContent="Select one or more atoms first.";return;}\n    pushUndo();\n    ids.forEach(id=>{const a=atomById(id);if(a)a.charge=Math.max(-4,Math.min(4,(a.charge||0)+delta));});'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          # Fresh history for each editor opening.
+          s=s.replace('''    graph=graphFromBase(base);renumber();render();validate();dialog.showModal();''','''    graph=graphFromBase(base);renumber();resetUndoHistory();render();validate();dialog.showModal();''',1)
+          s=s.replace('''    renumber();render();validate();dialog.showModal();\n  }\n  function openBlank''','''    renumber();resetUndoHistory();render();validate();dialog.showModal();\n  }\n  function openBlank''',1)
+          s=s.replace('''    graph={atoms:[],bonds:[],hbonds:[],iupac:null};renumber();render();validate();''','''    graph={atoms:[],bonds:[],hbonds:[],iupac:null};renumber();resetUndoHistory();render();validate();''',1)
+
+          p.write_text(s)
+
+          idx=Path('index.html')
+          html=idx.read_text()
+          html=html.replace('chemistry-editor.js?v=chem-editor-9','chemistry-editor.js?v=chem-editor-10')
+          idx.write_text(html)
+          PY
+      - name: Validate JavaScript
+        run: |
+          node --check chemistry-editor.js
+          grep -q 'id="chemUndoButton"' chemistry-editor.js
+          grep -q 'getScreenCTM' chemistry-editor.js
+          grep -q 'e.metaKey||e.ctrlKey' chemistry-editor.js
+      - name: Commit patch and remove temporary workflow
+        run: |
+          rm .github/workflows/patch-molecular-drawing.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add chemistry-editor.js index.html .github/workflows/patch-molecular-drawing.yml
+          git commit -m "Add molecular drawing undo and repair lasso selection"
+          git push
