@@ -178,36 +178,45 @@ const MoleculeEditor = (() => {
   let graph={atoms:[],bonds:[],hbonds:[]},tool="select",element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,lasso=null,transformDrag=null,pendingFuseBond=null,onSave=null;
   let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false,showAtomLabels=true,showAtomNumbers=false;
   let textDefaults={...DEFAULT_TEXT_STYLE};
-  let undoStack=[];
-  const UNDO_LIMIT=80;
+  let undoStack=[],redoStack=[];
+  const HISTORY_LIMIT=80;
 
   function historySnapshot(){
     return JSON.stringify({graph,atomSerial,bondSerial,hbondSerial,textDefaults});
   }
   function syncUndoButton(){
-    const button=dialog?.querySelector("#chemUndoButton");
-    if(button)button.disabled=undoStack.length===0;
+    const undoButton=dialog?.querySelector("#chemUndoButton"),redoButton=dialog?.querySelector("#chemRedoButton");
+    if(undoButton)undoButton.disabled=undoStack.length===0;
+    if(redoButton)redoButton.disabled=redoStack.length===0;
   }
-  function resetUndoHistory(){undoStack=[];syncUndoButton();}
+  function resetUndoHistory(){undoStack=[];redoStack=[];syncUndoButton();}
+  function trimHistory(stack){if(stack.length>HISTORY_LIMIT)stack.splice(0,stack.length-HISTORY_LIMIT);}
   function pushUndo(){
     const snapshot=historySnapshot();
     if(undoStack.at(-1)!==snapshot)undoStack.push(snapshot);
-    if(undoStack.length>UNDO_LIMIT)undoStack.splice(0,undoStack.length-UNDO_LIMIT);
-    syncUndoButton();
+    trimHistory(undoStack);redoStack=[];syncUndoButton();
   }
-  function undo(){
-    if(!undoStack.length){status.textContent="Nothing to undo.";syncUndoButton();return false;}
-    const current=historySnapshot();
-    let snapshot=null;
-    while(undoStack.length){
-      const candidate=undoStack.pop();
-      if(candidate!==current){snapshot=candidate;break;}
-    }
-    if(!snapshot){status.textContent="Nothing to undo.";syncUndoButton();return false;}
+  function restoreHistorySnapshot(snapshot,message){
     const state=JSON.parse(snapshot);
     graph=state.graph;atomSerial=state.atomSerial;bondSerial=state.bondSerial;hbondSerial=state.hbondSerial;textDefaults=state.textDefaults||{...DEFAULT_TEXT_STYLE};
     selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionBox=null;lasso=null;
-    syncTextControls(textDefaults);render();validate();syncUndoButton();status.textContent="Undid the last molecular drawing change.";return true;
+    syncTextControls(textDefaults);render();validate();syncUndoButton();status.textContent=message;return true;
+  }
+  function undo(){
+    if(!undoStack.length){status.textContent="Nothing to undo.";syncUndoButton();return false;}
+    const current=historySnapshot();let snapshot=null;
+    while(undoStack.length){const candidate=undoStack.pop();if(candidate!==current){snapshot=candidate;break;}}
+    if(!snapshot){status.textContent="Nothing to undo.";syncUndoButton();return false;}
+    if(redoStack.at(-1)!==current)redoStack.push(current);trimHistory(redoStack);
+    return restoreHistorySnapshot(snapshot,"Undid the last molecular drawing change.");
+  }
+  function redo(){
+    if(!redoStack.length){status.textContent="Nothing to redo.";syncUndoButton();return false;}
+    const current=historySnapshot();let snapshot=null;
+    while(redoStack.length){const candidate=redoStack.pop();if(candidate!==current){snapshot=candidate;break;}}
+    if(!snapshot){status.textContent="Nothing to redo.";syncUndoButton();return false;}
+    if(undoStack.at(-1)!==current)undoStack.push(current);trimHistory(undoStack);
+    return restoreHistorySnapshot(snapshot,"Redid the molecular drawing change.");
   }
 
   const atomById=id=>graph.atoms.find(a=>a.id===id);
@@ -221,6 +230,7 @@ const MoleculeEditor = (() => {
         <header><div><p class="eyebrow">RNA chemistry editor</p><h2 id="chemEditorTitle">Nucleobase editor</h2></div><button id="chemEditorClose" class="chem-editor-close" type="button" aria-label="Close">×</button></header>
         <div class="chem-editor-toolbar" role="toolbar" aria-label="Molecular drawing tools">
           <button type="button" id="chemUndoButton" title="Undo (Ctrl+Z / ⌘Z)" aria-label="Undo last molecular drawing change" disabled>Undo</button>
+          <button type="button" id="chemRedoButton" title="Redo (Ctrl+Y / Ctrl+Shift+Z / ⌘Shift+Z)" aria-label="Redo molecular drawing change" disabled>Redo</button>
           <button type="button" data-chem-tool="select" class="active">Select / move</button>
           <button type="button" data-chem-tool="lasso">Lasso select</button>
           <button type="button" id="chemSelectAll">Select all</button>
@@ -286,6 +296,7 @@ const MoleculeEditor = (() => {
     svg=dialog.querySelector("#chemEditorSvg");status=dialog.querySelector("#chemEditorStatus");title=dialog.querySelector("#chemEditorTitle");
     dialog.querySelector("#chemEditorClose").addEventListener("click",()=>dialog.close());
     dialog.querySelector("#chemUndoButton").addEventListener("click",undo);
+    dialog.querySelector("#chemRedoButton").addEventListener("click",redo);
     dialog.querySelectorAll("[data-chem-tool]").forEach(b=>b.addEventListener("click",()=>{
       tool=b.dataset.chemTool;pendingAtom=null;pendingFuseBond=null;transformDrag=null;selectionBox=null;lasso=null;
       dialog.querySelectorAll("[data-chem-tool]").forEach(x=>x.classList.toggle("active",x===b));render();
@@ -357,8 +368,12 @@ const MoleculeEditor = (() => {
       e.preventDefault();selectAtoms(covalentComponent(atomEl.dataset.atomId));render();validate();
     });
     dialog.addEventListener("keydown",e=>{
-      const modifier=e.metaKey||e.ctrlKey;
-      if(modifier&&!e.altKey&&String(e.key).toLowerCase()==="z"){e.preventDefault();undo();return;}
+      const modifier=e.metaKey||e.ctrlKey,key=String(e.key).toLowerCase();
+      if(modifier&&!e.altKey){
+        if(key==="z"&&e.shiftKey){e.preventDefault();redo();return;}
+        if(key==="z"){e.preventDefault();undo();return;}
+        if(!e.metaKey&&key==="y"){e.preventDefault();redo();return;}
+      }
       if(e.key==="Escape"&&lasso){lasso=null;render();return;}
       if(e.key==="Escape"&&selectedAtoms.size){selectedAtoms.clear();selectedAtom=null;render();return;}
       if((e.key==="Delete"||e.key==="Backspace")&&(selectedAtoms.size||selectedAtom)){
@@ -479,6 +494,20 @@ const MoleculeEditor = (() => {
       if(cross)inside=!inside;
     }
     return inside;
+  }
+
+  function distancePointToSegment(p,a,b){
+    const dx=b.x-a.x,dy=b.y-a.y,len2=dx*dx+dy*dy;if(len2<1e-9)return Math.hypot(p.x-a.x,p.y-a.y);
+    const t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/len2)),x=a.x+t*dx,y=a.y+t*dy;return Math.hypot(p.x-x,p.y-y);
+  }
+  function lassoContainsAtom(atom,poly,radius=19){
+    const center={x:atom.x,y:atom.y};if(pointInPolygon(center,poly))return true;
+    for(let i=0;i<poly.length;i++)if(distancePointToSegment(center,poly[i],poly[(i+1)%poly.length])<=radius)return true;
+    return false;
+  }
+  function setActiveChemTool(name){
+    tool=name;pendingAtom=null;pendingFuseBond=null;transformDrag=null;selectionBox=null;lasso=null;
+    dialog?.querySelectorAll("[data-chem-tool]").forEach(button=>button.classList.toggle("active",button.dataset.chemTool===name));
   }
 
   function selectedBounds(){
@@ -665,19 +694,16 @@ const MoleculeEditor = (() => {
   function canvasPointerUp(e){
     if(transformDrag&&e.pointerId===transformDrag.pointer){transformDrag=null;if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);invalidateIupac();render();validate();return;}
     if(lasso&&e.pointerId===lasso.pointer){
-      const current=lasso,poly=current.points;
-      if(!current.additive)selectedAtoms.clear();
-      if(poly.length>=3){
-        graph.atoms.filter(a=>{
-          if(pointInPolygon({x:a.x,y:a.y},poly))return true;
-          const r=14;
-          return [[r,0],[-r,0],[0,r],[0,-r]].some(([dx,dy])=>pointInPolygon({x:a.x+dx,y:a.y+dy},poly));
-        }).forEach(a=>selectedAtoms.add(a.id));
-      }
-      selectedAtom=[...selectedAtoms].at(-1)||null;lasso=null;
+      const current=lasso,end=point(e),last=current.points.at(-1);
+      if(!last||Math.hypot(end.x-last.x,end.y-last.y)>1)current.points.push(end);
+      const poly=current.points;if(!current.additive)selectedAtoms.clear();
+      if(poly.length>=3)graph.atoms.filter(a=>lassoContainsAtom(a,poly)).forEach(a=>selectedAtoms.add(a.id));
+      selectedAtom=[...selectedAtoms].at(-1)||null;
       if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);
-      if(selectedAtom){const a=atomById(selectedAtom);if(a)syncTextControls(a.textStyle||textDefaults);}
-      render();validate();return;
+      const count=selectedAtoms.size;if(selectedAtom){const a=atomById(selectedAtom);if(a)syncTextControls(a.textStyle||textDefaults);}
+      setActiveChemTool("select");render();validate();
+      status.textContent=count?`Lasso selected ${count} atom${count===1?"":"s"}. Drag the selection or use the resize/rotate handles.`:"No atoms were inside the lasso. Try drawing a wider loop around the atom centers.";
+      return;
     }
     if(drag&&e.pointerId===drag.pointer){drag=null;if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);validate();return;}
     if(selectionBox&&e.pointerId===selectionBox.pointer){
