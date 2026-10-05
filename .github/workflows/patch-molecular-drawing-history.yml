@@ -1,147 +1,39 @@
 name: Patch molecular drawing lasso and redo
-
 on:
   push:
     paths:
-      - '.github/workflows/patch-molecular-drawing-history.yml'
-
+      - .github/workflows/patch-molecular-drawing-history.yml
 permissions:
   contents: write
-
 jobs:
-  patch-and-test:
+  patch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Patch molecular drawing history and lasso
+      - name: Apply patch
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          p = Path('chemistry-editor.js')
-          s = p.read_text()
-
-          # Replace one-way undo history with paired undo/redo history.
-          pattern = re.compile(r'''  let undoStack=\[\];\n  const UNDO_LIMIT=80;\n\n  function historySnapshot\(\)\{.*?\n  \}\n\n  const atomById=''', re.S)
-          replacement = '''  let undoStack=[],redoStack=[];\n  const HISTORY_LIMIT=80;\n\n  function historySnapshot(){\n    return JSON.stringify({graph,atomSerial,bondSerial,hbondSerial,textDefaults});\n  }\n  function syncUndoButton(){\n    const undoButton=dialog?.querySelector("#chemUndoButton"),redoButton=dialog?.querySelector("#chemRedoButton");\n    if(undoButton)undoButton.disabled=undoStack.length===0;\n    if(redoButton)redoButton.disabled=redoStack.length===0;\n  }\n  function resetUndoHistory(){undoStack=[];redoStack=[];syncUndoButton();}\n  function trimHistory(stack){if(stack.length>HISTORY_LIMIT)stack.splice(0,stack.length-HISTORY_LIMIT);}\n  function pushUndo(){\n    const snapshot=historySnapshot();\n    if(undoStack.at(-1)!==snapshot)undoStack.push(snapshot);\n    trimHistory(undoStack);\n    redoStack=[];\n    syncUndoButton();\n  }\n  function restoreHistorySnapshot(snapshot,message){\n    const state=JSON.parse(snapshot);\n    graph=state.graph;atomSerial=state.atomSerial;bondSerial=state.bondSerial;hbondSerial=state.hbondSerial;textDefaults=state.textDefaults||{...DEFAULT_TEXT_STYLE};\n    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionBox=null;lasso=null;\n    syncTextControls(textDefaults);render();validate();syncUndoButton();status.textContent=message;return true;\n  }\n  function undo(){\n    if(!undoStack.length){status.textContent="Nothing to undo.";syncUndoButton();return false;}\n    const current=historySnapshot();\n    let snapshot=null;\n    while(undoStack.length){const candidate=undoStack.pop();if(candidate!==current){snapshot=candidate;break;}}\n    if(!snapshot){status.textContent="Nothing to undo.";syncUndoButton();return false;}\n    if(redoStack.at(-1)!==current)redoStack.push(current);trimHistory(redoStack);\n    return restoreHistorySnapshot(snapshot,"Undid the last molecular drawing change.");\n  }\n  function redo(){\n    if(!redoStack.length){status.textContent="Nothing to redo.";syncUndoButton();return false;}\n    const current=historySnapshot();\n    let snapshot=null;\n    while(redoStack.length){const candidate=redoStack.pop();if(candidate!==current){snapshot=candidate;break;}}\n    if(!snapshot){status.textContent="Nothing to redo.";syncUndoButton();return false;}\n    if(undoStack.at(-1)!==current)undoStack.push(current);trimHistory(undoStack);\n    return restoreHistorySnapshot(snapshot,"Redid the molecular drawing change.");\n  }\n\n  const atomById='''
-          s2, n = pattern.subn(replacement, s, count=1)
-          if n != 1:
-              raise SystemExit(f'history replacement count={n}')
-          s = s2
-
-          old = '<button type="button" id="chemUndoButton" title="Undo (Ctrl+Z / ⌘Z)" aria-label="Undo last molecular drawing change" disabled>Undo</button>'
-          new = old + '\n          <button type="button" id="chemRedoButton" title="Redo (Ctrl+Y / Ctrl+Shift+Z / ⌘Shift+Z)" aria-label="Redo molecular drawing change" disabled>Redo</button>'
-          if old not in s: raise SystemExit('undo button marker not found')
-          s = s.replace(old, new, 1)
-
-          old = 'dialog.querySelector("#chemUndoButton").addEventListener("click",undo);'
-          new = old + '\n    dialog.querySelector("#chemRedoButton").addEventListener("click",redo);'
-          if old not in s: raise SystemExit('undo listener marker not found')
-          s = s.replace(old, new, 1)
-
-          old = '''      const modifier=e.metaKey||e.ctrlKey;\n      if(modifier&&!e.altKey&&String(e.key).toLowerCase()==="z"){e.preventDefault();undo();return;}'''
-          new = '''      const modifier=e.metaKey||e.ctrlKey,key=String(e.key).toLowerCase();\n      if(modifier&&!e.altKey){\n        if(key==="z"&&e.shiftKey){e.preventDefault();redo();return;}\n        if(key==="z"){e.preventDefault();undo();return;}\n        if(!e.metaKey&&key==="y"){e.preventDefault();redo();return;}\n      }'''
-          if old not in s: raise SystemExit('keyboard marker not found')
-          s = s.replace(old, new, 1)
-
-          # Add robust lasso geometry helpers after pointInPolygon.
-          marker = '''  function selectedBounds(){'''
-          helpers = '''  function distancePointToSegment(p,a,b){\n    const dx=b.x-a.x,dy=b.y-a.y,len2=dx*dx+dy*dy;if(len2<1e-9)return Math.hypot(p.x-a.x,p.y-a.y);\n    const t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/len2)),x=a.x+t*dx,y=a.y+t*dy;return Math.hypot(p.x-x,p.y-y);\n  }\n  function lassoContainsAtom(atom,poly,radius=19){\n    const center={x:atom.x,y:atom.y};\n    if(pointInPolygon(center,poly))return true;\n    for(let i=0;i<poly.length;i++)if(distancePointToSegment(center,poly[i],poly[(i+1)%poly.length])<=radius)return true;\n    return false;\n  }\n  function setActiveChemTool(name){\n    tool=name;pendingAtom=null;pendingFuseBond=null;transformDrag=null;selectionBox=null;lasso=null;\n    dialog?.querySelectorAll("[data-chem-tool]").forEach(button=>button.classList.toggle("active",button.dataset.chemTool===name));\n  }\n\n'''
-          if marker not in s: raise SystemExit('selectedBounds marker not found')
-          s = s.replace(marker, helpers + marker, 1)
-
-          old = '''    if(lasso&&e.pointerId===lasso.pointer){\n      const current=lasso,poly=current.points;\n      if(!current.additive)selectedAtoms.clear();\n      if(poly.length>=3){\n        graph.atoms.filter(a=>{\n          if(pointInPolygon({x:a.x,y:a.y},poly))return true;\n          const r=14;\n          return [[r,0],[-r,0],[0,r],[0,-r]].some(([dx,dy])=>pointInPolygon({x:a.x+dx,y:a.y+dy},poly));\n        }).forEach(a=>selectedAtoms.add(a.id));\n      }\n      selectedAtom=[...selectedAtoms].at(-1)||null;lasso=null;\n      if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);\n      if(selectedAtom){const a=atomById(selectedAtom);if(a)syncTextControls(a.textStyle||textDefaults);}\n      render();validate();return;\n    }'''
-          new = '''    if(lasso&&e.pointerId===lasso.pointer){\n      const current=lasso,end=point(e),last=current.points.at(-1);\n      if(!last||Math.hypot(end.x-last.x,end.y-last.y)>1)current.points.push(end);\n      const poly=current.points;\n      if(!current.additive)selectedAtoms.clear();\n      if(poly.length>=3)graph.atoms.filter(a=>lassoContainsAtom(a,poly)).forEach(a=>selectedAtoms.add(a.id));\n      selectedAtom=[...selectedAtoms].at(-1)||null;\n      if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);\n      const count=selectedAtoms.size;\n      if(selectedAtom){const a=atomById(selectedAtom);if(a)syncTextControls(a.textStyle||textDefaults);}\n      setActiveChemTool("select");\n      render();validate();\n      status.textContent=count?`Lasso selected ${count} atom${count===1?"":"s"}. Drag the selection or use the resize/rotate handles.`:"No atoms were inside the lasso. Try drawing a wider loop around the atom centers.";\n      return;\n    }'''
-          if old not in s: raise SystemExit('lasso pointerup marker not found')
-          s = s.replace(old, new, 1)
-
-          p.write_text(s)
-
-          # Bump browser cache for the chemistry editor.
-          idx = Path('index.html')
-          t = idx.read_text()
-          if 'chemistry-editor.js?v=chem-editor-10' not in t: raise SystemExit('chemistry editor cache marker not found')
-          idx.write_text(t.replace('chemistry-editor.js?v=chem-editor-10','chemistry-editor.js?v=chem-editor-11',1))
-
-          test = r'''import { chromium } from "playwright";
-import assert from "node:assert/strict";
-
-const browser=await chromium.launch({headless:true});
-const page=await browser.newPage({viewport:{width:1280,height:900}});
-const errors=[];
-page.on("pageerror",error=>errors.push(String(error)));
-await page.goto("http://127.0.0.1:4173/?page=drawing",{waitUntil:"networkidle"});
-
-async function userToClient(x,y){
-  return page.evaluate(({x,y})=>{
-    const svg=document.querySelector("#chemEditorSvg"),pt=svg.createSVGPoint();pt.x=x;pt.y=y;
-    const out=pt.matrixTransform(svg.getScreenCTM());return {x:out.x,y:out.y};
-  },{x,y});
-}
-
-// Lasso a real adenine structure and verify it becomes an actionable selection.
-await page.evaluate(()=>MoleculeEditor.openBase("A"));
-await page.locator("#chemEditorDialog").waitFor({state:"visible"});
-await page.locator('[data-chem-tool="lasso"]').click();
-const polygon=[[135,30],[500,30],[500,320],[135,320],[135,30]];
-const first=await userToClient(...polygon[0]);
-await page.mouse.move(first.x,first.y);await page.mouse.down();
-for(let i=1;i<polygon.length;i++){
-  const [sx,sy]=polygon[i-1],[ex,ey]=polygon[i];
-  for(let k=1;k<=8;k++){
-    const p=await userToClient(sx+(ex-sx)*k/8,sy+(ey-sy)*k/8);await page.mouse.move(p.x,p.y);
-  }
-}
-await page.mouse.up();
-const lassoResult=await page.evaluate(()=>({selected:document.querySelectorAll("#chemEditorSvg .chem-editor-atom.selected").length,selectActive:document.querySelector('[data-chem-tool="select"]')?.classList.contains("active"),status:document.querySelector("#chemEditorStatus")?.textContent||""}));
-assert.ok(lassoResult.selected>=8,`Expected lasso to select most adenine atoms; got ${lassoResult.selected}. ${lassoResult.status}`);
-assert.equal(lassoResult.selectActive,true,"Lasso should return to Select / move so the selection is immediately usable.");
-
-// Verify Undo/Redo buttons and Windows + Mac keyboard conventions.
-await page.evaluate(()=>MoleculeEditor.openBlank());
-await page.locator('[data-chem-tool="atom"]').click();
-const center=await userToClient(410,235);await page.mouse.click(center.x,center.y);
-const atomCount=()=>page.locator("#chemEditorSvg .chem-editor-atom").count();
-assert.equal(await atomCount(),1,"Add atom should create one atom.");
-await page.keyboard.press("Control+z");assert.equal(await atomCount(),0,"Ctrl+Z should undo on Windows/Linux.");
-await page.keyboard.press("Control+y");assert.equal(await atomCount(),1,"Ctrl+Y should redo on Windows/Linux.");
-await page.keyboard.press("Meta+z");assert.equal(await atomCount(),0,"Command+Z should undo on Mac.");
-await page.keyboard.press("Meta+Shift+z");assert.equal(await atomCount(),1,"Command+Shift+Z should redo on Mac.");
-assert.equal(await page.locator("#chemRedoButton").count(),1,"Visible Redo button should exist.");
-assert.equal(errors.length,0,`Browser errors: ${errors.join(" | ")}`);
-console.log(JSON.stringify({result:"PASS",lassoSelected:lassoResult.selected,redoShortcuts:"PASS"},null,2));
-await browser.close();
-'''
-          Path('tests/molecular-editor-history-browser.mjs').write_text(test)
-
-          wf = Path('.github/workflows/learning-advanced-smoke.yml')
-          w = wf.read_text()
-          needle = '          node tests/utility-hover-browser.mjs\n          node tests/learning-advanced-complete-browser.mjs\n'
-          repl = '          node tests/utility-hover-browser.mjs\n          node tests/molecular-editor-history-browser.mjs\n          node tests/learning-advanced-complete-browser.mjs\n'
-          if needle not in w: raise SystemExit('browser workflow marker not found')
-          wf.write_text(w.replace(needle,repl,1))
-          PY
-      - name: Validate JavaScript syntax
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCmltcG9ydCByZQoKcCA9IFBhdGgoImNoZW1pc3RyeS1lZGl0b3IuanMiKQpzID0gcC5yZWFkX3RleHQoKQoKcGF0dGVybiA9IHJlLmNvbXBpbGUocicnJyAgbGV0IHVuZG9TdGFjaz1cW1xdOwogIGNvbnN0IFVORE9fTElNSVQ9ODA7CgogIGZ1bmN0aW9uIGhpc3RvcnlTbmFwc2hvdFwoXClcey4qPwogIFx9CgogIGNvbnN0IGF0b21CeUlkPScnJywgcmUuUykKcmVwbGFjZW1lbnQgPSAnJycgIGxldCB1bmRvU3RhY2s9W10scmVkb1N0YWNrPVtdOwogIGNvbnN0IEhJU1RPUllfTElNSVQ9ODA7CgogIGZ1bmN0aW9uIGhpc3RvcnlTbmFwc2hvdCgpewogICAgcmV0dXJuIEpTT04uc3RyaW5naWZ5KHtncmFwaCxhdG9tU2VyaWFsLGJvbmRTZXJpYWwsaGJvbmRTZXJpYWwsdGV4dERlZmF1bHRzfSk7CiAgfQogIGZ1bmN0aW9uIHN5bmNVbmRvQnV0dG9uKCl7CiAgICBjb25zdCB1bmRvQnV0dG9uPWRpYWxvZz8ucXVlcnlTZWxlY3RvcigiI2NoZW1VbmRvQnV0dG9uIikscmVkb0J1dHRvbj1kaWFsb2c/LnF1ZXJ5U2VsZWN0b3IoIiNjaGVtUmVkb0J1dHRvbiIpOwogICAgaWYodW5kb0J1dHRvbil1bmRvQnV0dG9uLmRpc2FibGVkPXVuZG9TdGFjay5sZW5ndGg9PT0wOwogICAgaWYocmVkb0J1dHRvbilyZWRvQnV0dG9uLmRpc2FibGVkPXJlZG9TdGFjay5sZW5ndGg9PT0wOwogIH0KICBmdW5jdGlvbiByZXNldFVuZG9IaXN0b3J5KCl7dW5kb1N0YWNrPVtdO3JlZG9TdGFjaz1bXTtzeW5jVW5kb0J1dHRvbigpO30KICBmdW5jdGlvbiB0cmltSGlzdG9yeShzdGFjayl7aWYoc3RhY2subGVuZ3RoPkhJU1RPUllfTElNSVQpc3RhY2suc3BsaWNlKDAsc3RhY2subGVuZ3RoLUhJU1RPUllfTElNSVQpO30KICBmdW5jdGlvbiBwdXNoVW5kbygpewogICAgY29uc3Qgc25hcHNob3Q9aGlzdG9yeVNuYXBzaG90KCk7CiAgICBpZih1bmRvU3RhY2suYXQoLTEpIT09c25hcHNob3QpdW5kb1N0YWNrLnB1c2goc25hcHNob3QpOwogICAgdHJpbUhpc3RvcnkodW5kb1N0YWNrKTsKICAgIHJlZG9TdGFjaz1bXTsKICAgIHN5bmNVbmRvQnV0dG9uKCk7CiAgfQogIGZ1bmN0aW9uIHJlc3RvcmVIaXN0b3J5U25hcHNob3Qoc25hcHNob3QsbWVzc2FnZSl7CiAgICBjb25zdCBzdGF0ZT1KU09OLnBhcnNlKHNuYXBzaG90KTsKICAgIGdyYXBoPXN0YXRlLmdyYXBoO2F0b21TZXJpYWw9c3RhdGUuYXRvbVNlcmlhbDtib25kU2VyaWFsPXN0YXRlLmJvbmRTZXJpYWw7aGJvbmRTZXJpYWw9c3RhdGUuaGJvbmRTZXJpYWw7dGV4dERlZmF1bHRzPXN0YXRlLnRleHREZWZhdWx0c3x8ey4uLkRFRkFVTFRfVEVYVF9TVFlMRX07CiAgICBzZWxlY3RlZEF0b209bnVsbDtzZWxlY3RlZEF0b21zLmNsZWFyKCk7cGVuZGluZ0F0b209bnVsbDtwZW5kaW5nRnVzZUJvbmQ9bnVsbDtkcmFnPW51bGw7dHJhbnNmb3JtRHJhZz1udWxsO3NlbGVjdGlvbkJveD1udWxsO2xhc3NvPW51bGw7CiAgICBzeW5jVGV4dENvbnRyb2xzKHRleHREZWZhdWx0cyk7cmVuZGVyKCk7dmFsaWRhdGUoKTtzeW5jVW5kb0J1dHRvbigpO3N0YXR1cy50ZXh0Q29udGVudD1tZXNzYWdlO3JldHVybiB0cnVlOwogIH0KICBmdW5jdGlvbiB1bmRvKCl7CiAgICBpZighdW5kb1N0YWNrLmxlbmd0aCl7c3RhdHVzLnRleHRDb250ZW50PSJOb3RoaW5nIHRvIHVuZG8uIjtzeW5jVW5kb0J1dHRvbigpO3JldHVybiBmYWxzZTt9CiAgICBjb25zdCBjdXJyZW50PWhpc3RvcnlTbmFwc2hvdCgpOwogICAgbGV0IHNuYXBzaG90PW51bGw7CiAgICB3aGlsZSh1bmRvU3RhY2subGVuZ3RoKXtjb25zdCBjYW5kaWRhdGU9dW5kb1N0YWNrLnBvcCgpO2lmKGNhbmRpZGF0ZSE9PWN1cnJlbnQpe3NuYXBzaG90PWNhbmRpZGF0ZTticmVhazt9fQogICAgaWYoIXNuYXBzaG90KXtzdGF0dXMudGV4dENvbnRlbnQ9Ik5vdGhpbmcgdG8gdW5kby4iO3N5bmNVbmRvQnV0dG9uKCk7cmV0dXJuIGZhbHNlO30KICAgIGlmKHJlZG9TdGFjay5hdCgtMSkhPT1jdXJyZW50KXJlZG9TdGFjay5wdXNoKGN1cnJlbnQpO3RyaW1IaXN0b3J5KHJlZG9TdGFjayk7CiAgICByZXR1cm4gcmVzdG9yZUhpc3RvcnlTbmFwc2hvdChzbmFwc2hvdCwiVW5kaWQgdGhlIGxhc3QgbW9sZWN1bGFyIGRyYXdpbmcgY2hhbmdlLiIpOwogIH0KICBmdW5jdGlvbiByZWRvKCl7CiAgICBpZighcmVkb1N0YWNrLmxlbmd0aCl7c3RhdHVzLnRleHRDb250ZW50PSJOb3RoaW5nIHRvIHJlZG8uIjtzeW5jVW5kb0J1dHRvbigpO3JldHVybiBmYWxzZTt9CiAgICBjb25zdCBjdXJyZW50PWhpc3RvcnlTbmFwc2hvdCgpOwogICAgbGV0IHNuYXBzaG90PW51bGw7CiAgICB3aGlsZShyZWRvU3RhY2subGVuZ3RoKXtjb25zdCBjYW5kaWRhdGU9cmVkb1N0YWNrLnBvcCgpO2lmKGNhbmRpZGF0ZSE9PWN1cnJlbnQpe3NuYXBzaG90PWNhbmRpZGF0ZTticmVhazt9fQogICAgaWYoIXNuYXBzaG90KXtzdGF0dXMudGV4dENvbnRlbnQ9Ik5vdGhpbmcgdG8gcmVkby4iO3N5bmNVbmRvQnV0dG9uKCk7cmV0dXJuIGZhbHNlO30KICAgIGlmKHVuZG9TdGFjay5hdCgtMSkhPT1jdXJyZW50KXVuZG9TdGFjay5wdXNoKGN1cnJlbnQpO3RyaW1IaXN0b3J5KHVuZG9TdGFjayk7CiAgICByZXR1cm4gcmVzdG9yZUhpc3RvcnlTbmFwc2hvdChzbmFwc2hvdCwiUmVkaWQgdGhlIG1vbGVjdWxhciBkcmF3aW5nIGNoYW5nZS4iKTsKICB9CgogIGNvbnN0IGF0b21CeUlkPScnJwpzMiwgbiA9IHBhdHRlcm4uc3VibihyZXBsYWNlbWVudCwgcywgY291bnQ9MSkKaWYgbiAhPSAxOgogICAgcmFpc2UgU3lzdGVtRXhpdChmImhpc3RvcnkgcmVwbGFjZW1lbnQgY291bnQ9e259IikKcyA9IHMyCgpvbGQgPSAnPGJ1dHRvbiB0eXBlPSJidXR0b24iIGlkPSJjaGVtVW5kb0J1dHRvbiIgdGl0bGU9IlVuZG8gKEN0cmwrWiAvIOKMmFopIiBhcmlhLWxhYmVsPSJVbmRvIGxhc3QgbW9sZWN1bGFyIGRyYXdpbmcgY2hhbmdlIiBkaXNhYmxlZD5VbmRvPC9idXR0b24+JwpuZXcgPSBvbGQgKyAnXG4gICAgICAgICAgPGJ1dHRvbiB0eXBlPSJidXR0b24iIGlkPSJjaGVtUmVkb0J1dHRvbiIgdGl0bGU9IlJlZG8gKEN0cmwrWSAvIEN0cmwrU2hpZnQrWiAvIOKMmFNoaWZ0K1opIiBhcmlhLWxhYmVsPSJSZWRvIG1vbGVjdWxhciBkcmF3aW5nIGNoYW5nZSIgZGlzYWJsZWQ+UmVkbzwvYnV0dG9uPicKaWYgb2xkIG5vdCBpbiBzOiByYWlzZSBTeXN0ZW1FeGl0KCJ1bmRvIGJ1dHRvbiBtYXJrZXIgbm90IGZvdW5kIikKcyA9IHMucmVwbGFjZShvbGQsIG5ldywgMSkKCm9sZCA9ICdkaWFsb2cucXVlcnlTZWxlY3RvcigiI2NoZW1VbmRvQnV0dG9uIikuYWRkRXZlbnRMaXN0ZW5lcigiY2xpY2siLHVuZG8pOycKbmV3ID0gb2xkICsgJ1xuICAgIGRpYWxvZy5xdWVyeVNlbGVjdG9yKCIjY2hlbVJlZG9CdXR0b24iKS5hZGRFdmVudExpc3RlbmVyKCJjbGljayIscmVkbyk7JwppZiBvbGQgbm90IGluIHM6IHJhaXNlIFN5c3RlbUV4aXQoInVuZG8gbGlzdGVuZXIgbWFya2VyIG5vdCBmb3VuZCIpCnMgPSBzLnJlcGxhY2Uob2xkLCBuZXcsIDEpCgpvbGQgPSAnJycgICAgICBjb25zdCBtb2RpZmllcj1lLm1ldGFLZXl8fGUuY3RybEtleTsKICAgICAgaWYobW9kaWZpZXImJiFlLmFsdEtleSYmU3RyaW5nKGUua2V5KS50b0xvd2VyQ2FzZSgpPT09InoiKXtlLnByZXZlbnREZWZhdWx0KCk7dW5kbygpO3JldHVybjt9JycnCm5ldyA9ICcnJyAgICAgIGNvbnN0IG1vZGlmaWVyPWUubWV0YUtleXx8ZS5jdHJsS2V5LGtleT1TdHJpbmcoZS5rZXkpLnRvTG93ZXJDYXNlKCk7CiAgICAgIGlmKG1vZGlmaWVyJiYhZS5hbHRLZXkpewogICAgICAgIGlmKGtleT09PSJ6IiYmZS5zaGlmdEtleSl7ZS5wcmV2ZW50RGVmYXVsdCgpO3JlZG8oKTtyZXR1cm47fQogICAgICAgIGlmKGtleT09PSJ6Iil7ZS5wcmV2ZW50RGVmYXVsdCgpO3VuZG8oKTtyZXR1cm47fQogICAgICAgIGlmKCFlLm1ldGFLZXkmJmtleT09PSJ5Iil7ZS5wcmV2ZW50RGVmYXVsdCgpO3JlZG8oKTtyZXR1cm47fQogICAgICB9JycnCmlmIG9sZCBub3QgaW4gczogcmFpc2UgU3lzdGVtRXhpdCgia2V5Ym9hcmQgbWFya2VyIG5vdCBmb3VuZCIpCnMgPSBzLnJlcGxhY2Uob2xkLCBuZXcsIDEpCgptYXJrZXIgPSAnICBmdW5jdGlvbiBzZWxlY3RlZEJvdW5kcygpeycKaGVscGVycyA9ICcnJyAgZnVuY3Rpb24gZGlzdGFuY2VQb2ludFRvU2VnbWVudChwLGEsYil7CiAgICBjb25zdCBkeD1iLngtYS54LGR5PWIueS1hLnksbGVuMj1keCpkeCtkeSpkeTtpZihsZW4yPDFlLTkpcmV0dXJuIE1hdGguaHlwb3QocC54LWEueCxwLnktYS55KTsKICAgIGNvbnN0IHQ9TWF0aC5tYXgoMCxNYXRoLm1pbigxLCgocC54LWEueCkqZHgrKHAueS1hLnkpKmR5KS9sZW4yKSkseD1hLngrdCpkeCx5PWEueSt0KmR5O3JldHVybiBNYXRoLmh5cG90KHAueC14LHAueS15KTsKICB9CiAgZnVuY3Rpb24gbGFzc29Db250YWluc0F0b20oYXRvbSxwb2x5LHJhZGl1cz0xOSl7CiAgICBjb25zdCBjZW50ZXI9e3g6YXRvbS54LHk6YXRvbS55fTsKICAgIGlmKHBvaW50SW5Qb2x5Z29uKGNlbnRlcixwb2x5KSlyZXR1cm4gdHJ1ZTsKICAgIGZvcihsZXQgaT0wO2k8cG9seS5sZW5ndGg7aSsrKWlmKGRpc3RhbmNlUG9pbnRUb1NlZ21lbnQoY2VudGVyLHBvbHlbaV0scG9seVsoaSsxKSVwb2x5Lmxlbmd0aF0pPD1yYWRpdXMpcmV0dXJuIHRydWU7CiAgICByZXR1cm4gZmFsc2U7CiAgfQogIGZ1bmN0aW9uIHNldEFjdGl2ZUNoZW1Ub29sKG5hbWUpewogICAgdG9vbD1uYW1lO3BlbmRpbmdBdG9tPW51bGw7cGVuZGluZ0Z1c2VCb25kPW51bGw7dHJhbnNmb3JtRHJhZz1udWxsO3NlbGVjdGlvbkJveD1udWxsO2xhc3NvPW51bGw7CiAgICBkaWFsb2c/LnF1ZXJ5U2VsZWN0b3JBbGwoIltkYXRhLWNoZW0tdG9vbF0iKS5mb3JFYWNoKGJ1dHRvbj0+YnV0dG9uLmNsYXNzTGlzdC50b2dnbGUoImFjdGl2ZSIsYnV0dG9uLmRhdGFzZXQuY2hlbVRvb2w9PT1uYW1lKSk7CiAgfQoKJycnCmlmIG1hcmtlciBub3QgaW4gczogcmFpc2UgU3lzdGVtRXhpdCgic2VsZWN0ZWRCb3VuZHMgbWFya2VyIG5vdCBmb3VuZCIpCnMgPSBzLnJlcGxhY2UobWFya2VyLCBoZWxwZXJzICsgbWFya2VyLCAxKQoKb2xkID0gJycnICAgIGlmKGxhc3NvJiZlLnBvaW50ZXJJZD09PWxhc3NvLnBvaW50ZXIpewogICAgICBjb25zdCBjdXJyZW50PWxhc3NvLHBvbHk9Y3VycmVudC5wb2ludHM7CiAgICAgIGlmKCFjdXJyZW50LmFkZGl0aXZlKXNlbGVjdGVkQXRvbXMuY2xlYXIoKTsKICAgICAgaWYocG9seS5sZW5ndGg+PTMpewogICAgICAgIGdyYXBoLmF0b21zLmZpbHRlcihhPT57CiAgICAgICAgICBpZihwb2ludEluUG9seWdvbih7eDphLngseTphLnl9LHBvbHkpKXJldHVybiB0cnVlOwogICAgICAgICAgY29uc3Qgcj0xNDsKICAgICAgICAgIHJldHVybiBbW3IsMF0sWy1yLDBdLFswLHJdLFswLC1yXV0uc29tZSgoW2R4LGR5XSk9PnBvaW50SW5Qb2x5Z29uKHt4OmEueCtkeCx5OmEueStkeX0scG9seSkpOwogICAgICAgIH0pLmZvckVhY2goYT0+c2VsZWN0ZWRBdG9tcy5hZGQoYS5pZCkpOwogICAgICB9CiAgICAgIHNlbGVjdGVkQXRvbT1bLi4uc2VsZWN0ZWRBdG9tc10uYXQoLTEpfHxudWxsO2xhc3NvPW51bGw7CiAgICAgIGlmKHN2Zy5oYXNQb2ludGVyQ2FwdHVyZT8uKGUucG9pbnRlcklkKSlzdmcucmVsZWFzZVBvaW50ZXJDYXB0dXJlKGUucG9pbnRlcklkKTsKICAgICAgaWYoc2VsZWN0ZWRBdG9tKXtjb25zdCBhPWF0b21CeUlkKHNlbGVjdGVkQXRvbSk7aWYoYSlzeW5jVGV4dENvbnRyb2xzKGEudGV4dFN0eWxlfHx0ZXh0RGVmYXVsdHMpO30KICAgICAgcmVuZGVyKCk7dmFsaWRhdGUoKTtyZXR1cm47CiAgICB9JycnCm5ldyA9ICcnJyAgICBpZihsYXNzbyYmZS5wb2ludGVySWQ9PT1sYXNzby5wb2ludGVyKXsKICAgICAgY29uc3QgY3VycmVudD1sYXNzbyxlbmQ9cG9pbnQoZSksbGFzdD1jdXJyZW50LnBvaW50cy5hdCgtMSk7CiAgICAgIGlmKCFsYXN0fHxNYXRoLmh5cG90KGVuZC54LWxhc3QueCxlbmQueS1sYXN0LnkpPjEpY3VycmVudC5wb2ludHMucHVzaChlbmQpOwogICAgICBjb25zdCBwb2x5PWN1cnJlbnQucG9pbnRzOwogICAgICBpZighY3VycmVudC5hZGRpdGl2ZSlzZWxlY3RlZEF0b21zLmNsZWFyKCk7CiAgICAgIGlmKHBvbHkubGVuZ3RoPj0zKWdyYXBoLmF0b21zLmZpbHRlcihhPT5sYXNzb0NvbnRhaW5zQXRvbShhLHBvbHkpKS5mb3JFYWNoKGE9PnNlbGVjdGVkQXRvbXMuYWRkKGEuaWQpKTsKICAgICAgc2VsZWN0ZWRBdG9tPVsuLi5zZWxlY3RlZEF0b21zXS5hdCgtMSl8fG51bGw7CiAgICAgIGlmKHN2Zy5oYXNQb2ludGVyQ2FwdHVyZT8uKGUucG9pbnRlcklkKSlzdmcucmVsZWFzZVBvaW50ZXJDYXB0dXJlKGUucG9pbnRlcklkKTsKICAgICAgY29uc3QgY291bnQ9c2VsZWN0ZWRBdG9tcy5zaXplOwogICAgICBpZihzZWxlY3RlZEF0b20pe2NvbnN0IGE9YXRvbUJ5SWQoc2VsZWN0ZWRBdG9tKTtpZihhKXN5bmNUZXh0Q29udHJvbHMoYS50ZXh0U3R5bGV8fHRleHREZWZhdWx0cyk7fQogICAgICBzZXRBY3RpdmVDaGVtVG9vbCgic2VsZWN0Iik7CiAgICAgIHJlbmRlcigpO3ZhbGlkYXRlKCk7CiAgICAgIHN0YXR1cy50ZXh0Q29udGVudD1jb3VudD9gTGFzc28gc2VsZWN0ZWQgJHtjb3VudH0gYXRvbSR7Y291bnQ9PT0xPyIiOiJzIn0uIERyYWcgdGhlIHNlbGVjdGlvbiBvciB1c2UgdGhlIHJlc2l6ZS9yb3RhdGUgaGFuZGxlcy5gOiJObyBhdG9tcyB3ZXJlIGluc2lkZSB0aGUgbGFzc28uIFRyeSBkcmF3aW5nIGEgd2lkZXIgbG9vcCBhcm91bmQgdGhlIGF0b20gY2VudGVycy4iOwogICAgICByZXR1cm47CiAgICB9JycnCmlmIG9sZCBub3QgaW4gczogcmFpc2UgU3lzdGVtRXhpdCgibGFzc28gcG9pbnRlcnVwIG1hcmtlciBub3QgZm91bmQiKQpzID0gcy5yZXBsYWNlKG9sZCwgbmV3LCAxKQoKcC53cml0ZV90ZXh0KHMpCgppZHggPSBQYXRoKCJpbmRleC5odG1sIikKdCA9IGlkeC5yZWFkX3RleHQoKQppZiAiY2hlbWlzdHJ5LWVkaXRvci5qcz92PWNoZW0tZWRpdG9yLTEwIiBub3QgaW4gdDogcmFpc2UgU3lzdGVtRXhpdCgiY2hlbWlzdHJ5IGVkaXRvciBjYWNoZSBtYXJrZXIgbm90IGZvdW5kIikKaWR4LndyaXRlX3RleHQodC5yZXBsYWNlKCJjaGVtaXN0cnktZWRpdG9yLmpzP3Y9Y2hlbS1lZGl0b3ItMTAiLCJjaGVtaXN0cnktZWRpdG9yLmpzP3Y9Y2hlbS1lZGl0b3ItMTEiLDEpKQoKdGVzdCA9IHInJydpbXBvcnQgeyBjaHJvbWl1bSB9IGZyb20gInBsYXl3cmlnaHQiOwppbXBvcnQgYXNzZXJ0IGZyb20gIm5vZGU6YXNzZXJ0L3N0cmljdCI7Cgpjb25zdCBicm93c2VyPWF3YWl0IGNocm9taXVtLmxhdW5jaCh7aGVhZGxlc3M6dHJ1ZX0pOwpjb25zdCBwYWdlPWF3YWl0IGJyb3dzZXIubmV3UGFnZSh7dmlld3BvcnQ6e3dpZHRoOjEyODAsaGVpZ2h0OjkwMH19KTsKY29uc3QgZXJyb3JzPVtdOwpwYWdlLm9uKCJwYWdlZXJyb3IiLGVycm9yPT5lcnJvcnMucHVzaChTdHJpbmcoZXJyb3IpKSk7CmF3YWl0IHBhZ2UuZ290bygiaHR0cDovLzEyNy4wLjAuMTo0MTczLz9wYWdlPWRyYXdpbmciLHt3YWl0VW50aWw6Im5ldHdvcmtpZGxlIn0pOwoKYXN5bmMgZnVuY3Rpb24gdXNlclRvQ2xpZW50KHgseSl7CiAgcmV0dXJuIHBhZ2UuZXZhbHVhdGUoKHt4LHl9KT0+ewogICAgY29uc3Qgc3ZnPWRvY3VtZW50LnF1ZXJ5U2VsZWN0b3IoIiNjaGVtRWRpdG9yU3ZnIikscHQ9c3ZnLmNyZWF0ZVNWR1BvaW50KCk7cHQueD14O3B0Lnk9eTsKICAgIGNvbnN0IG91dD1wdC5tYXRyaXhUcmFuc2Zvcm0oc3ZnLmdldFNjcmVlbkNUTSgpKTtyZXR1cm4ge3g6b3V0LngseTpvdXQueX07CiAgfSx7eCx5fSk7Cn0KCmF3YWl0IHBhZ2UuZXZhbHVhdGUoKCk9Pk1vbGVjdWxlRWRpdG9yLm9wZW5CYXNlKCJBIikpOwphd2FpdCBwYWdlLmxvY2F0b3IoIiNjaGVtRWRpdG9yRGlhbG9nIikud2FpdEZvcih7c3RhdGU6InZpc2libGUifSk7CmF3YWl0IHBhZ2UubG9jYXRvcignW2RhdGEtY2hlbS10b29sPSJsYXNzbyJdJykuY2xpY2soKTsKY29uc3QgcG9seWdvbj1bWzEzNSwzMF0sWzUwMCwzMF0sWzUwMCwzMjBdLFsxMzUsMzIwXSxbMTM1LDMwXV07CmNvbnN0IGZpcnN0PWF3YWl0IHVzZXJUb0NsaWVudCguLi5wb2x5Z29uWzBdKTsKYXdhaXQgcGFnZS5tb3VzZS5tb3ZlKGZpcnN0LngsZmlyc3QueSk7YXdhaXQgcGFnZS5tb3VzZS5kb3duKCk7CmZvcihsZXQgaT0xO2k8cG9seWdvbi5sZW5ndGg7aSsrKXsKICBjb25zdCBbc3gsc3ldPXBvbHlnb25baS0xXSxbZXgsZXldPXBvbHlnb25baV07CiAgZm9yKGxldCBrPTE7azw9ODtrKyspewogICAgY29uc3QgcD1hd2FpdCB1c2VyVG9DbGllbnQoc3grKGV4LXN4KSprLzgsc3krKGV5LXN5KSprLzgpO2F3YWl0IHBhZ2UubW91c2UubW92ZShwLngscC55KTsKICB9Cn0KYXdhaXQgcGFnZS5tb3VzZS51cCgpOwpjb25zdCBsYXNzb1Jlc3VsdD1hd2FpdCBwYWdlLmV2YWx1YXRlKCgpPT4oe3NlbGVjdGVkOmRvY3VtZW50LnF1ZXJ5U2VsZWN0b3JBbGwoIiNjaGVtRWRpdG9yU3ZnIC5jaGVtLWVkaXRvci1hdG9tLnNlbGVjdGVkIikubGVuZ3RoLHNlbGVjdEFjdGl2ZTpkb2N1bWVudC5xdWVyeVNlbGVjdG9yKCdbZGF0YS1jaGVtLXRvb2w9InNlbGVjdCJdJyk/LmNsYXNzTGlzdC5jb250YWlucygiYWN0aXZlIiksc3RhdHVzOmRvY3VtZW50LnF1ZXJ5U2VsZWN0b3IoIiNjaGVtRWRpdG9yU3RhdHVzIik/LnRleHRDb250ZW50fHwiIn0pKTsKYXNzZXJ0Lm9rKGxhc3NvUmVzdWx0LnNlbGVjdGVkPj04LGBFeHBlY3RlZCBsYXNzbyB0byBzZWxlY3QgbW9zdCBhZGVuaW5lIGF0b21zOyBnb3QgJHtsYXNzb1Jlc3VsdC5zZWxlY3RlZH0uICR7bGFzc29SZXN1bHQuc3RhdHVzfWApOwphc3NlcnQuZXF1YWwobGFzc29SZXN1bHQuc2VsZWN0QWN0aXZlLHRydWUsIkxhc3NvIHNob3VsZCByZXR1cm4gdG8gU2VsZWN0IC8gbW92ZSBzbyB0aGUgc2VsZWN0aW9uIGlzIGltbWVkaWF0ZWx5IHVzYWJsZS4iKTsKCmF3YWl0IHBhZ2UuZXZhbHVhdGUoKCk9Pk1vbGVjdWxlRWRpdG9yLm9wZW5CbGFuaygpKTsKYXdhaXQgcGFnZS5sb2NhdG9yKCdbZGF0YS1jaGVtLXRvb2w9ImF0b20iXScpLmNsaWNrKCk7CmNvbnN0IGNlbnRlcj1hd2FpdCB1c2VyVG9DbGllbnQoNDEwLDIzNSk7YXdhaXQgcGFnZS5tb3VzZS5jbGljayhjZW50ZXIueCxjZW50ZXIueSk7CmNvbnN0IGF0b21Db3VudD0oKT0+cGFnZS5sb2NhdG9yKCIjY2hlbUVkaXRvclN2ZyAuY2hlbS1lZGl0b3ItYXRvbSIpLmNvdW50KCk7CmFzc2VydC5lcXVhbChhd2FpdCBhdG9tQ291bnQoKSwxLCJBZGQgYXRvbSBzaG91bGQgY3JlYXRlIG9uZSBhdG9tLiIpOwphd2FpdCBwYWdlLmtleWJvYXJkLnByZXNzKCJDb250cm9sK3oiKTthc3NlcnQuZXF1YWwoYXdhaXQgYXRvbUNvdW50KCksMCwiQ3RybCtaIHNob3VsZCB1bmRvIG9uIFdpbmRvd3MvTGludXguIik7CmF3YWl0IHBhZ2Uua2V5Ym9hcmQucHJlc3MoIkNvbnRyb2wreSIpO2Fzc2VydC5lcXVhbChhd2FpdCBhdG9tQ291bnQoKSwxLCJDdHJsK1kgc2hvdWxkIHJlZG8gb24gV2luZG93cy9MaW51eC4iKTsKYXdhaXQgcGFnZS5rZXlib2FyZC5wcmVzcygiTWV0YSt6Iik7YXNzZXJ0LmVxdWFsKGF3YWl0IGF0b21Db3VudCgpLDAsIkNvbW1hbmQrWiBzaG91bGQgdW5kbyBvbiBNYWMuIik7CmF3YWl0IHBhZ2Uua2V5Ym9hcmQucHJlc3MoIk1ldGErU2hpZnQreiIpO2Fzc2VydC5lcXVhbChhd2FpdCBhdG9tQ291bnQoKSwxLCJDb21tYW5kK1NoaWZ0K1ogc2hvdWxkIHJlZG8gb24gTWFjLiIpOwphc3NlcnQuZXF1YWwoYXdhaXQgcGFnZS5sb2NhdG9yKCIjY2hlbVJlZG9CdXR0b24iKS5jb3VudCgpLDEsIlZpc2libGUgUmVkbyBidXR0b24gc2hvdWxkIGV4aXN0LiIpOwphc3NlcnQuZXF1YWwoZXJyb3JzLmxlbmd0aCwwLGBCcm93c2VyIGVycm9yczogJHtlcnJvcnMuam9pbigiIHwgIil9YCk7CmNvbnNvbGUubG9nKEpTT04uc3RyaW5naWZ5KHtyZXN1bHQ6IlBBU1MiLGxhc3NvU2VsZWN0ZWQ6bGFzc29SZXN1bHQuc2VsZWN0ZWQscmVkb1Nob3J0Y3V0czoiUEFTUyJ9LG51bGwsMikpOwphd2FpdCBicm93c2VyLmNsb3NlKCk7CicnJwpQYXRoKCJ0ZXN0cy9tb2xlY3VsYXItZWRpdG9yLWhpc3RvcnktYnJvd3Nlci5tanMiKS53cml0ZV90ZXh0KHRlc3QpCgp3ZiA9IFBhdGgoIi5naXRodWIvd29ya2Zsb3dzL2xlYXJuaW5nLWFkdmFuY2VkLXNtb2tlLnltbCIpCncgPSB3Zi5yZWFkX3RleHQoKQpuZWVkbGUgPSAiICAgICAgICAgIG5vZGUgdGVzdHMvdXRpbGl0eS1ob3Zlci1icm93c2VyLm1qc1xuICAgICAgICAgIG5vZGUgdGVzdHMvbGVhcm5pbmctYWR2YW5jZWQtY29tcGxldGUtYnJvd3Nlci5tanNcbiIKcmVwbCA9ICIgICAgICAgICAgbm9kZSB0ZXN0cy91dGlsaXR5LWhvdmVyLWJyb3dzZXIubWpzXG4gICAgICAgICAgbm9kZSB0ZXN0cy9tb2xlY3VsYXItZWRpdG9yLWhpc3RvcnktYnJvd3Nlci5tanNcbiAgICAgICAgICBub2RlIHRlc3RzL2xlYXJuaW5nLWFkdmFuY2VkLWNvbXBsZXRlLWJyb3dzZXIubWpzXG4iCmlmIG5lZWRsZSBub3QgaW4gdzogcmFpc2UgU3lzdGVtRXhpdCgiYnJvd3NlciB3b3JrZmxvdyBtYXJrZXIgbm90IGZvdW5kIikKd2Yud3JpdGVfdGV4dCh3LnJlcGxhY2UobmVlZGxlLHJlcGwsMSkpCg==' | base64 -d > /tmp/patch.py
+          python3 /tmp/patch.py
+      - name: Validate JavaScript
         run: node --check chemistry-editor.js && node --check tests/molecular-editor-history-browser.mjs
-      - name: Install browser test dependency
+      - name: Install Playwright
         run: |
           npm install --no-save playwright
           npx playwright install --with-deps chromium
-      - name: Run molecular editor interaction browser test
+      - name: Browser test
         run: |
           python3 -m http.server 4173 > /tmp/rna-explorer-http.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID' EXIT
           node tests/molecular-editor-history-browser.mjs
-      - name: Commit tested patch and remove temporary workflow
+      - name: Commit tested update
         run: |
           rm .github/workflows/patch-molecular-drawing-history.yml
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add chemistry-editor.js index.html tests/molecular-editor-history-browser.mjs .github/workflows/learning-advanced-smoke.yml .github/workflows/patch-molecular-drawing-history.yml
           git commit -m 'Fix molecular lasso selection and add redo history'
           git push
