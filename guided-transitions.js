@@ -1,5 +1,5 @@
 const GuidedStructureTransitions = (() => {
-  const state={secondaryReady:true,tertiaryReady:true,miniFeature:"glycosidic",yaw:-0.55,pitch:0.34,zoom:1,panX:0,panY:0,dragging:false,dragMode:"rotate",lastX:0,lastY:0,labelsOn:true,
+  const state={secondaryReady:true,tertiaryReady:true,miniFeature:"glycosidic",yaw:-0.55,pitch:0.34,rotation:null,zoom:1,panX:0,panY:0,dragging:false,dragMode:"rotate",lastX:0,lastY:0,labelsOn:true,
     realPairKey:"gc",realPairModels:null,realLessonModels:null,realPairPromise:null};
 
   const LEARNING_LANDMARKS={
@@ -479,6 +479,48 @@ const GuidedStructureTransitions = (() => {
       }
     }catch(error){if(status)status.textContent="Could not open the linked example: "+String(error.message||error);}
   }
+  function miniQuatNormalize(q){
+    const n=Math.hypot(q[0],q[1],q[2],q[3])||1;return q.map(v=>v/n);
+  }
+  function miniQuatMultiply(a,b){
+    const [aw,ax,ay,az]=a,[bw,bx,by,bz]=b;
+    return [aw*bw-ax*bx-ay*by-az*bz,aw*bx+ax*bw+ay*bz-az*by,aw*by-ax*bz+ay*bw+az*bx,aw*bz+ax*by-ay*bx+az*bw];
+  }
+  function miniQuatAxisAngle(x,y,z,angle){
+    const n=Math.hypot(x,y,z)||1,h=angle/2,s=Math.sin(h)/n;return [Math.cos(h),x*s,y*s,z*s];
+  }
+  function miniQuatFromView(yaw,pitch){
+    return miniQuatNormalize(miniQuatMultiply(miniQuatAxisAngle(1,0,0,pitch),miniQuatAxisAngle(0,1,0,yaw)));
+  }
+  function miniRotateVector(p,q){
+    const [w,x,y,z]=miniQuatNormalize(q);
+    return {
+      x:(1-2*y*y-2*z*z)*p.x+2*(x*y-w*z)*p.y+2*(x*z+w*y)*p.z,
+      y:2*(x*y+w*z)*p.x+(1-2*x*x-2*z*z)*p.y+2*(y*z-w*x)*p.z,
+      z:2*(x*z-w*y)*p.x+2*(y*z+w*x)*p.y+(1-2*x*x-2*y*y)*p.z
+    };
+  }
+  function miniTrackballVector(svg,clientX,clientY){
+    const rect=svg.getBoundingClientRect(),radius=Math.max(1,Math.min(rect.width,rect.height)*.46);
+    let x=(clientX-(rect.left+rect.width/2))/radius,y=((rect.top+rect.height/2)-clientY)/radius;
+    const d=x*x+y*y;
+    if(d>=1){const scale=1/Math.sqrt(d);x*=scale;y*=scale;return {x,y,z:0};}
+    return {x,y,z:Math.sqrt(1-d)};
+  }
+  function miniQuatBetween(a,b){
+    const dot=Math.max(-1,Math.min(1,a.x*b.x+a.y*b.y+a.z*b.z));
+    let x=a.y*b.z-a.z*b.y,y=a.z*b.x-a.x*b.z,z=a.x*b.y-a.y*b.x,w=1+dot;
+    if(w<1e-7){
+      const ref=Math.abs(a.x)<.8?{x:1,y:0,z:0}:{x:0,y:1,z:0};
+      x=a.y*ref.z-a.z*ref.y;y=a.z*ref.x-a.x*ref.z;z=a.x*ref.y-a.y*ref.x;w=0;
+    }
+    return miniQuatNormalize([w,x,y,z]);
+  }
+  function applyMiniTrackball(from,to){
+    const delta=miniQuatBetween(from,to),current=state.rotation||miniQuatFromView(state.yaw,state.pitch);
+    state.rotation=miniQuatNormalize(miniQuatMultiply(delta,current));
+  }
+
   function buildTertiaryTransition(){
     const scene=$("scene-tertiary"),learning=$("tertiaryLearning");if(!scene||!learning||!isJourney())return;
     if(!learning.classList.contains("guided-inline-lesson")){
@@ -490,7 +532,7 @@ const GuidedStructureTransitions = (() => {
       if(show)show.textContent="Show me in the 3D structure";
       const card=learning.querySelector(".tertiary-learning-card");
       const mini=document.createElement("div");mini.className="gps-inline-mini-shell";mini.id="gpsInlineMiniShell";
-      mini.innerHTML='<div class="gps-mini-toolbar inline"><span>Mouse/one finger: rotate · Right/Ctrl drag: pan · Wheel or pinch: zoom · Double-click: reset</span><div><button type="button" id="gpsMiniZoomOut" aria-label="Zoom out">−</button><button type="button" id="gpsMiniZoomIn" aria-label="Zoom in">+</button><button type="button" id="gpsLabelsToggle">Labels: on</button><button type="button" id="gpsMiniReset">Reset / center</button></div></div>'+
+      mini.innerHTML='<div class="gps-mini-toolbar inline"><span>Left drag / one finger: free rotate · Right/Ctrl/⌘ drag: pan · Wheel or pinch: zoom · Double-click: reset</span><div><button type="button" id="gpsMiniZoomOut" aria-label="Zoom out">−</button><button type="button" id="gpsMiniZoomIn" aria-label="Zoom in">+</button><button type="button" id="gpsLabelsToggle">Labels: on</button><button type="button" id="gpsMiniReset">Reset / center</button></div></div>'+
         '<div class="gps-real-pair-tabs" id="gpsRealPairTabs" hidden><button type="button" class="active" data-gps-real-pair="gc">G–C</button><button type="button" data-gps-real-pair="au">A–U</button><button type="button" data-gps-real-pair="gu">G–U</button></div>'+
         '<svg id="gpsMini3D" viewBox="0 0 640 520" role="img" aria-label="Interactive molecular teaching model"></svg>'+
         '<div class="gps-element-legend" aria-label="Element colors"><span><i data-element="C"></i>Carbon</span><span><i data-element="O"></i>Oxygen</span><span><i data-element="N"></i>Nitrogen</span><span><i data-element="H"></i>Hydrogen</span><span><i data-element="P"></i>Phosphorus</span><span class="gps-hbond-key"><i></i>H-bond</span></div>'+
@@ -519,30 +561,42 @@ const GuidedStructureTransitions = (() => {
     $("gpsLabelsToggle")?.addEventListener("click",()=>{state.labelsOn=!state.labelsOn;$("gpsLabelsToggle").textContent="Labels: "+(state.labelsOn?"on":"off");renderMiniModel();});
     const svg=$("gpsMini3D");
     if(svg&&!svg.dataset.interactionsReady){
-      svg.dataset.interactionsReady="true";svg.style.touchAction="none";
-      const pointers=new Map();let pinch=null;
+      svg.dataset.interactionsReady="true";svg.style.touchAction="none";svg.style.cursor="grab";
+      const pointers=new Map();let pinch=null,rotateVector=null;
       const clampZoom=z=>Math.max(.42,Math.min(3.2,z));
       const pointerCenter=()=>{const a=[...pointers.values()];return a.length<2?null:{x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2,d:Math.hypot(a[1].x-a[0].x,a[1].y-a[0].y)};};
+      const panScale=()=>{const rect=svg.getBoundingClientRect();return {x:640/Math.max(1,rect.width),y:520/Math.max(1,rect.height)};};
       svg.addEventListener("contextmenu",e=>e.preventDefault());
-      svg.addEventListener("wheel",e=>{e.preventDefault();state.zoom=clampZoom(state.zoom*(e.deltaY<0?1.1:.91));renderMiniModel();},{passive:false});
-      svg.addEventListener("dblclick",e=>{e.preventDefault();resetMiniView();pointers.clear();pinch=null;renderMiniModel();});
+      svg.addEventListener("wheel",e=>{e.preventDefault();const delta=e.deltaMode===1?e.deltaY*16:e.deltaY;state.zoom=clampZoom(state.zoom*Math.exp(-delta*.0016));renderMiniModel();},{passive:false});
+      svg.addEventListener("dblclick",e=>{e.preventDefault();resetMiniView();pointers.clear();pinch=null;rotateVector=null;svg.style.cursor="grab";renderMiniModel();});
       svg.addEventListener("pointerdown",e=>{
-        if(e.pointerType==="mouse"&&![0,1,2].includes(e.button))return;e.preventDefault();pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});svg.setPointerCapture?.(e.pointerId);
-        if(pointers.size>=2){const c=pointerCenter();pinch={distance:Math.max(1,c.d),zoom:state.zoom,x:c.x,y:c.y,panX:state.panX,panY:state.panY};state.dragMode="pinch";}
-        else{state.dragging=true;state.dragMode=(e.pointerType==="mouse"&&(e.button===2||e.ctrlKey||e.metaKey||e.button===1))?"pan":"rotate";state.lastX=e.clientX;state.lastY=e.clientY;}
+        if(e.pointerType==="mouse"&&![0,1,2].includes(e.button))return;e.preventDefault();pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});svg.setPointerCapture?.(e.pointerId);svg.style.cursor="grabbing";
+        if(pointers.size>=2){const c=pointerCenter();pinch={distance:Math.max(1,c.d),zoom:state.zoom,x:c.x,y:c.y,panX:state.panX,panY:state.panY};state.dragMode="pinch";rotateVector=null;}
+        else{state.dragging=true;state.dragMode=(e.pointerType==="mouse"&&(e.button===2||e.ctrlKey||e.metaKey||e.button===1))?"pan":"rotate";state.lastX=e.clientX;state.lastY=e.clientY;rotateVector=state.dragMode==="rotate"?miniTrackballVector(svg,e.clientX,e.clientY):null;}
       });
       svg.addEventListener("pointermove",e=>{
         if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
-        if(pointers.size>=2){if(!pinch){const c=pointerCenter();pinch={distance:Math.max(1,c.d),zoom:state.zoom,x:c.x,y:c.y,panX:state.panX,panY:state.panY};}const c=pointerCenter();state.zoom=clampZoom(pinch.zoom*(c.d/pinch.distance));state.panX=pinch.panX+(c.x-pinch.x);state.panY=pinch.panY+(c.y-pinch.y);renderMiniModel();return;}
-        const dx=e.clientX-state.lastX,dy=e.clientY-state.lastY;if(state.dragMode==="pan"){state.panX+=dx;state.panY+=dy;}else{state.yaw+=dx*.0085;state.pitch=Math.max(-1.48,Math.min(1.48,state.pitch+dy*.0085));}state.lastX=e.clientX;state.lastY=e.clientY;renderMiniModel();
+        if(pointers.size>=2){
+          if(!pinch){const c=pointerCenter();pinch={distance:Math.max(1,c.d),zoom:state.zoom,x:c.x,y:c.y,panX:state.panX,panY:state.panY};}
+          const c=pointerCenter(),ps=panScale();state.zoom=clampZoom(pinch.zoom*(c.d/pinch.distance));state.panX=pinch.panX+(c.x-pinch.x)*ps.x;state.panY=pinch.panY+(c.y-pinch.y)*ps.y;renderMiniModel();return;
+        }
+        const dx=e.clientX-state.lastX,dy=e.clientY-state.lastY;
+        if(state.dragMode==="pan"){const ps=panScale();state.panX+=dx*ps.x;state.panY+=dy*ps.y;}
+        else{const next=miniTrackballVector(svg,e.clientX,e.clientY);if(rotateVector)applyMiniTrackball(rotateVector,next);rotateVector=next;}
+        state.lastX=e.clientX;state.lastY=e.clientY;renderMiniModel();
       });
-      const end=e=>{pointers.delete(e.pointerId);if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);pinch=null;if(pointers.size===1){const p=[...pointers.values()][0];state.lastX=p.x;state.lastY=p.y;state.dragMode="rotate";state.dragging=true;}else if(!pointers.size)state.dragging=false;};svg.addEventListener("pointerup",end);svg.addEventListener("pointercancel",end);
+      const end=e=>{
+        pointers.delete(e.pointerId);if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);pinch=null;
+        if(pointers.size===1){const p=[...pointers.values()][0];state.lastX=p.x;state.lastY=p.y;state.dragMode="rotate";state.dragging=true;rotateVector=miniTrackballVector(svg,p.x,p.y);}
+        else if(!pointers.size){state.dragging=false;rotateVector=null;svg.style.cursor="grab";}
+      };
+      svg.addEventListener("pointerup",end);svg.addEventListener("pointercancel",end);
     }
     renderMiniLesson();
   }
   function resetMiniView(feature=state.miniFeature){
     const view=MINI_VIEWS[feature]||MINI_VIEWS.glycosidic;
-    state.yaw=view.yaw;state.pitch=view.pitch;state.zoom=view.zoom;state.panX=0;state.panY=0;state.dragging=false;
+    state.yaw=view.yaw;state.pitch=view.pitch;state.rotation=miniQuatFromView(view.yaw,view.pitch);state.zoom=view.zoom;state.panX=0;state.panY=0;state.dragging=false;
   }
   function modelForLesson(){
     const lesson=MINI_LESSONS[state.miniFeature]||MINI_LESSONS.glycosidic;
@@ -556,9 +610,8 @@ const GuidedStructureTransitions = (() => {
     return lesson;
   }
   function rotatePoint(p){
-    const cy=Math.cos(state.yaw),sy=Math.sin(state.yaw),cp=Math.cos(state.pitch),sp=Math.sin(state.pitch);
-    const x=p.x*cy+p.z*sy,z=-p.x*sy+p.z*cy,y=p.y*cp-z*sp,z2=p.y*sp+z*cp;
-    return {...p,rx:x,ry:y,rz:z2};
+    if(!state.rotation)state.rotation=miniQuatFromView(state.yaw,state.pitch);
+    const r=miniRotateVector(p,state.rotation);return {...p,rx:r.x,ry:r.y,rz:r.z};
   }
   function renderMiniModel(){
     const svg=$("gpsMini3D");if(!svg)return;const model=modelForLesson();
@@ -591,7 +644,7 @@ const GuidedStructureTransitions = (() => {
     }).join("");
     const torsionLabels=(model.torsionLabels||[]).map(t=>{const p=map.get(t.a),q=map.get(t.b);if(!p||!q)return"";const A=screen(p),B=screen(q),dx=B.x-A.x,dy=B.y-A.y,len=Math.hypot(dx,dy)||1,x=(A.x+B.x)/2-dy/len*16,y=(A.y+B.y)/2+dx/len*16;return '<g class="gps-torsion-label" transform="translate('+x+' '+y+')"><circle r="11" fill="#07111c" stroke="#f2c66d" stroke-width="1.8"/><text y="4" text-anchor="middle" fill="#f7fbff" font-size="13" font-weight="800">'+t.symbol+'</text></g>';}).join("");
     svg.innerHTML='<g>'+bonds+guides+nodes+torsionLabels+'</g>';
-    svg.dataset.feature=state.miniFeature;svg.dataset.yaw=state.yaw.toFixed(3);svg.dataset.pitch=state.pitch.toFixed(3);svg.dataset.zoom=state.zoom.toFixed(3);
+    svg.dataset.feature=state.miniFeature;svg.dataset.yaw=state.yaw.toFixed(3);svg.dataset.pitch=state.pitch.toFixed(3);svg.dataset.rotation=(state.rotation||miniQuatFromView(state.yaw,state.pitch)).map(v=>v.toFixed(5)).join(",");svg.dataset.zoom=state.zoom.toFixed(3);
   }
   function renderMiniLesson(){
     const l=MINI_LESSONS[state.miniFeature]||MINI_LESSONS.glycosidic;
