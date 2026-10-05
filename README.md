@@ -25,3 +25,5 @@ This is a dependency-free static site. Open `index.html` in a browser, or serve 
 - `styles.css` — styling and animations
 - `app.js` — navigation, primary sequence, secondary structure, and 3D trace
 - `chemistry.js`, `journey.js`, and `primary-animation.js` — chemical and chain-growth animations
+
+<!-- Pages deployment retrigger: 2026-10-05 -->
