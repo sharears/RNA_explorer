@@ -39,6 +39,7 @@ jobs:
           t=Path('tests/afternoon-updates-browser.mjs')
           x=t.read_text()
           x=x.replace("const q=(await page.locator('#flashcardText').textContent())?.trim();await page.click('#flashcardFlip');const a=(await page.locator('#flashcardText').textContent())?.trim();if(!q||!a||q===a)","const question=(await page.locator('#flashcardText').textContent())?.trim();await page.click('#flashcardFlip');const answer=(await page.locator('#flashcardText').textContent())?.trim();if(!question||!answer||question===answer)",1)
+          x=x.replace("const before=await page.locator('#chemEditorSvg').getAttribute('viewBox');await page.click('#chemExpandCanvas');", "const before=await page.locator('#chemEditorSvg').getAttribute('viewBox');await page.locator('.chem-tool-group>summary').filter({hasText:'View · Canvas'}).click();await page.click('#chemExpandCanvas');",1)
           t.write_text(x)
           PY
       - name: Validate JavaScript syntax
