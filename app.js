@@ -461,7 +461,7 @@ function setupModernWorkspaceUi(){
 
   const secondaryControls=document.querySelector("#scene-secondary .se-controls");
   if(secondaryControls&&!secondaryControls.closest(".workspace-advanced-panel")){
-    const advanced=document.createElement("details");advanced.className="workspace-advanced-panel";advanced.open=true;
+    const advanced=document.createElement("details");advanced.className="workspace-advanced-panel";advanced.open=false;
     const summary=document.createElement("summary");summary.textContent="Controls · Structure, display & analysis";
     secondaryControls.before(advanced);advanced.append(summary,secondaryControls);
   }
@@ -555,6 +555,7 @@ function applyPageMode() {
   if(page==="secondary"){
     if(!start){renderWorkspaceLauncher("secondary");return;}
     showScene(4);
+    const advanced=document.querySelector("#scene-secondary .workspace-advanced-panel");if(advanced)advanced.open=true;
     if(start==="custom")prepareSecondaryCustomStart();
     else document.getElementById("restoreTrnaButton")?.click();
     return;

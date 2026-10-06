@@ -72,7 +72,7 @@ try{
     await page.waitForFunction(expected=>TertiaryExplorer.getDiagnostics().representation===expected,representation,{timeout:10000});
   }
 
-  const importSummary=teControls.locator(":scope > details > summary").filter({hasText:"Import structure"}).first();
+  const importSummary=teControls.locator(":scope > details > summary").filter({hasText:"Import · Structure & mapping"}).first();
   await openDetails(importSummary);
   await page.fill("#tePdbId","1HS8");
   await page.click("#teLoadPdbId");
@@ -88,9 +88,9 @@ try{
 
   const deepAdvanced=teControls.locator(":scope > .workspace-advanced-panel");
   if(await deepAdvanced.count())await openDetails(deepAdvanced.locator(":scope > summary"));
-  const selectSummary=page.locator("summary").filter({hasText:"Select · sequence & ranges"}).first();
+  const selectSummary=page.locator("summary").filter({hasText:"Select · Residues & ranges"}).first();
   await openDetails(selectSummary);
-  const objectSummary=page.locator("summary").filter({hasText:"Saved objects"}).first();
+  const objectSummary=page.locator("summary").filter({hasText:"Select · Saved objects"}).first();
   await openDetails(objectSummary);
 
   await page.locator("#teSequencePanel .te-seq-residue").nth(0).click();
@@ -120,7 +120,7 @@ try{
   mkdirSync("test-output",{recursive:true});
   await page.locator("#tertiaryMolecularViewer canvas").screenshot({path:"test-output/1HS8-styled.png"});
 
-  const analyzeSummary=page.locator("summary").filter({hasText:"Analyze · measurements & contacts"}).first();
+  const analyzeSummary=page.locator("summary").filter({hasText:"Analyze · Measurements & contacts"}).first();
   await openDetails(analyzeSummary);
   await page.selectOption("#teMeasureMode","distance");
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().measurementMode==="distance");
@@ -133,7 +133,7 @@ try{
   const measurementText=(await page.locator("#teMeasurementList").textContent())||"";
   if(!measurementText.includes("Å"))throw new Error("Distance was not displayed in Å: "+measurementText);
 
-  const clippingSummary=page.locator("summary").filter({hasText:"Clipping"}).first();
+  const clippingSummary=page.locator("summary").filter({hasText:"View · Clipping"}).first();
   await openDetails(clippingSummary);
   await page.locator("#teClipEnabled").check();
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().clipEnabled===true);

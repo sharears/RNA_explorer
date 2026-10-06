@@ -6,8 +6,9 @@ const {parseHTML}=require(process.argv[2] || 'linkedom');
 const {document,window}=parseHTML(fs.readFileSync('dist/index.html','utf8'));
 let serial=0;const timers=new Map();
 window.matchMedia=()=>({matches:false});
+if(!window.location)Object.defineProperty(window,'location',{value:{href:'http://localhost/'},writable:true,configurable:true});
 const OptionCtor=window.Option || function Option(text,value){const el=document.createElement('option');el.textContent=text;el.value=value;return el;};
-const ctx=vm.createContext({document,window,console,CustomEvent:window.CustomEvent,Option:OptionCtor,
+const ctx=vm.createContext({document,window,console,CustomEvent:window.CustomEvent,Option:OptionCtor,URL,URLSearchParams,
   setTimeout(fn){const id=++serial;timers.set(id,fn);return id;},
   clearTimeout(id){timers.delete(id);}
 });
@@ -34,7 +35,7 @@ for(const base of ['A','G','C','U']){
   document.querySelector('[data-scene="blocks"]').click();
   assert.equal(timers.size,0,'Leaving a tab cancels unfinished animation');
 }
-for(let i=0;i<6;i++){run('showScene('+i+')');flush();assert.equal(document.querySelectorAll('.scene:not([hidden])').length,1);assert.equal(document.getElementById('progressText').textContent,(i+1)+' of 6');}
+for(let i=0;i<6;i++){run('showScene('+i+')');flush();assert.equal(document.querySelectorAll('.scene:not([hidden])').length,1);assert.equal(document.getElementById('progressText').textContent,'Checkpoint '+(i+1)+' of 6');}
 assert.equal(document.querySelectorAll('.nt').length,76);
 assert.equal(document.querySelectorAll('.se-node').length,76);
 assert.ok(document.getElementById('tertiaryMolecularViewer'),'All-atom tertiary viewer container is present');
@@ -46,17 +47,18 @@ assert.ok(document.getElementById('sePairChemButton'),'Selected Secondary pair c
 assert.ok(document.getElementById('sePairProbFile'),'Secondary has pair-probability upload');
 assert.ok(document.getElementById('seLayerReactivity'),'Secondary has an independent reactivity layer toggle');
 assert.ok(document.getElementById('seLayerPairProb'),'Secondary has an independent base-pair probability layer toggle');
-assert.ok(document.querySelector('.home-cover-actions a[href="?page=journey"]'),'Homepage has a Learn RNA guided-journey path');
-assert.ok(document.getElementById('homeAnalyzeToggle'),'Homepage has an Analyze an RNA toggle');
-assert.ok(document.querySelector('#homeAnalyzeFork a[href="?page=secondary"]'),'Homepage Analyze fork has a 2D path');
-assert.ok(document.querySelector('#homeAnalyzeFork a[href="?page=tertiary"]'),'Homepage Analyze fork has a 3D path');
+assert.ok(document.querySelector('[data-home-path-toggle="learn"]'),'Homepage has a Learn path toggle');
+assert.ok(document.querySelector('[data-home-path-toggle="explore"]'),'Homepage has an Explore path toggle');
+assert.ok(document.querySelector('#homeLearnPanel a[href="?page=journey&scene=blocks"]'),'Homepage Learn panel has a guided starting point');
+assert.ok(document.querySelector('#homeExplorePanel a[href="?page=secondary"]'),'Homepage Explore panel has a 2D path');
+assert.ok(document.querySelector('#homeExplorePanel a[href="?page=tertiary"]'),'Homepage Explore panel has a 3D path');
 assert.equal([...document.querySelectorAll('.scene-number')].every(el=>/\/ 06$/.test(el.textContent)),true,'All visible scene counters use six total steps');
 run('showScene(3)');
 assert.equal(document.querySelectorAll('.growth-residue').length,1);
 for(let i=0;i<4;i++)flush();
 assert.equal(document.querySelectorAll('.growth-residue').length,5);
 assert.equal(document.querySelectorAll('.growth-phosphate').length,5,'Every displayed incoming unit should already contain its phosphate');
-assert.equal(document.querySelectorAll('.growth-phosphate .phosphate-atom.oxygen').length,20,'Each displayed phosphate shows four oxygen atoms');
+assert.equal(document.querySelectorAll('.growth-phosphate .growth-oxygen-label').length,20,'Each displayed phosphate shows four oxygen labels');
 assert.equal(document.querySelectorAll('.growth-phosphate .phosphate-bond').length,25,'Each displayed phosphate shows its P–O covalent bonds, including the double-bond drawing');
 assert.equal(document.querySelectorAll('.growth-residue[data-nucleotide-phosphate="attached"]').length,5,'Phosphate is part of the nucleotide before chain linkage');
 assert.equal(document.querySelectorAll('.growth-link').length,4,'Only inter-nucleotide phosphodiester connections are animated between complete nucleotides');
