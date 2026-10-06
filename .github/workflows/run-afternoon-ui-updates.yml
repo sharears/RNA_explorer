@@ -22,9 +22,21 @@ jobs:
           /^[[:space:]]*python3 - <<.PY.$/ { found=1; next }
           found && /^[[:space:]]*PY$/ { exit }
           found { sub(/^          /, ""); print }
-          ' .github/workflows/afternoon-ui-updates.yml > /tmp/apply-afternoon.py
-          test -s /tmp/apply-afternoon.py
+          ' .github/workflows/afternoon-ui-updates.yml > /tmp/apply-afternoon-full.py
+          test -s /tmp/apply-afternoon-full.py
+          awk '/# Add the new regression to the existing permanent browser smoke workflow\./ { exit } { print }' /tmp/apply-afternoon-full.py > /tmp/apply-afternoon.py
           python3 /tmp/apply-afternoon.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/learning-advanced-smoke.yml')
+          s=p.read_text()
+          marker='          node tests/mini3d-trackball-browser.mjs\n'
+          line='          node tests/afternoon-updates-browser.mjs\n'
+          if line not in s:
+              if marker not in s: raise SystemExit('browser smoke insertion marker not found')
+              s=s.replace(marker,marker+line,1)
+          p.write_text(s)
+          PY
       - name: Validate JavaScript syntax
         run: |
           node --check chemistry-editor.js
