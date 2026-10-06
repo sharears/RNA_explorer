@@ -1,0 +1,408 @@
+name: Apply afternoon RNA Explorer updates
+
+on:
+  push:
+    paths:
+      - .github/workflows/afternoon-ui-updates.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply requested updates
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(path, old, new, label):
+              p=Path(path); s=p.read_text()
+              if old not in s:
+                  raise SystemExit(f'{label}: marker not found in {path}')
+              p.write_text(s.replace(old,new,1))
+
+          # 1 + 5: molecular drawing — strict freeform lasso, organized controls, expandable canvas.
+          p=Path('chemistry-editor.js'); s=p.read_text()
+          old='''  let textDefaults={...DEFAULT_TEXT_STYLE};\n  let undoStack=[],redoStack=[];\n  const HISTORY_LIMIT=80;\n'''
+          new='''  let textDefaults={...DEFAULT_TEXT_STYLE};\n  let undoStack=[],redoStack=[];\n  const HISTORY_LIMIT=80;\n  const DEFAULT_CANVAS_VIEW={x:0,y:0,width:820,height:470};\n  let canvasView={...DEFAULT_CANVAS_VIEW};\n\n  function canvasViewBox(){return [canvasView.x,canvasView.y,canvasView.width,canvasView.height].map(v=>Number(v.toFixed(2))).join(" ");}\n  function applyCanvasView(){if(svg)svg.setAttribute("viewBox",canvasViewBox());}\n  function resetCanvasView(){canvasView={...DEFAULT_CANVAS_VIEW};applyCanvasView();}\n  function expandCanvas(){\n    const cx=canvasView.x+canvasView.width/2,cy=canvasView.y+canvasView.height/2;\n    canvasView.width=Math.min(4000,canvasView.width*1.35);canvasView.height=Math.min(2600,canvasView.height*1.35);\n    canvasView.x=cx-canvasView.width/2;canvasView.y=cy-canvasView.height/2;applyCanvasView();\n    if(status)status.textContent="Canvas expanded. Keep drawing; the workspace can grow again whenever you need more room.";\n  }\n  function fitCanvasToDrawing(announce=true){\n    if(!graph.atoms.length){resetCanvasView();if(announce&&status)status.textContent="Canvas centered at the default size.";return;}\n    const pad=85,minX=Math.min(...graph.atoms.map(a=>a.x))-pad,maxX=Math.max(...graph.atoms.map(a=>a.x))+pad,minY=Math.min(...graph.atoms.map(a=>a.y))-pad,maxY=Math.max(...graph.atoms.map(a=>a.y))+pad;\n    const width=Math.max(DEFAULT_CANVAS_VIEW.width,maxX-minX),height=Math.max(DEFAULT_CANVAS_VIEW.height,maxY-minY),cx=(minX+maxX)/2,cy=(minY+maxY)/2;\n    canvasView={x:cx-width/2,y:cy-height/2,width,height};applyCanvasView();\n    if(announce&&status)status.textContent="Canvas fitted to the current drawing.";\n  }\n  function ensureCanvasContainsDrawing(){\n    if(!graph.atoms.length)return;\n    const margin=70,left=Math.min(...graph.atoms.map(a=>a.x))-margin,right=Math.max(...graph.atoms.map(a=>a.x))+margin,top=Math.min(...graph.atoms.map(a=>a.y))-margin,bottom=Math.max(...graph.atoms.map(a=>a.y))+margin;\n    const oldRight=canvasView.x+canvasView.width,oldBottom=canvasView.y+canvasView.height,newX=Math.min(canvasView.x,left),newY=Math.min(canvasView.y,top),newRight=Math.max(oldRight,right),newBottom=Math.max(oldBottom,bottom);\n    if(newX!==canvasView.x||newY!==canvasView.y||newRight!==oldRight||newBottom!==oldBottom){canvasView={x:newX,y:newY,width:newRight-newX,height:newBottom-newY};applyCanvasView();}\n  }\n\n  function organizeChemistryControls(){\n    const toolbar=dialog?.querySelector(".chem-editor-toolbar");if(!toolbar||toolbar.dataset.grouped)return;toolbar.dataset.grouped="true";\n    const button=(id,text,title)=>{const b=document.createElement("button");b.type="button";b.id=id;b.textContent=text;b.title=title||text;toolbar.append(b);return b;};\n    button("chemExpandCanvas","More canvas","Expand the molecular drawing workspace");\n    button("chemFitCanvas","Fit drawing","Fit the canvas around the current drawing");\n    const groups=[\n      ["History",["#chemUndoButton","#chemRedoButton"]],\n      ["Select · Atoms & groups",['[data-chem-tool="select"]','[data-chem-tool="lasso"]',"#chemSelectAll"]],\n      ["Build · Atoms & bonds",['[data-chem-tool="atom"]','[data-chem-tool="bond"]','[data-chem-tool="fuse"]','[data-chem-tool="hbond"]','[data-chem-tool="delete"]',"#chemRingTemplate","#chemInsertRing"]],\n      ["Display · Labels & chemistry",["#chemAtomCirclesToggle","#chemAtomLabelsToggle","#chemAtomNumbersToggle","#chemElement","#chemBondOrder","#chemChargeMinus","#chemChargePlus","#chemIupacButton"]],\n      ["View · Canvas",["#chemExpandCanvas","#chemFitCanvas"]]\n    ];\n    groups.forEach(([name,selectors],index)=>{\n      const details=document.createElement("details");details.className="chem-tool-group";details.open=index<3;const summary=document.createElement("summary");summary.textContent=name;const body=document.createElement("div");body.className="chem-tool-group-body";details.append(summary,body);\n      selectors.forEach(selector=>{let el=toolbar.querySelector(selector);if(el&&el.tagName==="SELECT")el=el.closest("label");if(el&&!body.contains(el))body.append(el);});toolbar.append(details);\n    });\n    const text=dialog.querySelector(".chem-text-controls > strong");if(text)text.textContent="Display · Text";\n  }\n'''
+          if old not in s: raise SystemExit('chem state marker not found')
+          s=s.replace(old,new,1)
+
+          s=s.replace('''    document.body.append(dialog);\n    const exportDialog=document.createElement("dialog");''','''    document.body.append(dialog);\n    organizeChemistryControls();\n    const exportDialog=document.createElement("dialog");''',1)
+
+          s=s.replace('''    dialog.querySelector("#chemRedoButton").addEventListener("click",redo);\n''','''    dialog.querySelector("#chemRedoButton").addEventListener("click",redo);\n    dialog.querySelector("#chemExpandCanvas").addEventListener("click",expandCanvas);\n    dialog.querySelector("#chemFitCanvas").addEventListener("click",()=>fitCanvasToDrawing(true));\n''',1)
+
+          old='''  function lassoContainsAtom(atom,poly,radius=19){\n    const center={x:atom.x,y:atom.y};if(pointInPolygon(center,poly))return true;\n    for(let i=0;i<poly.length;i++)if(distancePointToSegment(center,poly[i],poly[(i+1)%poly.length])<=radius)return true;\n    return false;\n  }'''
+          new='''  function lassoContainsAtom(atom,poly){\n    // True lasso semantics: selection follows the freeform polygon itself.\n    // The transform rectangle shown afterward is only a handle box and never\n    // adds atoms that were outside the lasso path.\n    return pointInPolygon({x:atom.x,y:atom.y},poly);\n  }'''
+          if old not in s: raise SystemExit('lasso marker not found')
+          s=s.replace(old,new,1)
+
+          old='''  function ringInsertCenter(){\n    if(!graph.atoms.length)return {x:410,y:235};\n    const maxX=Math.max(...graph.atoms.map(a=>a.x)),minX=Math.min(...graph.atoms.map(a=>a.x));\n    if(maxX<650)return {x:Math.min(650,maxX+105),y:235};\n    if(minX>170)return {x:Math.max(100,minX-105),y:235};\n    return {x:410,y:235};\n  }'''
+          new='''  function ringInsertCenter(){\n    const center={x:canvasView.x+canvasView.width/2,y:canvasView.y+canvasView.height/2};\n    if(!graph.atoms.length)return center;\n    const maxX=Math.max(...graph.atoms.map(a=>a.x)),minX=Math.min(...graph.atoms.map(a=>a.x));\n    if(maxX<center.x+canvasView.width*.28)return {x:maxX+105,y:center.y};\n    if(minX>center.x-canvasView.width*.28)return {x:minX-105,y:center.y};\n    return center;\n  }'''
+          if old not in s: raise SystemExit('ring center marker not found')
+          s=s.replace(old,new,1)
+
+          s=s.replace('''    return {x:clamp(origin.x+Math.cos(angle)*length,22,798),y:clamp(origin.y+Math.sin(angle)*length,22,448)};''','''    return {x:origin.x+Math.cos(angle)*length,y:origin.y+Math.sin(angle)*length};''',1)
+
+          s=s.replace('''      graph.atoms.push({id,element,x:p.x,y:p.y,charge:0,label:element,textStyle:{...textDefaults}});\n      invalidateIupac();selectAtoms([id],id);render();validate();return;''','''      graph.atoms.push({id,element,x:p.x,y:p.y,charge:0,label:element,textStyle:{...textDefaults}});\n      ensureCanvasContainsDrawing();invalidateIupac();selectAtoms([id],id);render();validate();return;''',1)
+          s=s.replace('''      graph.atoms.push({id,element,x:p.x,y:p.y,charge:0,label:element,textStyle:{...textDefaults}});\n      graph.bonds.push({id:"b"+bondSerial++,a:pendingAtom,b:id,order:bondOrder});pendingAtom=null;invalidateIupac();selectAtoms([id],id);render();validate();status.textContent="New atom placed at a geometry-aware bond angle. Drag it if you want a different arrangement.";return;''','''      graph.atoms.push({id,element,x:p.x,y:p.y,charge:0,label:element,textStyle:{...textDefaults}});\n      graph.bonds.push({id:"b"+bondSerial++,a:pendingAtom,b:id,order:bondOrder});pendingAtom=null;ensureCanvasContainsDrawing();invalidateIupac();selectAtoms([id],id);render();validate();status.textContent="New atom placed at a geometry-aware bond angle. Drag it if you want a different arrangement.";return;''',1)
+
+          old='''      const p=point(e),dx0=p.x-drag.last.x,dy0=p.y-drag.last.y;\n      const atoms=drag.ids.map(atomById).filter(Boolean);if(!atoms.length)return;\n      const minX=Math.min(...atoms.map(a=>a.x)),maxX=Math.max(...atoms.map(a=>a.x)),minY=Math.min(...atoms.map(a=>a.y)),maxY=Math.max(...atoms.map(a=>a.y));\n      const dx=clamp(dx0,24-minX,796-maxX),dy=clamp(dy0,24-minY,446-maxY);\n      atoms.forEach(a=>{a.x+=dx;a.y+=dy;});drag.last=p;render();return;'''
+          new='''      const p=point(e),dx=p.x-drag.last.x,dy=p.y-drag.last.y;\n      const atoms=drag.ids.map(atomById).filter(Boolean);if(!atoms.length)return;\n      atoms.forEach(a=>{a.x+=dx;a.y+=dy;});drag.last=p;render();return;'''
+          if old not in s: raise SystemExit('drag clamp marker not found')
+          s=s.replace(old,new,1)
+          s=s.replace('''    if(drag&&e.pointerId===drag.pointer){drag=null;if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);validate();return;}''','''    if(drag&&e.pointerId===drag.pointer){drag=null;if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);ensureCanvasContainsDrawing();render();validate();return;}''',1)
+
+          s=s.replace('''  function loadCurrent(){\n    graph=mode==="base"?graphFromBase(base):mode==="pair"?mergePair(leftBase,rightBase):{atoms:[],bonds:[],hbonds:[],iupac:null};\n    renumber();render();validate();\n  }''','''  function loadCurrent(){\n    graph=mode==="base"?graphFromBase(base):mode==="pair"?mergePair(leftBase,rightBase):{atoms:[],bonds:[],hbonds:[],iupac:null};\n    resetCanvasView();renumber();fitCanvasToDrawing(false);render();validate();\n  }''',1)
+
+          s=s.replace('''  function render(){\n    if(!svg)return;\n    svg.innerHTML="";''','''  function render(){\n    if(!svg)return;\n    applyCanvasView();svg.innerHTML="";''',1)
+
+          s=s.replace('''      await ExportTools.exportSvgElement(svg,{format,filename:label,scale,background,viewBox:"0 0 820 470"});''','''      await ExportTools.exportSvgElement(svg,{format,filename:label,scale,background,viewBox:canvasViewBox()});''',1)
+          s=s.replace('''const result=await ExportTools.exportSvgElement(svg,{format,filename,scale,background,viewBox:svg.getAttribute("viewBox")||"0 0 820 470"});''','''const result=await ExportTools.exportSvgElement(svg,{format,filename,scale,background,viewBox:canvasViewBox()});''',1)
+
+          s=s.replace('''    graph=graphFromBase(base);renumber();resetUndoHistory();render();validate();dialog.showModal();''','''    graph=graphFromBase(base);resetCanvasView();renumber();fitCanvasToDrawing(false);resetUndoHistory();render();validate();dialog.showModal();''',1)
+          s=s.replace('''    renumber();resetUndoHistory();render();validate();dialog.showModal();\n  }\n  function openBlank''','''    resetCanvasView();renumber();fitCanvasToDrawing(false);resetUndoHistory();render();validate();dialog.showModal();\n  }\n  function openBlank''',1)
+          s=s.replace('''    graph={atoms:[],bonds:[],hbonds:[],iupac:null};renumber();resetUndoHistory();render();validate();''','''    graph={atoms:[],bonds:[],hbonds:[],iupac:null};resetCanvasView();renumber();resetUndoHistory();render();validate();''',1)
+          s=s.replace('''      status.textContent=count?`Lasso selected ${count} atom${count===1?"":"s"}. Drag the selection or use the resize/rotate handles.`:"No atoms were inside the lasso. Try drawing a wider loop around the atom centers.";''','''      status.textContent=count?`Lasso selected ${count} atom${count===1?"":"s"} inside the freeform path. The rectangle is only a transform handle and does not add enclosed unselected atoms.`:"No atom centers were inside the lasso. Draw the loop around the atoms you want to select.";''',1)
+          p.write_text(s)
+
+          # 4: only the newly formed bond animates at each learning step.
+          p=Path('chemistry.js'); s=p.read_text()
+          s=s.replace('''  else b('p','o5',1,'formed phosphate-bond');''','''  else b('p','o5',1,'formed phosphate-bond step-new');''',1)
+          s=s.replace('''  else b('c1','n',1,'formed glycosidic-bond');''','''  else b('c1','n',1,step===1?'formed glycosidic-bond step-new':'formed glycosidic-bond prior-formed');''',1)
+          p.write_text(s)
+
+          p=Path('styles.css'); s=p.read_text()
+          s=s.replace('.animate-reaction .formed { animation: bond-appear .7s ease both; }','.animate-reaction .step-new { animation: bond-appear .7s ease both; }',1)
+          s=s.replace('.animate-reaction .formed line:not(.bond-hit) { stroke-dasharray: 160; animation: draw-connection 1s ease both; }','.animate-reaction .step-new line:not(.bond-hit) { stroke-dasharray: 160; animation: draw-connection 1s ease both; }',1)
+          old='.growth-svg .inter-nucleotide-link{stroke:var(--mint);stroke-width:4;stroke-dasharray:120;animation:draw-growth-link .8s ease both}'
+          new='.growth-svg .inter-nucleotide-link{stroke:var(--mint);stroke-width:4}\n.growth-svg .new-growth-link .inter-nucleotide-link{stroke-dasharray:120;animation:draw-growth-link .8s ease both}'
+          if old not in s: raise SystemExit('primary animation CSS marker not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+
+          # 2: consistent, navigable control categories in 2D/3D.
+          p=Path('app.js'); s=p.read_text()
+          start=s.index('function setupModernWorkspaceUi(){')
+          end=s.index('\nfunction applyPageMode()',start)
+          new_func=r'''function setupModernWorkspaceUi(){
+  document.querySelectorAll("[data-controls-toggle]").forEach(button=>{
+    const scene=document.getElementById("scene-"+button.dataset.controlsToggle);
+    if(!scene)return;
+    const sync=()=>{
+      const collapsed=scene.classList.contains("controls-collapsed");
+      button.setAttribute("aria-expanded",String(!collapsed));
+      const icon=button.querySelector("span"),label=button.querySelector("b");
+      if(icon)icon.textContent=collapsed?"›":"‹";
+      if(label)label.textContent=collapsed?"Show":"Controls";
+    };
+    button.addEventListener("click",()=>{scene.classList.toggle("controls-collapsed");sync();});
+    sync();
+  });
+
+  const secondaryControls=document.querySelector("#scene-secondary .se-controls");
+  if(secondaryControls&&!secondaryControls.closest(".workspace-advanced-panel")){
+    const advanced=document.createElement("details");advanced.className="workspace-advanced-panel";advanced.open=true;
+    const summary=document.createElement("summary");summary.textContent="Controls · Structure, display & analysis";
+    secondaryControls.before(advanced);advanced.append(summary,secondaryControls);
+  }
+
+  const tertiaryControls=document.querySelector("#scene-tertiary .te-controls");
+  if(tertiaryControls&&!tertiaryControls.querySelector(":scope > .workspace-advanced-panel")){
+    const details=[...tertiaryControls.children].filter(el=>el.tagName==="DETAILS");
+    details.slice(0,2).forEach(el=>el.open=false);
+    if(details.length>2){
+      const advanced=document.createElement("details");advanced.className="workspace-advanced-panel";advanced.open=true;
+      const summary=document.createElement("summary");summary.textContent="More · Selection, analysis & view";advanced.append(summary);
+      details.slice(2).forEach(el=>advanced.append(el));tertiaryControls.append(advanced);
+    }
+  }
+
+  const renameSummaries=(root,map)=>{
+    if(!root)return;
+    root.querySelectorAll("summary").forEach(summary=>{
+      const key=summary.textContent.trim();if(map[key])summary.textContent=map[key];
+    });
+  };
+  renameSummaries(secondaryControls,{
+    "Analyze · Data layers":"Analyze · Data layers",
+    "Display · Backbone":"Display · Backbone",
+    "Display · Residues":"Display · Residues",
+    "Analyze · Base pairs":"Analyze · Base pairs",
+    "Display · Residue index":"Display · Residue index"
+  });
+  renameSummaries(tertiaryControls,{
+    "Import structure & 2D/3D mapping":"Import · Structure & mapping",
+    "Display":"Display · Structure",
+    "Select · sequence & ranges":"Select · Residues & ranges",
+    "Saved objects":"Select · Saved objects",
+    "Residue index":"Display · Residue index",
+    "Analyze · measurements & contacts":"Analyze · Measurements & contacts",
+    "Clipping":"View · Clipping",
+    "Compare / align structures":"Analyze · Compare / align structures",
+    "Saved camera views":"View · Saved camera views",
+    "Focus on structural region":"View · Focus on structural region"
+  });
+
+  const addControlNavigator=(root,labels)=>{
+    if(!root||root.querySelector(":scope > .workspace-control-map"))return;
+    const nav=document.createElement("nav");nav.className="workspace-control-map";nav.setAttribute("aria-label","Control categories");
+    labels.forEach(label=>{
+      const button=document.createElement("button");button.type="button";button.textContent=label;
+      button.addEventListener("click",()=>{
+        const summary=[...root.querySelectorAll("summary")].find(s=>s.textContent.trim().startsWith(label+" ·"));
+        if(!summary)return;
+        let node=summary.parentElement;while(node&&node!==root){if(node.tagName==="DETAILS")node.open=true;node=node.parentElement;}
+        summary.parentElement.open=true;summary.scrollIntoView({behavior:"smooth",block:"nearest"});
+      });nav.append(button);
+    });
+    root.prepend(nav);
+  };
+  addControlNavigator(secondaryControls,["Display","Analyze"]);
+  addControlNavigator(tertiaryControls,["Import","Select","Display","Analyze","View"]);
+}
+'''
+          s=s[:start]+new_func+s[end:]
+          # Contextual tutorial button on drawing launchers.
+          marker='''  launcher.hidden=false;\n  actions.replaceChildren();\n'''
+          repl='''  launcher.hidden=false;\n  actions.replaceChildren();\n  launcher.querySelector(".workspace-tutorial-button")?.remove();\n  const tutorialButton=document.createElement("button");tutorialButton.type="button";tutorialButton.className="workspace-tutorial-button secondary-action";tutorialButton.dataset.rnaTutorial=page; tutorialButton.textContent="? Quick tutorial";\n  description.insertAdjacentElement("afterend",tutorialButton);\n'''
+          if marker not in s: raise SystemExit('workspace launcher marker not found')
+          s=s.replace(marker,repl,1)
+          p.write_text(s)
+
+          # 6 + 7: engaging tutorials and Learn/Practice flashcards.
+          p=Path('index.html'); s=p.read_text()
+          s=s.replace('''            <a href="?page=journey&scene=tertiary"><strong>06</strong> Tertiary structure</a>\n          </div>''','''            <a href="?page=journey&scene=tertiary"><strong>06</strong> Tertiary structure</a>\n            <a href="./#tutorials"><strong>→</strong> Tutorials <small>Try guided examples</small></a>\n            <a href="./#rnaPractice"><strong>✓</strong> Practice <small>RNA flashcards</small></a>\n          </div>''',1)
+
+          home_insert=r'''
+      <section class="home-discovery" id="tutorials" aria-labelledby="homeDiscoveryTitle">
+        <div class="home-section-heading">
+          <p class="eyebrow">Try it now</p>
+          <h2 id="homeDiscoveryTitle">What can I do with RNA Explorer?</h2>
+          <p>Pick a short guided example. Each tutorial explains the goal in a few steps, then opens the real workspace so you can try it yourself.</p>
+        </div>
+        <div class="home-tutorial-grid">
+          <article class="home-tutorial-card"><span>01</span><h3>Draw & edit RNA chemistry</h3><p>Start from a nucleobase or blank canvas, select atoms with a true lasso, change bonds and charges, and export the drawing.</p><button type="button" data-rna-tutorial="drawing">Start drawing tutorial</button></article>
+          <article class="home-tutorial-card"><span>02</span><h3>Explore a 2D structure</h3><p>Load the tRNA example, switch layouts, style residues and base pairs, and add reactivity or base-pair probability data.</p><button type="button" data-rna-tutorial="secondary">Start 2D tutorial</button></article>
+          <article class="home-tutorial-card"><span>03</span><h3>Inspect RNA in 3D</h3><p>Rotate the 1EHZ tRNA, select residues, inspect structural features, measure geometry, and link the 3D structure to 2D.</p><button type="button" data-rna-tutorial="tertiary">Start 3D tutorial</button></article>
+          <article class="home-tutorial-card practice-card"><span>04</span><h3>Practice what you learned</h3><p>Use quick RNA flashcards to review building blocks, bonding, secondary structure, and tertiary structure.</p><a href="#rnaPractice">Practice flashcards ↓</a></article>
+        </div>
+      </section>
+
+      <section class="rna-practice" id="rnaPractice" aria-labelledby="rnaPracticeTitle">
+        <div class="home-section-heading">
+          <p class="eyebrow">Learn · Practice</p>
+          <h2 id="rnaPracticeTitle">RNA structure flashcards</h2>
+          <p>Flip a card, mark whether you knew it, and move through the deck. This first deck is intentionally short; more topic-specific decks can be added later.</p>
+        </div>
+        <div class="flashcard-shell" aria-live="polite">
+          <div class="flashcard-progress"><span id="flashcardProgress">1 / 10</span><span id="flashcardScore">Known 0 · Review 0</span></div>
+          <button class="rna-flashcard" id="rnaFlashcard" type="button" aria-pressed="false" aria-label="Flip flashcard">
+            <span class="flashcard-side-label" id="flashcardSideLabel">Question</span>
+            <strong id="flashcardText">What are the four standard RNA bases?</strong>
+            <small>Tap to flip</small>
+          </button>
+          <div class="flashcard-actions">
+            <button type="button" id="flashcardPrevious">← Previous</button>
+            <button type="button" id="flashcardFlip">Flip card</button>
+            <button type="button" id="flashcardReview">Review again</button>
+            <button type="button" id="flashcardKnow">I know this ✓</button>
+            <button type="button" id="flashcardNext">Next →</button>
+          </div>
+        </div>
+      </section>
+'''
+          marker='''      <section class="workspace-launcher" id="workspaceLauncher" aria-labelledby="workspaceLauncherTitle" hidden>'''
+          if marker not in s: raise SystemExit('home insertion marker not found')
+          s=s.replace(marker,home_insert+'\n'+marker,1)
+
+          s=s.replace('''            <button class="workspace-controls-toggle" type="button" data-controls-toggle="secondary" aria-expanded="true" aria-controls="secondaryControlContent"><span aria-hidden="true">‹</span><b>Controls</b></button>''','''            <div class="workspace-heading-actions"><button class="workspace-controls-toggle" type="button" data-controls-toggle="secondary" aria-expanded="true" aria-controls="secondaryControlContent"><span aria-hidden="true">‹</span><b>Controls</b></button><button class="workspace-help-button" type="button" data-rna-tutorial="secondary">? Tutorial</button></div>''',1)
+          s=s.replace('''            <button class="workspace-controls-toggle" type="button" data-controls-toggle="tertiary" aria-expanded="true" aria-controls="tertiaryControls"><span aria-hidden="true">‹</span><b>Controls</b></button>''','''            <div class="workspace-heading-actions"><button class="workspace-controls-toggle" type="button" data-controls-toggle="tertiary" aria-expanded="true" aria-controls="tertiaryControls"><span aria-hidden="true">‹</span><b>Controls</b></button><button class="workspace-help-button" type="button" data-rna-tutorial="tertiary">? Tutorial</button></div>''',1)
+
+          tutorial_dialog=r'''
+  <dialog id="rnaTutorialDialog" class="rna-tutorial-dialog" aria-labelledby="rnaTutorialTitle">
+    <button class="dialog-close" id="rnaTutorialClose" aria-label="Close tutorial">×</button>
+    <p class="eyebrow">Quick tutorial</p>
+    <h2 id="rnaTutorialTitle">RNA Explorer tutorial</h2>
+    <p id="rnaTutorialIntro"></p>
+    <div class="tutorial-step" id="rnaTutorialStep"></div>
+    <div class="tutorial-progress" id="rnaTutorialProgress"></div>
+    <div class="tutorial-actions"><button type="button" id="rnaTutorialPrevious">← Previous</button><button type="button" id="rnaTutorialNext">Next →</button><a id="rnaTutorialOpen" class="primary-action" href="?page=journey">Open workspace</a></div>
+  </dialog>
+
+'''
+          marker='''  <dialog id="siteSearchDialog"'''
+          if marker not in s: raise SystemExit('tutorial dialog marker not found')
+          s=s.replace(marker,tutorial_dialog+marker,1)
+
+          s=s.replace('''  <link rel="stylesheet" href="chemistry-editor.css?v=chem-editor-6" />''','''  <link rel="stylesheet" href="chemistry-editor.css?v=chem-editor-7" />\n  <link rel="stylesheet" href="learning-tools.css?v=learning-tools-1" />\n  <link rel="stylesheet" href="readability.css?v=readability-1" />''',1)
+          s=s.replace('''  <script src="chemistry.js"></script>''','''  <script src="chemistry.js?v=chemistry-2"></script>''',1)
+          s=s.replace('''  <script src="chemistry-editor.js?v=chem-editor-11"></script>''','''  <script src="chemistry-editor.js?v=chem-editor-12"></script>''',1)
+          s=s.replace('''  <script src="primary-animation.js?v=primary-4"></script>''','''  <script src="primary-animation.js?v=primary-5"></script>''',1)
+          s=s.replace('''  <script src="app.js?v=modern-ui-1"></script>''','''  <script src="learning-tools.js?v=learning-tools-1"></script>\n  <script src="app.js?v=modern-ui-2"></script>''',1)
+          p.write_text(s)
+
+          Path('learning-tools.js').write_text(r'''const RNAExplorerLearningTools=(()=>{
+  const tutorials={
+    drawing:{title:"Draw & edit RNA chemistry",intro:"Use the molecular drawing workspace like a compact chemistry sketchpad.",href:"?page=drawing",steps:[
+      ["Start from something useful","Open a nucleobase, ribose, phosphate, a common base pair, or a blank canvas."],
+      ["Select exactly what you mean","Use box selection for rectangular regions or Lasso select for a true freeform selection. The transform rectangle never adds atoms that were outside the lasso."],
+      ["Edit, make room, and export","Add/delete atoms and bonds, change bond order or charge, use More canvas when the drawing gets crowded, then export your figure."]]},
+    secondary:{title:"Explore a 2D RNA structure",intro:"Use the secondary-structure workspace to connect sequence, pairing, styling, and experimental data.",href:"?page=secondary&start=example",steps:[
+      ["Load the example","Start with the 76-residue tRNA example, or enter your own sequence and dot-bracket structure."],
+      ["Use the same control language","Display controls change backbone, residues, indices and pair appearance; Analyze controls handle base pairs and data layers."],
+      ["Add data when you want it","Upload reactivity/residue information, base-pair probability data, or both, then export the structure or structure files."]]},
+    tertiary:{title:"Inspect RNA in 3D",intro:"Use the 3D workspace to move from a whole structure to residues, contacts, measurements, and linked 2D context.",href:"?page=tertiary&start=example",steps:[
+      ["Move around naturally","Left-drag to rotate, wheel to zoom, and Ctrl/⌘-drag or middle-drag to pan. Reset or center the view whenever you need."],
+      ["Select before you analyze","Use Select controls for residues and ranges, Display controls for representation and labels, then Analyze controls for measurements, contacts, and comparison."],
+      ["Connect 3D back to RNA structure","Use the 1EHZ example, inspect structural features, and link or derive a 2D view when the structure and mapping are appropriate."] ]}
+  };
+  const cards=[
+    ["What are the four standard RNA bases?","Adenine, guanine, cytosine, and uracil."],
+    ["What sugar is found in RNA?","Ribose."],
+    ["What links a base to ribose?","A glycosidic bond."],
+    ["What bond links RNA nucleotides together?","A phosphodiester bond."],
+    ["Which bases form standard Watson–Crick pairs?","A–U and G–C."],
+    ["What is a common RNA wobble pair?","G–U."],
+    ["What is RNA primary structure?","The nucleotide sequence of the RNA strand."],
+    ["What is RNA secondary structure?","Base-paired elements such as stems, loops, bulges, and junctions."],
+    ["What is RNA tertiary structure?","The complete three-dimensional arrangement of the RNA."],
+    ["What does 5′ to 3′ describe?","The direction of the RNA backbone and sequence."]
+  ];
+  let tutorialKey="drawing",tutorialStep=0,cardIndex=0,flipped=false,known=0,review=0;
+  const $=id=>document.getElementById(id);
+  function renderTutorial(){
+    const t=tutorials[tutorialKey];if(!t)return;const step=t.steps[tutorialStep];
+    $("rnaTutorialTitle").textContent=t.title;$("rnaTutorialIntro").textContent=t.intro;
+    $("rnaTutorialStep").innerHTML="<span>Step "+(tutorialStep+1)+"</span><h3></h3><p></p>";$("rnaTutorialStep").querySelector("h3").textContent=step[0];$("rnaTutorialStep").querySelector("p").textContent=step[1];
+    $("rnaTutorialProgress").textContent=(tutorialStep+1)+" / "+t.steps.length;$("rnaTutorialPrevious").disabled=tutorialStep===0;$("rnaTutorialNext").hidden=tutorialStep===t.steps.length-1;$("rnaTutorialOpen").hidden=tutorialStep!==t.steps.length-1;$("rnaTutorialOpen").href=t.href;
+  }
+  function openTutorial(key){if(!tutorials[key])return;tutorialKey=key;tutorialStep=0;renderTutorial();$("rnaTutorialDialog")?.showModal();}
+  function renderCard(){
+    const card=cards[cardIndex];if(!card||!$("rnaFlashcard"))return;
+    $("rnaFlashcard").setAttribute("aria-pressed",String(flipped));$("flashcardSideLabel").textContent=flipped?"Answer":"Question";$("flashcardText").textContent=flipped?card[1]:card[0];
+    $("flashcardProgress").textContent=(cardIndex+1)+" / "+cards.length;$("flashcardScore").textContent="Known "+known+" · Review "+review;
+  }
+  function moveCard(delta){cardIndex=(cardIndex+delta+cards.length)%cards.length;flipped=false;renderCard();}
+  function setup(){
+    document.addEventListener("click",event=>{const trigger=event.target.closest?.("[data-rna-tutorial]");if(trigger){event.preventDefault();openTutorial(trigger.dataset.rnaTutorial);}});
+    $("rnaTutorialClose")?.addEventListener("click",()=>$("rnaTutorialDialog").close());
+    $("rnaTutorialPrevious")?.addEventListener("click",()=>{tutorialStep=Math.max(0,tutorialStep-1);renderTutorial();});
+    $("rnaTutorialNext")?.addEventListener("click",()=>{tutorialStep=Math.min(tutorials[tutorialKey].steps.length-1,tutorialStep+1);renderTutorial();});
+    $("rnaFlashcard")?.addEventListener("click",()=>{flipped=!flipped;renderCard();});$("flashcardFlip")?.addEventListener("click",()=>{flipped=!flipped;renderCard();});
+    $("flashcardPrevious")?.addEventListener("click",()=>moveCard(-1));$("flashcardNext")?.addEventListener("click",()=>moveCard(1));
+    $("flashcardKnow")?.addEventListener("click",()=>{known++;moveCard(1);});$("flashcardReview")?.addEventListener("click",()=>{review++;moveCard(1);});renderCard();
+  }
+  return {setup,openTutorial};
+})();
+RNAExplorerLearningTools.setup();
+''')
+
+          Path('learning-tools.css').write_text(r'''body:not([data-page-mode="home"]) .home-discovery,body:not([data-page-mode="home"]) .rna-practice{display:none!important}
+.home-discovery,.rna-practice{margin:0 0 70px;padding:clamp(24px,4vw,46px);border:1px solid rgba(154,178,194,.14);border-radius:22px;background:rgba(10,20,34,.82);box-shadow:0 18px 45px rgba(0,0,0,.16)}
+.home-section-heading{max-width:780px;margin-bottom:28px}.home-section-heading h2{margin-bottom:12px}.home-section-heading>p:last-child{color:var(--muted);line-height:1.7;margin:0}
+.home-tutorial-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.home-tutorial-card{display:flex;flex-direction:column;min-height:250px;padding:22px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.025)}
+.home-tutorial-card>span{font:700 .82rem "DM Mono",monospace;color:var(--mint)}.home-tutorial-card h3{font-size:1.12rem;margin:18px 0 9px}.home-tutorial-card p{color:var(--muted);font-size:.92rem;line-height:1.6;margin:0 0 20px}.home-tutorial-card button,.home-tutorial-card a{margin-top:auto;border:1px solid rgba(116,215,182,.45);border-radius:8px;background:rgba(116,215,182,.08);color:var(--mint);font-weight:700;text-decoration:none;padding:11px 12px;cursor:pointer;text-align:center}
+.flashcard-shell{max-width:760px;margin:0 auto}.flashcard-progress{display:flex;justify-content:space-between;gap:18px;color:var(--muted);font:.84rem "DM Mono",monospace;margin:0 4px 12px}.rna-flashcard{width:100%;min-height:260px;padding:34px;border:1px solid rgba(116,215,182,.4);border-radius:18px;background:linear-gradient(145deg,rgba(116,215,182,.08),rgba(93,127,163,.06));color:var(--text);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;cursor:pointer}.rna-flashcard[aria-pressed="true"]{border-color:rgba(232,187,105,.6);background:linear-gradient(145deg,rgba(232,187,105,.1),rgba(93,127,163,.05))}.flashcard-side-label{color:var(--mint);font:700 .82rem "DM Mono",monospace;text-transform:uppercase;letter-spacing:.1em}.rna-flashcard strong{max-width:620px;margin:24px 0;font-size:clamp(1.35rem,3vw,2rem);line-height:1.35}.rna-flashcard small{color:var(--muted);font-size:.84rem}.flashcard-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:14px}.flashcard-actions button{border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.035);color:var(--text);padding:10px 12px;cursor:pointer}.flashcard-actions button:hover{border-color:var(--mint);color:var(--mint)}
+.rna-tutorial-dialog{width:min(680px,calc(100% - 28px));border:1px solid var(--line);border-radius:18px;background:#0b1625;color:var(--text);padding:30px;box-shadow:0 28px 80px rgba(0,0,0,.5)}.rna-tutorial-dialog::backdrop{background:rgba(1,6,12,.72)}.rna-tutorial-dialog>p:not(.eyebrow){color:var(--muted);line-height:1.65}.tutorial-step{margin:22px 0;padding:22px;border:1px solid rgba(116,215,182,.24);border-radius:12px;background:rgba(116,215,182,.05)}.tutorial-step>span{color:var(--mint);font:700 .8rem "DM Mono",monospace}.tutorial-step h3{margin:10px 0 8px}.tutorial-step p{margin:0;color:var(--muted);line-height:1.65}.tutorial-progress{text-align:center;color:var(--muted);font:.82rem "DM Mono",monospace}.tutorial-actions{display:flex;gap:9px;justify-content:flex-end;align-items:center;margin-top:18px}.tutorial-actions button{border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--text);padding:10px 12px;cursor:pointer}.tutorial-actions .primary-action{text-decoration:none;padding:11px 14px}
+.workspace-heading-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.workspace-help-button,.workspace-tutorial-button{border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.035);color:var(--muted);padding:8px 10px;cursor:pointer;font-weight:700}.workspace-help-button:hover,.workspace-tutorial-button:hover{color:var(--mint);border-color:var(--mint)}.workspace-tutorial-button{margin:10px 0 2px!important;align-self:flex-start}
+.workspace-control-map{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px;padding:0 0 10px;border-bottom:1px solid rgba(154,178,194,.12)}.workspace-control-map button{border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.025);color:var(--muted);padding:7px 10px;cursor:pointer;font-size:.82rem;font-weight:700}.workspace-control-map button:hover{border-color:var(--mint);color:var(--mint)}
+.chem-editor-toolbar{align-items:flex-start}.chem-tool-group{min-width:150px;border:1px solid rgba(154,178,194,.16);border-radius:9px;background:rgba(255,255,255,.02)}.chem-tool-group>summary{cursor:pointer;padding:9px 11px;color:var(--cream);font-size:.84rem;font-weight:800}.chem-tool-group-body{display:flex;flex-wrap:wrap;gap:6px;padding:0 8px 9px}.chem-tool-group-body label{margin:0}.chem-tool-group-body button{margin:0}
+@media(max-width:1050px){.home-tutorial-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:620px){.home-tutorial-grid{grid-template-columns:1fr}.flashcard-progress{flex-direction:column;gap:4px}.tutorial-actions{flex-wrap:wrap;justify-content:stretch}.tutorial-actions>*{flex:1;text-align:center}}
+''')
+
+          # 8: site-wide small-text readability floor, loaded last so it can override module CSS.
+          Path('readability.css').write_text(r'''/* Site-wide readability pass: preserve hierarchy while avoiding hard-to-read micro text. */
+.beta{font-size:.76rem}.eyebrow,.scene-number{font-size:.82rem}.fact-label,.stage-note,.result-formula{font-size:.78rem}.home-cover-kicker,.home-path-kicker{font-size:.78rem!important}
+.chem-part .part-name{font-size:13px}.chem-part .carbon-label{font-size:12px}.base-choice span{font-size:.82rem}.legend{font-size:.82rem}.secondary-inputs label{font-size:.78rem}.secondary-inputs textarea{font-size:.86rem}.input-help,.input-status{font-size:.82rem}.layout-choice{font-size:.8rem}
+.secondary-node text{font-size:11px}.region-label{font-size:12px}.tertiary-learning-status{font-size:.82rem!important}body[data-page-mode="journey"] #scene-tertiary .te-molecular-viewport::after{font-size:12px!important}
+.se-controls label,.te-controls label,.chem-editor-toolbar,.chem-text-controls,.chem-pair-controls{font-size:.86rem}.se-controls p,.te-controls p,.te-tool-note,.se-controls fieldset,.te-controls fieldset{font-size:.84rem}.se-controls summary,.te-controls summary,.workspace-advanced-panel>summary{font-size:.88rem}.te-sequence-panel,.te-contact-list,.te-measurement-list{font-size:.82rem}
+.home-feedback-button,.workspace-controls-toggle,.project-session-status,.site-search-help,.utility-menu-label{font-size:.82rem!important}.nav-menu-panel small{font-size:.76rem!important}
+@media(max-width:620px){body{font-size:16px}.stage-note{font-size:.76rem}}
+''')
+
+          # 3: permanent browser regression for the controls and interactions added above.
+          Path('tests/afternoon-updates-browser.mjs').write_text(r'''import { chromium } from "playwright";
+const base=process.env.RNA_EXPLORER_URL||"http://127.0.0.1:4173/";
+const browser=await chromium.launch({headless:true});
+const page=await browser.newPage({viewport:{width:1440,height:1100}});
+const errors=[];page.on("pageerror",e=>errors.push(String(e)));page.on("console",m=>{if(m.type()==="error")errors.push(m.text());});
+const screenPoint=async(x,y)=>page.locator('#chemEditorSvg').evaluate((svg,p)=>{const pt=svg.createSVGPoint();pt.x=p.x;pt.y=p.y;const q=pt.matrixTransform(svg.getScreenCTM());return {x:q.x,y:q.y};},{x,y});
+try{
+  await page.goto(base,{waitUntil:"domcontentloaded"});
+  await page.waitForSelector('#tutorials');
+  if(!(await page.locator('#tutorials').isVisible()))throw new Error('Tutorial gallery is not visible on home.');
+  await page.locator('[data-rna-tutorial="drawing"]').first().click();
+  await page.waitForSelector('#rnaTutorialDialog[open]');
+  await page.click('#rnaTutorialNext');await page.click('#rnaTutorialNext');
+  if(!(await page.locator('#rnaTutorialOpen').isVisible()))throw new Error('Tutorial final action did not appear.');
+  await page.click('#rnaTutorialClose');
+  const q=(await page.locator('#flashcardText').textContent())?.trim();await page.click('#flashcardFlip');const a=(await page.locator('#flashcardText').textContent())?.trim();if(!q||!a||q===a)throw new Error('Flashcard did not flip.');
+  await page.click('#flashcardKnow');if(!((await page.locator('#flashcardScore').textContent())||'').includes('Known 1'))throw new Error('Flashcard known counter did not update.');
+
+  await page.goto(base+'?page=drawing',{waitUntil:'domcontentloaded'});await page.click('#drawingOpenBlank');await page.waitForSelector('#chemEditorDialog[open]');
+  const groups=await page.locator('.chem-tool-group>summary').allTextContents();for(const label of ['History','Select · Atoms & groups','Build · Atoms & bonds','Display · Labels & chemistry','View · Canvas'])if(!groups.includes(label))throw new Error('Missing molecular group '+label);
+  await page.locator('[data-chem-tool="atom"]').click();
+  for(const p of [[180,150],[350,150],[180,320],[380,320]]){const q=await screenPoint(...p);await page.mouse.click(q.x,q.y);}
+  await page.locator('[data-chem-tool="lasso"]').click();
+  const polygon=[[150,100],[450,350],[150,350],[150,100]];let q=await screenPoint(...polygon[0]);await page.mouse.move(q.x,q.y);await page.mouse.down();for(const p of polygon.slice(1)){q=await screenPoint(...p);await page.mouse.move(q.x,q.y,{steps:8});}await page.mouse.up();
+  const selected=await page.locator('.chem-editor-atom.selected').count();if(selected!==3)throw new Error('True lasso expected 3 selected atoms, got '+selected);
+  const secondSelected=await page.locator('.chem-editor-atom').nth(1).evaluate(el=>el.classList.contains('selected'));if(secondSelected)throw new Error('Lasso selected an atom inside the bounding rectangle but outside the freeform polygon.');
+  const before=await page.locator('#chemEditorSvg').getAttribute('viewBox');await page.click('#chemExpandCanvas');const after=await page.locator('#chemEditorSvg').getAttribute('viewBox');if(before===after)throw new Error('More canvas did not expand the viewBox.');await page.click('#chemFitCanvas');
+
+  await page.goto(base+'?page=secondary&start=example',{waitUntil:'domcontentloaded'});await page.waitForSelector('.se-controls');
+  const secMap=await page.locator('.se-controls .workspace-control-map button').allTextContents();if(secMap.join('|')!=='Display|Analyze')throw new Error('Secondary control navigation is inconsistent: '+secMap.join('|'));
+  await page.goto(base+'?page=tertiary&start=custom',{waitUntil:'domcontentloaded'});await page.waitForSelector('.te-controls');
+  const terMap=await page.locator('.te-controls .workspace-control-map button').allTextContents();for(const label of ['Import','Select','Display','Analyze','View'])if(!terMap.includes(label))throw new Error('Missing tertiary control category '+label);
+  const summaries=await page.locator('.te-controls summary').allTextContents();for(const label of ['Import · Structure & mapping','Display · Structure','Select · Residues & ranges','Analyze · Measurements & contacts','View · Clipping'])if(!summaries.includes(label))throw new Error('Missing normalized 3D summary '+label);
+
+  await page.goto(base+'?page=journey&scene=nucleotide',{waitUntil:'domcontentloaded'});await page.waitForSelector('#nucleotideDiagram');await page.waitForTimeout(2350);
+  const gly=await page.locator('#nucleotideDiagram .glycosidic-bond').getAttribute('class'),pho=await page.locator('#nucleotideDiagram .phosphate-bond').getAttribute('class');if(!gly?.includes('prior-formed')||gly.includes('step-new'))throw new Error('Existing glycosidic bond is re-animated in nucleotide step.');if(!pho?.includes('step-new'))throw new Error('New phosphate bond is not marked as the only animated bond.');
+  await page.goto(base+'?page=journey&scene=primary',{waitUntil:'domcontentloaded'});await page.waitForSelector('#chainGrowth');await page.waitForTimeout(1550);
+  const links=page.locator('.growth-link .inter-nucleotide-link');if(await links.count()<1)throw new Error('Primary growth link did not appear.');
+  await page.waitForTimeout(1450);const oldLink=page.locator('.growth-link:not(.new-growth-link) .inter-nucleotide-link').first();if(await oldLink.count()){const anim=await oldLink.evaluate(el=>getComputedStyle(el).animationName);if(anim!=='none')throw new Error('Earlier phosphodiester bond is re-animated: '+anim);}
+  const factSize=parseFloat(await page.locator('.fact-label').first().evaluate(el=>getComputedStyle(el).fontSize));if(factSize<12)throw new Error('Readability pass left fact labels too small: '+factSize);
+  const serious=errors.filter(x=>!/favicon|ResizeObserver loop/i.test(x));if(serious.length)throw new Error('Browser errors:\n'+serious.join('\n'));
+  console.log(JSON.stringify({result:'PASS',tutorials:true,flashcards:true,lassoSelected:selected,canvasBefore:before,canvasAfter:after,secondaryGroups:secMap,tertiaryGroups:terMap}));
+} finally {await browser.close();}
+''')
+
+          # Add the new regression to the existing permanent browser smoke workflow.
+          p=Path('.github/workflows/learning-advanced-smoke.yml'); s=p.read_text()
+          old='''          node tests/utility-hover-browser.mjs\n          node tests/learning-advanced-complete-browser.mjs'''
+          new='''          node tests/utility-hover-browser.mjs\n          node tests/afternoon-updates-browser.mjs\n          node tests/learning-advanced-complete-browser.mjs'''
+          if old not in s: raise SystemExit('smoke workflow command marker not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+      - name: Validate JavaScript syntax
+        run: |
+          node --check chemistry-editor.js
+          node --check chemistry.js
+          node --check app.js
+          node --check learning-tools.js
+          node --check tests/afternoon-updates-browser.mjs
+      - name: Install browser test dependency
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Run targeted browser regression
+        run: |
+          python3 -m http.server 4173 > /tmp/rna-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID' EXIT
+          node tests/afternoon-updates-browser.mjs
+      - name: Commit tested update
+        run: |
+          rm .github/workflows/afternoon-ui-updates.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Improve RNA Explorer navigation, learning, and drawing UX'
+          git push
