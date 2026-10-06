@@ -27,7 +27,7 @@ function chemicalDiagram(base, step, overview = false, hidePhosphate = false) {
   a('p',110,210,'P'); a('po',110,140,'O'); a('poh',45,210,'HO'); a('poh2',110,275,'OH');
   b('p','po',2); b('p','poh'); b('p','poh2');
   if (!phosphorylated) { a('leaveP',155,255,'OH',step===1?'leaving':''); b('p','leaveP'); }
-  else b('p','o5',1,'formed phosphate-bond');
+  else b('p','o5',1,'formed phosphate-bond step-new');
   if (purine) {
     a('n',600,230,'N9','base'); a('c8',565,170,'C8','base'); a('n7',610,125,'N7','base');
     a('c5b',665,155,'C5','base'); a('c4b',655,220,'C4','base');
@@ -45,7 +45,7 @@ function chemicalDiagram(base, step, overview = false, hidePhosphate = false) {
     a('ex4',755,135,base==='C'?'NH₂':'O','base'); b('c4b','ex4',base==='C'?1:2);
   }
   if (!linked) { a('hn',555,260,'H','leaving'); b('n','hn'); }
-  else b('c1','n',1,'formed glycosidic-bond');
+  else b('c1','n',1,step===1?'formed glycosidic-bond step-new':'formed glycosidic-bond prior-formed');
   labels.push(`<text x="390" y="487" class="chem-label">${linked ? chemicalNames[base][1] + ' · nucleoside' : 'Ribofuranose (ribose)'}</text>`);
   if(!hidePhosphate) labels.push(`<text x="120" y="340" class="chem-label">${phosphorylated?'5′-phosphate':'Phosphoric acid'}</text>`);
   labels.push(`<text x="690" y="385" class="chem-label">${chemicalNames[base][0]} · ${purine?'purine':'pyrimidine'}</text>`);

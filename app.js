@@ -302,6 +302,9 @@ function renderWorkspaceLauncher(page){
   document.body.dataset.workspaceHub="true";
   launcher.hidden=false;
   actions.replaceChildren();
+  launcher.querySelector(".workspace-tutorial-button")?.remove();
+  const tutorialButton=document.createElement("button");tutorialButton.type="button";tutorialButton.className="workspace-tutorial-button secondary-action";tutorialButton.dataset.rnaTutorial=page; tutorialButton.textContent="? Quick tutorial";
+  description.insertAdjacentElement("afterend",tutorialButton);
 
   if(page==="drawing"){
     title.textContent="Molecular Drawing";
@@ -458,8 +461,8 @@ function setupModernWorkspaceUi(){
 
   const secondaryControls=document.querySelector("#scene-secondary .se-controls");
   if(secondaryControls&&!secondaryControls.closest(".workspace-advanced-panel")){
-    const advanced=document.createElement("details");advanced.className="workspace-advanced-panel";
-    const summary=document.createElement("summary");summary.textContent="Style & advanced controls";
+    const advanced=document.createElement("details");advanced.className="workspace-advanced-panel";advanced.open=true;
+    const summary=document.createElement("summary");summary.textContent="Controls · Structure, display & analysis";
     secondaryControls.before(advanced);advanced.append(summary,secondaryControls);
   }
 
@@ -468,11 +471,54 @@ function setupModernWorkspaceUi(){
     const details=[...tertiaryControls.children].filter(el=>el.tagName==="DETAILS");
     details.slice(0,2).forEach(el=>el.open=false);
     if(details.length>2){
-      const advanced=document.createElement("details");advanced.className="workspace-advanced-panel";
-      const summary=document.createElement("summary");summary.textContent="Advanced tools";advanced.append(summary);
+      const advanced=document.createElement("details");advanced.className="workspace-advanced-panel";advanced.open=true;
+      const summary=document.createElement("summary");summary.textContent="More · Selection, analysis & view";advanced.append(summary);
       details.slice(2).forEach(el=>advanced.append(el));tertiaryControls.append(advanced);
     }
   }
+
+  const renameSummaries=(root,map)=>{
+    if(!root)return;
+    root.querySelectorAll("summary").forEach(summary=>{
+      const key=summary.textContent.trim();if(map[key])summary.textContent=map[key];
+    });
+  };
+  renameSummaries(secondaryControls,{
+    "Analyze · Data layers":"Analyze · Data layers",
+    "Display · Backbone":"Display · Backbone",
+    "Display · Residues":"Display · Residues",
+    "Analyze · Base pairs":"Analyze · Base pairs",
+    "Display · Residue index":"Display · Residue index"
+  });
+  renameSummaries(tertiaryControls,{
+    "Import structure & 2D/3D mapping":"Import · Structure & mapping",
+    "Display":"Display · Structure",
+    "Select · sequence & ranges":"Select · Residues & ranges",
+    "Saved objects":"Select · Saved objects",
+    "Residue index":"Display · Residue index",
+    "Analyze · measurements & contacts":"Analyze · Measurements & contacts",
+    "Clipping":"View · Clipping",
+    "Compare / align structures":"Analyze · Compare / align structures",
+    "Saved camera views":"View · Saved camera views",
+    "Focus on structural region":"View · Focus on structural region"
+  });
+
+  const addControlNavigator=(root,labels)=>{
+    if(!root||root.querySelector(":scope > .workspace-control-map"))return;
+    const nav=document.createElement("nav");nav.className="workspace-control-map";nav.setAttribute("aria-label","Control categories");
+    labels.forEach(label=>{
+      const button=document.createElement("button");button.type="button";button.textContent=label;
+      button.addEventListener("click",()=>{
+        const summary=[...root.querySelectorAll("summary")].find(s=>s.textContent.trim().startsWith(label+" ·"));
+        if(!summary)return;
+        let node=summary.parentElement;while(node&&node!==root){if(node.tagName==="DETAILS")node.open=true;node=node.parentElement;}
+        summary.parentElement.open=true;summary.scrollIntoView({behavior:"smooth",block:"nearest"});
+      });nav.append(button);
+    });
+    root.prepend(nav);
+  };
+  addControlNavigator(secondaryControls,["Display","Analyze"]);
+  addControlNavigator(tertiaryControls,["Import","Select","Display","Analyze","View"]);
 }
 
 function applyPageMode() {

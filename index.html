@@ -15,7 +15,9 @@
   <link rel="stylesheet" href="secondary.css?v=secondary-23" />
   <link rel="stylesheet" href="tertiary.css?v=tertiary-17" />
   <link rel="stylesheet" href="guided-transitions.css?v=guided-6" />
-  <link rel="stylesheet" href="chemistry-editor.css?v=chem-editor-6" />
+  <link rel="stylesheet" href="chemistry-editor.css?v=chem-editor-7" />
+  <link rel="stylesheet" href="learning-tools.css?v=learning-tools-1" />
+  <link rel="stylesheet" href="readability.css?v=readability-1" />
 </head>
 <body>
   <div class="app-shell">
@@ -36,6 +38,8 @@
             <a href="?page=journey&scene=primary"><strong>04</strong> Primary structure</a>
             <a href="?page=journey&scene=secondary"><strong>05</strong> Secondary structure</a>
             <a href="?page=journey&scene=tertiary"><strong>06</strong> Tertiary structure</a>
+            <a href="./#tutorials"><strong>→</strong> Tutorials <small>Try guided examples</small></a>
+            <a href="./#rnaPractice"><strong>✓</strong> Practice <small>RNA flashcards</small></a>
           </div>
         </div>
         <div class="nav-menu" id="exploreNavMenu">
@@ -118,6 +122,44 @@
           <blockquote class="home-thought-bubble">A little editing here…<br>a better base pair there…<br><strong>RNA makes sense!</strong></blockquote>
           <figcaption>From building blocks to editable 2D and interactive 3D structure.</figcaption>
         </figure>
+      </section>
+
+
+      <section class="home-discovery" id="tutorials" aria-labelledby="homeDiscoveryTitle">
+        <div class="home-section-heading">
+<p class="eyebrow">Try it now</p>
+<h2 id="homeDiscoveryTitle">What can I do with RNA Explorer?</h2>
+<p>Pick a short guided example. Each tutorial explains the goal in a few steps, then opens the real workspace so you can try it yourself.</p>
+        </div>
+        <div class="home-tutorial-grid">
+<article class="home-tutorial-card"><span>01</span><h3>Draw & edit RNA chemistry</h3><p>Start from a nucleobase or blank canvas, select atoms with a true lasso, change bonds and charges, and export the drawing.</p><button type="button" data-rna-tutorial="drawing">Start drawing tutorial</button></article>
+<article class="home-tutorial-card"><span>02</span><h3>Explore a 2D structure</h3><p>Load the tRNA example, switch layouts, style residues and base pairs, and add reactivity or base-pair probability data.</p><button type="button" data-rna-tutorial="secondary">Start 2D tutorial</button></article>
+<article class="home-tutorial-card"><span>03</span><h3>Inspect RNA in 3D</h3><p>Rotate the 1EHZ tRNA, select residues, inspect structural features, measure geometry, and link the 3D structure to 2D.</p><button type="button" data-rna-tutorial="tertiary">Start 3D tutorial</button></article>
+<article class="home-tutorial-card practice-card"><span>04</span><h3>Practice what you learned</h3><p>Use quick RNA flashcards to review building blocks, bonding, secondary structure, and tertiary structure.</p><a href="#rnaPractice">Practice flashcards ↓</a></article>
+        </div>
+      </section>
+
+      <section class="rna-practice" id="rnaPractice" aria-labelledby="rnaPracticeTitle">
+        <div class="home-section-heading">
+<p class="eyebrow">Learn · Practice</p>
+<h2 id="rnaPracticeTitle">RNA structure flashcards</h2>
+<p>Flip a card, mark whether you knew it, and move through the deck. This first deck is intentionally short; more topic-specific decks can be added later.</p>
+        </div>
+        <div class="flashcard-shell" aria-live="polite">
+<div class="flashcard-progress"><span id="flashcardProgress">1 / 10</span><span id="flashcardScore">Known 0 · Review 0</span></div>
+<button class="rna-flashcard" id="rnaFlashcard" type="button" aria-pressed="false" aria-label="Flip flashcard">
+  <span class="flashcard-side-label" id="flashcardSideLabel">Question</span>
+  <strong id="flashcardText">What are the four standard RNA bases?</strong>
+  <small>Tap to flip</small>
+</button>
+<div class="flashcard-actions">
+  <button type="button" id="flashcardPrevious">← Previous</button>
+  <button type="button" id="flashcardFlip">Flip card</button>
+  <button type="button" id="flashcardReview">Review again</button>
+  <button type="button" id="flashcardKnow">I know this ✓</button>
+  <button type="button" id="flashcardNext">Next →</button>
+</div>
+        </div>
       </section>
 
       <section class="workspace-launcher" id="workspaceLauncher" aria-labelledby="workspaceLauncherTitle" hidden>
@@ -226,7 +268,7 @@
         <section class="scene" id="scene-secondary" data-scene-panel="secondary" aria-labelledby="secondaryTitle" hidden>
           <div class="scene-copy">
             <p class="scene-number">05 / 06</p>
-            <button class="workspace-controls-toggle" type="button" data-controls-toggle="secondary" aria-expanded="true" aria-controls="secondaryControlContent"><span aria-hidden="true">‹</span><b>Controls</b></button>
+            <div class="workspace-heading-actions"><button class="workspace-controls-toggle" type="button" data-controls-toggle="secondary" aria-expanded="true" aria-controls="secondaryControlContent"><span aria-hidden="true">‹</span><b>Controls</b></button><button class="workspace-help-button" type="button" data-rna-tutorial="secondary">? Tutorial</button></div>
             <h2 id="secondaryTitle">Secondary structure maps local pairing</h2>
             <p>Enter an RNA sequence and its dot-bracket structure, then compare three ways of viewing the same base pairs.</p>
             <div class="secondary-inputs" aria-label="RNA secondary-structure input">
@@ -265,7 +307,7 @@
         <section class="scene" id="scene-tertiary" data-scene-panel="tertiary" aria-labelledby="tertiaryTitle" hidden>
           <div class="scene-copy">
             <p class="scene-number">06 / 06</p>
-            <button class="workspace-controls-toggle" type="button" data-controls-toggle="tertiary" aria-expanded="true" aria-controls="tertiaryControls"><span aria-hidden="true">‹</span><b>Controls</b></button>
+            <div class="workspace-heading-actions"><button class="workspace-controls-toggle" type="button" data-controls-toggle="tertiary" aria-expanded="true" aria-controls="tertiaryControls"><span aria-hidden="true">‹</span><b>Controls</b></button><button class="workspace-help-button" type="button" data-rna-tutorial="tertiary">? Tutorial</button></div>
             <h2 id="tertiaryTitle">Tertiary structure is the 3D arrangement</h2>
             <p>See how the same residues and secondary-structure elements occupy three-dimensional space. Use the example 1EHZ structure or upload your own PDB/mmCIF file and validate it against the Secondary sequence before linking the views.</p>
             <div class="fact-panel residue-panel" aria-live="polite">
@@ -355,6 +397,17 @@
     </main>
   </div>
 
+
+  <dialog id="rnaTutorialDialog" class="rna-tutorial-dialog" aria-labelledby="rnaTutorialTitle">
+    <button class="dialog-close" id="rnaTutorialClose" aria-label="Close tutorial">×</button>
+    <p class="eyebrow">Quick tutorial</p>
+    <h2 id="rnaTutorialTitle">RNA Explorer tutorial</h2>
+    <p id="rnaTutorialIntro"></p>
+    <div class="tutorial-step" id="rnaTutorialStep"></div>
+    <div class="tutorial-progress" id="rnaTutorialProgress"></div>
+    <div class="tutorial-actions"><button type="button" id="rnaTutorialPrevious">← Previous</button><button type="button" id="rnaTutorialNext">Next →</button><a id="rnaTutorialOpen" class="primary-action" href="?page=journey">Open workspace</a></div>
+  </dialog>
+
   <dialog id="siteSearchDialog" class="site-search-dialog" aria-labelledby="siteSearchTitle">
     <button class="dialog-close" id="siteSearchClose" aria-label="Close search">×</button>
     <p class="eyebrow">Find a tool</p>
@@ -374,15 +427,16 @@
   </dialog>
 
   <script src="export-tools.js?v=1"></script>
-  <script src="chemistry.js"></script>
-  <script src="chemistry-editor.js?v=chem-editor-11"></script>
+  <script src="chemistry.js?v=chemistry-2"></script>
+  <script src="chemistry-editor.js?v=chem-editor-12"></script>
   <script src="journey.js?v=guided-2"></script>
-  <script src="primary-animation.js?v=primary-4"></script>
+  <script src="primary-animation.js?v=primary-5"></script>
   <script src="guided-transitions.js?v=guided-8"></script>
   <script src="secondary.js?v=secondary-22"></script>
   <script src="tertiary.js?v=tertiary-16"></script>
   <script src="project-session.js?v=project-1"></script>
-  <script src="app.js?v=modern-ui-1"></script>
+  <script src="learning-tools.js?v=learning-tools-1"></script>
+  <script src="app.js?v=modern-ui-2"></script>
   <script src="ui-fixes.js?v=ui-fixes-4"></script>
 </body>
 </html>

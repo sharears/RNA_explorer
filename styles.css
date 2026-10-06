@@ -218,7 +218,7 @@ dialog a { color: var(--mint); }
 #scene-nucleotide .base-choice span { font-size: .875rem; }
 .release-groups .chem-atom.leaving { animation: depart-water 1s ease forwards; }
 .animate-reaction .water-product { animation: water-appear 1s ease both; }
-.animate-reaction .formed { animation: bond-appear .7s ease both; }
+.animate-reaction .step-new { animation: bond-appear .7s ease both; }
 @keyframes depart-water { to { opacity: 0; transform: translateY(25px); } }
 @keyframes water-appear { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes bond-appear { from { opacity: 0; } to { opacity: 1; } }
@@ -229,7 +229,7 @@ dialog a { color: var(--mint); }
 #chosenBase { font-size: .875rem; color: var(--mint); }
 .join-animation .chem-atom.leaving { animation: combine-water 2.2s ease-in-out forwards; }
 .join-animation .departing-bond { animation: break-bond 2.2s ease forwards; }
-.animate-reaction .formed line:not(.bond-hit) { stroke-dasharray: 160; animation: draw-connection 1s ease both; }
+.animate-reaction .step-new line:not(.bond-hit) { stroke-dasharray: 160; animation: draw-connection 1s ease both; }
 @keyframes combine-water { 0%,20% { transform: translate(0,0); opacity: 1; } 80% { transform: translate(var(--travel-x),var(--travel-y)); opacity: 1; } 100% { transform: translate(var(--travel-x),var(--travel-y)); opacity: 0; } }
 @keyframes break-bond { 0%,20% { opacity: 1; } 50%,100% { opacity: 0; } }
 @keyframes draw-connection { from { stroke-dashoffset: 160; } to { stroke-dashoffset: 0; } }
@@ -253,7 +253,8 @@ dialog a { color: var(--mint); }
 }
 .growth-svg .phosphate-bond{stroke:#bfcbd4;stroke-width:2.4}
 .growth-svg .nucleotide-phosphate-bond{stroke:#bfcbd4;stroke-width:2.6}
-.growth-svg .inter-nucleotide-link{stroke:var(--mint);stroke-width:4;stroke-dasharray:120;animation:draw-growth-link .8s ease both}
+.growth-svg .inter-nucleotide-link{stroke:var(--mint);stroke-width:4}
+.growth-svg .new-growth-link .inter-nucleotide-link{stroke-dasharray:120;animation:draw-growth-link .8s ease both}
 @keyframes draw-growth-link{from{stroke-dashoffset:120;opacity:.25}to{stroke-dashoffset:0;opacity:1}}
 .growth-svg .growth-direction { stroke:var(--mint); }
 .arriving-residue { animation:residue-arrives .75s ease both; }

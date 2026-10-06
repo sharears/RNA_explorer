@@ -180,6 +180,50 @@ const MoleculeEditor = (() => {
   let textDefaults={...DEFAULT_TEXT_STYLE};
   let undoStack=[],redoStack=[];
   const HISTORY_LIMIT=80;
+  const DEFAULT_CANVAS_VIEW={x:0,y:0,width:820,height:470};
+  let canvasView={...DEFAULT_CANVAS_VIEW};
+
+  function canvasViewBox(){return [canvasView.x,canvasView.y,canvasView.width,canvasView.height].map(v=>Number(v.toFixed(2))).join(" ");}
+  function applyCanvasView(){if(svg)svg.setAttribute("viewBox",canvasViewBox());}
+  function resetCanvasView(){canvasView={...DEFAULT_CANVAS_VIEW};applyCanvasView();}
+  function expandCanvas(){
+    const cx=canvasView.x+canvasView.width/2,cy=canvasView.y+canvasView.height/2;
+    canvasView.width=Math.min(4000,canvasView.width*1.35);canvasView.height=Math.min(2600,canvasView.height*1.35);
+    canvasView.x=cx-canvasView.width/2;canvasView.y=cy-canvasView.height/2;applyCanvasView();
+    if(status)status.textContent="Canvas expanded. Keep drawing; the workspace can grow again whenever you need more room.";
+  }
+  function fitCanvasToDrawing(announce=true){
+    if(!graph.atoms.length){resetCanvasView();if(announce&&status)status.textContent="Canvas centered at the default size.";return;}
+    const pad=85,minX=Math.min(...graph.atoms.map(a=>a.x))-pad,maxX=Math.max(...graph.atoms.map(a=>a.x))+pad,minY=Math.min(...graph.atoms.map(a=>a.y))-pad,maxY=Math.max(...graph.atoms.map(a=>a.y))+pad;
+    const width=Math.max(DEFAULT_CANVAS_VIEW.width,maxX-minX),height=Math.max(DEFAULT_CANVAS_VIEW.height,maxY-minY),cx=(minX+maxX)/2,cy=(minY+maxY)/2;
+    canvasView={x:cx-width/2,y:cy-height/2,width,height};applyCanvasView();
+    if(announce&&status)status.textContent="Canvas fitted to the current drawing.";
+  }
+  function ensureCanvasContainsDrawing(){
+    if(!graph.atoms.length)return;
+    const margin=70,left=Math.min(...graph.atoms.map(a=>a.x))-margin,right=Math.max(...graph.atoms.map(a=>a.x))+margin,top=Math.min(...graph.atoms.map(a=>a.y))-margin,bottom=Math.max(...graph.atoms.map(a=>a.y))+margin;
+    const oldRight=canvasView.x+canvasView.width,oldBottom=canvasView.y+canvasView.height,newX=Math.min(canvasView.x,left),newY=Math.min(canvasView.y,top),newRight=Math.max(oldRight,right),newBottom=Math.max(oldBottom,bottom);
+    if(newX!==canvasView.x||newY!==canvasView.y||newRight!==oldRight||newBottom!==oldBottom){canvasView={x:newX,y:newY,width:newRight-newX,height:newBottom-newY};applyCanvasView();}
+  }
+
+  function organizeChemistryControls(){
+    const toolbar=dialog?.querySelector(".chem-editor-toolbar");if(!toolbar||toolbar.dataset.grouped)return;toolbar.dataset.grouped="true";
+    const button=(id,text,title)=>{const b=document.createElement("button");b.type="button";b.id=id;b.textContent=text;b.title=title||text;toolbar.append(b);return b;};
+    button("chemExpandCanvas","More canvas","Expand the molecular drawing workspace");
+    button("chemFitCanvas","Fit drawing","Fit the canvas around the current drawing");
+    const groups=[
+      ["History",["#chemUndoButton","#chemRedoButton"]],
+      ["Select · Atoms & groups",['[data-chem-tool="select"]','[data-chem-tool="lasso"]',"#chemSelectAll"]],
+      ["Build · Atoms & bonds",['[data-chem-tool="atom"]','[data-chem-tool="bond"]','[data-chem-tool="fuse"]','[data-chem-tool="hbond"]','[data-chem-tool="delete"]',"#chemRingTemplate","#chemInsertRing"]],
+      ["Display · Labels & chemistry",["#chemAtomCirclesToggle","#chemAtomLabelsToggle","#chemAtomNumbersToggle","#chemElement","#chemBondOrder","#chemChargeMinus","#chemChargePlus","#chemIupacButton"]],
+      ["View · Canvas",["#chemExpandCanvas","#chemFitCanvas"]]
+    ];
+    groups.forEach(([name,selectors],index)=>{
+      const details=document.createElement("details");details.className="chem-tool-group";details.open=index<3;const summary=document.createElement("summary");summary.textContent=name;const body=document.createElement("div");body.className="chem-tool-group-body";details.append(summary,body);
+      selectors.forEach(selector=>{let el=toolbar.querySelector(selector);if(el&&el.tagName==="SELECT")el=el.closest("label");if(el&&!body.contains(el))body.append(el);});toolbar.append(details);
+    });
+    const text=dialog.querySelector(".chem-text-controls > strong");if(text)text.textContent="Display · Text";
+  }
 
   function historySnapshot(){
     return JSON.stringify({graph,atomSerial,bondSerial,hbondSerial,textDefaults});
@@ -285,6 +329,7 @@ const MoleculeEditor = (() => {
         </div>
       </div>`;
     document.body.append(dialog);
+    organizeChemistryControls();
     const exportDialog=document.createElement("dialog");exportDialog.id="chemExportDialog";exportDialog.className="chem-export-dialog";
     exportDialog.innerHTML='<button type="button" class="dialog-close" id="chemExportClose" aria-label="Close">×</button><h3>Export Chemical Drawing</h3>'+
       '<label>Format<select id="chemExportFormat"><option value="svg">SVG</option><option value="png">PNG</option><option value="pdf">PDF</option></select></label>'+
@@ -297,6 +342,8 @@ const MoleculeEditor = (() => {
     dialog.querySelector("#chemEditorClose").addEventListener("click",()=>dialog.close());
     dialog.querySelector("#chemUndoButton").addEventListener("click",undo);
     dialog.querySelector("#chemRedoButton").addEventListener("click",redo);
+    dialog.querySelector("#chemExpandCanvas").addEventListener("click",expandCanvas);
+    dialog.querySelector("#chemFitCanvas").addEventListener("click",()=>fitCanvasToDrawing(true));
     dialog.querySelectorAll("[data-chem-tool]").forEach(b=>b.addEventListener("click",()=>{
       tool=b.dataset.chemTool;pendingAtom=null;pendingFuseBond=null;transformDrag=null;selectionBox=null;lasso=null;
       dialog.querySelectorAll("[data-chem-tool]").forEach(x=>x.classList.toggle("active",x===b));render();
@@ -339,7 +386,7 @@ const MoleculeEditor = (() => {
         const scale=(Number(exportDialog.querySelector("#chemExportScale").value)||1)*(dpi/96);
         const format=exportDialog.querySelector("#chemExportFormat").value,background=exportDialog.querySelector("#chemExportBackground").value;
         const filename=mode==="pair"?"rna-base-pair-chemistry":mode==="blank"?"rna-molecular-drawing":"rna-"+base.toLowerCase()+"-chemistry";
-        const result=await ExportTools.exportSvgElement(svg,{format,filename,scale,background,viewBox:svg.getAttribute("viewBox")||"0 0 820 470"});
+        const result=await ExportTools.exportSvgElement(svg,{format,filename,scale,background,viewBox:canvasViewBox()});
         out.textContent=format.toUpperCase()+" exported"+(result?.width?" · "+result.width+" × "+result.height:"")+".";
       }catch(error){out.textContent="Export failed: "+error.message;}
     });
@@ -474,11 +521,12 @@ const MoleculeEditor = (() => {
     return {points,bonds,iupac:RING_NAMES[kind]||null};
   }
   function ringInsertCenter(){
-    if(!graph.atoms.length)return {x:410,y:235};
+    const center={x:canvasView.x+canvasView.width/2,y:canvasView.y+canvasView.height/2};
+    if(!graph.atoms.length)return center;
     const maxX=Math.max(...graph.atoms.map(a=>a.x)),minX=Math.min(...graph.atoms.map(a=>a.x));
-    if(maxX<650)return {x:Math.min(650,maxX+105),y:235};
-    if(minX>170)return {x:Math.max(100,minX-105),y:235};
-    return {x:410,y:235};
+    if(maxX<center.x+canvasView.width*.28)return {x:maxX+105,y:center.y};
+    if(minX>center.x-canvasView.width*.28)return {x:minX-105,y:center.y};
+    return center;
   }
   function insertRing(kind){
     const def=ringDefinition(kind),center=ringInsertCenter(),wasEmpty=graph.atoms.length===0,newIds=[];
@@ -500,10 +548,11 @@ const MoleculeEditor = (() => {
     const dx=b.x-a.x,dy=b.y-a.y,len2=dx*dx+dy*dy;if(len2<1e-9)return Math.hypot(p.x-a.x,p.y-a.y);
     const t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/len2)),x=a.x+t*dx,y=a.y+t*dy;return Math.hypot(p.x-x,p.y-y);
   }
-  function lassoContainsAtom(atom,poly,radius=19){
-    const center={x:atom.x,y:atom.y};if(pointInPolygon(center,poly))return true;
-    for(let i=0;i<poly.length;i++)if(distancePointToSegment(center,poly[i],poly[(i+1)%poly.length])<=radius)return true;
-    return false;
+  function lassoContainsAtom(atom,poly){
+    // True lasso semantics: selection follows the freeform polygon itself.
+    // The transform rectangle shown afterward is only a handle box and never
+    // adds atoms that were outside the lasso path.
+    return pointInPolygon({x:atom.x,y:atom.y},poly);
   }
   function setActiveChemTool(name){
     tool=name;pendingAtom=null;pendingFuseBond=null;transformDrag=null;selectionBox=null;lasso=null;
@@ -557,7 +606,7 @@ const MoleculeEditor = (() => {
       for(let i=0;i<angles.length;i++){const start=angles[i],end=i===angles.length-1?angles[0]+Math.PI*2:angles[i+1],gap=end-start;if(gap>bestGap){bestGap=gap;bestStart=start;}}
       angle=bestStart+bestGap/2;
     }
-    return {x:clamp(origin.x+Math.cos(angle)*length,22,798),y:clamp(origin.y+Math.sin(angle)*length,22,448)};
+    return {x:origin.x+Math.cos(angle)*length,y:origin.y+Math.sin(angle)*length};
   }
   function componentCentroid(ids){
     const atoms=[...ids].map(atomById).filter(Boolean);if(!atoms.length)return {x:0,y:0};return {x:atoms.reduce((s,a)=>s+a.x,0)/atoms.length,y:atoms.reduce((s,a)=>s+a.y,0)/atoms.length};
@@ -588,7 +637,7 @@ const MoleculeEditor = (() => {
 
   function loadCurrent(){
     graph=mode==="base"?graphFromBase(base):mode==="pair"?mergePair(leftBase,rightBase):{atoms:[],bonds:[],hbonds:[],iupac:null};
-    renumber();render();validate();
+    resetCanvasView();renumber();fitCanvasToDrawing(false);render();validate();
   }
   function changeCharge(delta){
     const ids=selectedAtoms.size?[...selectedAtoms]:(selectedAtom?[selectedAtom]:[]);
@@ -632,12 +681,12 @@ const MoleculeEditor = (() => {
     if(tool==="atom"&&!atomEl){
       const p=point(e),id="X"+atomSerial++;
       graph.atoms.push({id,element,x:p.x,y:p.y,charge:0,label:element,textStyle:{...textDefaults}});
-      invalidateIupac();selectAtoms([id],id);render();validate();return;
+      ensureCanvasContainsDrawing();invalidateIupac();selectAtoms([id],id);render();validate();return;
     }
     if(tool==="bond"&&pendingAtom&&!atomEl&&!bondEl&&!hEl){
       const p=smartAttachmentPosition(pendingAtom,point(e)),id="X"+atomSerial++;
       graph.atoms.push({id,element,x:p.x,y:p.y,charge:0,label:element,textStyle:{...textDefaults}});
-      graph.bonds.push({id:"b"+bondSerial++,a:pendingAtom,b:id,order:bondOrder});pendingAtom=null;invalidateIupac();selectAtoms([id],id);render();validate();status.textContent="New atom placed at a geometry-aware bond angle. Drag it if you want a different arrangement.";return;
+      graph.bonds.push({id:"b"+bondSerial++,a:pendingAtom,b:id,order:bondOrder});pendingAtom=null;ensureCanvasContainsDrawing();invalidateIupac();selectAtoms([id],id);render();validate();status.textContent="New atom placed at a geometry-aware bond angle. Drag it if you want a different arrangement.";return;
     }
     if(tool==="fuse"&&bondEl){
       const id=bondEl.dataset.bondId;if(!pendingFuseBond){pendingFuseBond=id;status.textContent="First fusion edge selected. Now click one bond on the other ring.";render();}else if(id===pendingFuseBond){pendingFuseBond=null;status.textContent="Fusion selection cleared.";render();}else fuseBonds(pendingFuseBond,id);return;
@@ -683,10 +732,8 @@ const MoleculeEditor = (() => {
       const p=point(e),last=lasso.points.at(-1);if(!last||Math.hypot(p.x-last.x,p.y-last.y)>3){lasso.points.push(p);render();}return;
     }
     if(drag&&e.pointerId===drag.pointer){
-      const p=point(e),dx0=p.x-drag.last.x,dy0=p.y-drag.last.y;
+      const p=point(e),dx=p.x-drag.last.x,dy=p.y-drag.last.y;
       const atoms=drag.ids.map(atomById).filter(Boolean);if(!atoms.length)return;
-      const minX=Math.min(...atoms.map(a=>a.x)),maxX=Math.max(...atoms.map(a=>a.x)),minY=Math.min(...atoms.map(a=>a.y)),maxY=Math.max(...atoms.map(a=>a.y));
-      const dx=clamp(dx0,24-minX,796-maxX),dy=clamp(dy0,24-minY,446-maxY);
       atoms.forEach(a=>{a.x+=dx;a.y+=dy;});drag.last=p;render();return;
     }
     if(selectionBox&&e.pointerId===selectionBox.pointer){selectionBox.current=point(e);render();}
@@ -702,10 +749,10 @@ const MoleculeEditor = (() => {
       if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);
       const count=selectedAtoms.size;if(selectedAtom){const a=atomById(selectedAtom);if(a)syncTextControls(a.textStyle||textDefaults);}
       setActiveChemTool("select");render();validate();
-      status.textContent=count?`Lasso selected ${count} atom${count===1?"":"s"}. Drag the selection or use the resize/rotate handles.`:"No atoms were inside the lasso. Try drawing a wider loop around the atom centers.";
+      status.textContent=count?`Lasso selected ${count} atom${count===1?"":"s"} inside the freeform path. The rectangle is only a transform handle and does not add enclosed unselected atoms.`:"No atom centers were inside the lasso. Draw the loop around the atoms you want to select.";
       return;
     }
-    if(drag&&e.pointerId===drag.pointer){drag=null;if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);validate();return;}
+    if(drag&&e.pointerId===drag.pointer){drag=null;if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);ensureCanvasContainsDrawing();render();validate();return;}
     if(selectionBox&&e.pointerId===selectionBox.pointer){
       const {start,current,additive}=selectionBox,loX=Math.min(start.x,current.x),hiX=Math.max(start.x,current.x),loY=Math.min(start.y,current.y),hiY=Math.max(start.y,current.y);
       const ids=graph.atoms.filter(a=>a.x>=loX&&a.x<=hiX&&a.y>=loY&&a.y<=hiY).map(a=>a.id);
@@ -771,7 +818,7 @@ const MoleculeEditor = (() => {
   }
   function render(){
     if(!svg)return;
-    svg.innerHTML="";
+    applyCanvasView();svg.innerHTML="";
     const bondLayer=document.createElementNS(NS,"g");bondLayer.setAttribute("class","chem-editor-bonds");
     graph.bonds.forEach(b=>{
       const a=atomById(b.a),c=atomById(b.b);if(!a||!c)return;
@@ -820,7 +867,7 @@ const MoleculeEditor = (() => {
     selectedAtoms.clear();selectedAtom=null;pendingAtom=null;selectionBox=null;lasso=null;render();
     try{
       const label=mode==="pair"?"rna-base-pair-"+leftBase+"-"+rightBase:mode==="blank"?"rna-molecular-drawing":"rna-template-"+String(base).toLowerCase();
-      await ExportTools.exportSvgElement(svg,{format,filename:label,scale,background,viewBox:"0 0 820 470"});
+      await ExportTools.exportSvgElement(svg,{format,filename:label,scale,background,viewBox:canvasViewBox()});
       status.textContent=format.toUpperCase()+" image exported.";
     }finally{
       selectedAtoms=oldSelected;selectedAtom=oldAtom;pendingAtom=oldPending;selectionBox=oldBox;lasso=oldLasso;render();
@@ -849,7 +896,7 @@ const MoleculeEditor = (() => {
     ensureDialog();mode="base";base=selectedBase||"A";onSave=callback||null;showAtomCircles=false;showAtomLabels=true;showAtomNumbers=false;syncDisplayButtons();syncTextControls(textDefaults);
     title.textContent="Edit "+((BASES[base]||{}).name||base);
     dialog.querySelector("#chemPairControls").hidden=true;
-    graph=graphFromBase(base);renumber();resetUndoHistory();render();validate();dialog.showModal();
+    graph=graphFromBase(base);resetCanvasView();renumber();fitCanvasToDrawing(false);resetUndoHistory();render();validate();dialog.showModal();
   }
   function openPair(a,b,callback){
     ensureDialog();mode="pair";leftBase=a||"G";rightBase=b||"C";onSave=callback||null;showAtomCircles=false;showAtomLabels=true;showAtomNumbers=false;syncDisplayButtons();syncTextControls(textDefaults);
@@ -861,13 +908,13 @@ const MoleculeEditor = (() => {
       :/^(AU|UA)$/.test(identity)?pairTemplate("AU",leftBase,rightBase)
       :/^(GU|UG)$/.test(identity)?pairTemplate("GU",leftBase,rightBase)
       :mergePair(leftBase,rightBase);
-    renumber();resetUndoHistory();render();validate();dialog.showModal();
+    resetCanvasView();renumber();fitCanvasToDrawing(false);resetUndoHistory();render();validate();dialog.showModal();
   }
   function openBlank(callback){
     ensureDialog();mode="blank";onSave=callback||null;showAtomCircles=false;showAtomLabels=true;showAtomNumbers=false;syncDisplayButtons();syncTextControls(textDefaults);
     title.textContent="New molecular drawing";
     dialog.querySelector("#chemPairControls").hidden=true;
-    graph={atoms:[],bonds:[],hbonds:[],iupac:null};renumber();resetUndoHistory();render();validate();
+    graph={atoms:[],bonds:[],hbonds:[],iupac:null};resetCanvasView();renumber();resetUndoHistory();render();validate();
     status.textContent="Blank canvas. Choose Add atom to begin, then connect atoms with Add bond.";
     dialog.showModal();
   }

@@ -1,0 +1,7 @@
+/* Site-wide readability pass: preserve hierarchy while avoiding hard-to-read micro text. */
+.beta{font-size:.76rem}.eyebrow,.scene-number{font-size:.82rem}.fact-label,.stage-note,.result-formula{font-size:.78rem}.home-cover-kicker,.home-path-kicker{font-size:.78rem!important}
+.chem-part .part-name{font-size:13px}.chem-part .carbon-label{font-size:12px}.base-choice span{font-size:.82rem}.legend{font-size:.82rem}.secondary-inputs label{font-size:.78rem}.secondary-inputs textarea{font-size:.86rem}.input-help,.input-status{font-size:.82rem}.layout-choice{font-size:.8rem}
+.secondary-node text{font-size:11px}.region-label{font-size:12px}.tertiary-learning-status{font-size:.82rem!important}body[data-page-mode="journey"] #scene-tertiary .te-molecular-viewport::after{font-size:12px!important}
+.se-controls label,.te-controls label,.chem-editor-toolbar,.chem-text-controls,.chem-pair-controls{font-size:.86rem}.se-controls p,.te-controls p,.te-tool-note,.se-controls fieldset,.te-controls fieldset{font-size:.84rem}.se-controls summary,.te-controls summary,.workspace-advanced-panel>summary{font-size:.88rem}.te-sequence-panel,.te-contact-list,.te-measurement-list{font-size:.82rem}
+.home-feedback-button,.workspace-controls-toggle,.project-session-status,.site-search-help,.utility-menu-label{font-size:.82rem!important}.nav-menu-panel small{font-size:.76rem!important}
+@media(max-width:620px){body{font-size:16px}.stage-note{font-size:.76rem}}
