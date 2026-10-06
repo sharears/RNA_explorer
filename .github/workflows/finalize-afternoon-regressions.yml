@@ -49,6 +49,10 @@ jobs:
           old='''assert.ok(document.querySelector('.home-cover-actions a[href="?page=journey"]'),'Homepage has a Learn RNA guided-journey path');\nassert.ok(document.getElementById('homeAnalyzeToggle'),'Homepage has an Analyze an RNA toggle');\nassert.ok(document.querySelector('#homeAnalyzeFork a[href="?page=secondary"]'),'Homepage Analyze fork has a 2D path');\nassert.ok(document.querySelector('#homeAnalyzeFork a[href="?page=tertiary"]'),'Homepage Analyze fork has a 3D path');'''
           new='''assert.ok(document.querySelector('[data-home-path-toggle="learn"]'),'Homepage has a Learn path toggle');\nassert.ok(document.querySelector('[data-home-path-toggle="explore"]'),'Homepage has an Explore path toggle');\nassert.ok(document.querySelector('#homeLearnPanel a[href="?page=journey&scene=blocks"]'),'Homepage Learn panel has a guided starting point');\nassert.ok(document.querySelector('#homeExplorePanel a[href="?page=secondary"]'),'Homepage Explore panel has a 2D path');\nassert.ok(document.querySelector('#homeExplorePanel a[href="?page=tertiary"]'),'Homepage Explore panel has a 3D path');'''
           if old not in s: raise SystemExit('home assertion marker not found')
+          s=s.replace(old,new,1)
+          old="assert.equal(document.querySelectorAll('.growth-phosphate .phosphate-atom.oxygen').length,20,'Each displayed phosphate shows four oxygen atoms');"
+          new="assert.equal(document.querySelectorAll('.growth-phosphate .growth-oxygen-label').length,20,'Each displayed phosphate shows four oxygen labels');"
+          if old not in s: raise SystemExit('phosphate oxygen assertion marker not found')
           p.write_text(s.replace(old,new,1))
           PY
       - name: Validate syntax and static integration
