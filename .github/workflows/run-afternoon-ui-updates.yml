@@ -1,0 +1,52 @@
+name: Run afternoon RNA Explorer updates
+
+on:
+  push:
+    paths:
+      - .github/workflows/run-afternoon-ui-updates.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Extract and apply patch script
+        run: |
+          awk '
+          /^[[:space:]]*python3 - <<.PY.$/ { found=1; next }
+          found && /^[[:space:]]*PY$/ { exit }
+          found { sub(/^          /, ""); print }
+          ' .github/workflows/afternoon-ui-updates.yml > /tmp/apply-afternoon.py
+          test -s /tmp/apply-afternoon.py
+          python3 /tmp/apply-afternoon.py
+      - name: Validate JavaScript syntax
+        run: |
+          node --check chemistry-editor.js
+          node --check chemistry.js
+          node --check app.js
+          node --check learning-tools.js
+          node --check tests/afternoon-updates-browser.mjs
+      - name: Install browser test dependency
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Run targeted browser regression
+        run: |
+          python3 -m http.server 4173 > /tmp/rna-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID' EXIT
+          node tests/afternoon-updates-browser.mjs
+      - name: Commit tested update
+        run: |
+          rm -f .github/workflows/afternoon-ui-updates.yml .github/workflows/run-afternoon-ui-updates.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Improve RNA Explorer navigation, learning, and drawing UX'
+          git push
