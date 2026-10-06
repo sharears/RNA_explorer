@@ -1,0 +1,74 @@
+name: Finalize afternoon regression fixes
+
+on:
+  push:
+    paths:
+      - .github/workflows/finalize-afternoon-regressions.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Fix Learn advanced-control state and refresh legacy static assertions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('app.js')
+          s=p.read_text()
+          old='''  if(secondaryControls&&!secondaryControls.closest(".workspace-advanced-panel")){\n    const advanced=document.createElement("details");advanced.className="workspace-advanced-panel";advanced.open=true;\n    const summary=document.createElement("summary");summary.textContent="Controls · Structure, display & analysis";\n    secondaryControls.before(advanced);advanced.append(summary,secondaryControls);\n  }'''
+          new='''  if(secondaryControls&&!secondaryControls.closest(".workspace-advanced-panel")){\n    const advanced=document.createElement("details");advanced.className="workspace-advanced-panel";advanced.open=false;\n    const summary=document.createElement("summary");summary.textContent="Controls · Structure, display & analysis";\n    secondaryControls.before(advanced);advanced.append(summary,secondaryControls);\n  }'''
+          if old not in s: raise SystemExit('secondary panel marker not found')
+          s=s.replace(old,new,1)
+          old='''  if(page==="secondary"){\n    if(!start){renderWorkspaceLauncher("secondary");return;}\n    showScene(4);\n    if(start==="custom")prepareSecondaryCustomStart();\n    else document.getElementById("restoreTrnaButton")?.click();\n    return;\n  }'''
+          new='''  if(page==="secondary"){\n    if(!start){renderWorkspaceLauncher("secondary");return;}\n    showScene(4);\n    const advanced=document.querySelector("#scene-secondary .workspace-advanced-panel");if(advanced)advanced.open=true;\n    if(start==="custom")prepareSecondaryCustomStart();\n    else document.getElementById("restoreTrnaButton")?.click();\n    return;\n  }'''
+          if old not in s: raise SystemExit('secondary page branch marker not found')
+          p.write_text(s.replace(old,new,1))
+
+          p=Path('tests/chemistry.cjs')
+          s=p.read_text()
+          old='''const ctx=vm.createContext({document,window,console,CustomEvent:window.CustomEvent,Option:OptionCtor,\n  setTimeout(fn){const id=++serial;timers.set(id,fn);return id;},'''
+          new='''const ctx=vm.createContext({document,window,console,CustomEvent:window.CustomEvent,Option:OptionCtor,URL,URLSearchParams,\n  setTimeout(fn){const id=++serial;timers.set(id,fn);return id;},'''
+          if old not in s: raise SystemExit('test context marker not found')
+          s=s.replace(old,new,1)
+          old="for(let i=0;i<6;i++){run('showScene('+i+')');flush();assert.equal(document.querySelectorAll('.scene:not([hidden])').length,1);assert.equal(document.getElementById('progressText').textContent,(i+1)+' of 6');}"
+          new="for(let i=0;i<6;i++){run('showScene('+i+')');flush();assert.equal(document.querySelectorAll('.scene:not([hidden])').length,1);assert.equal(document.getElementById('progressText').textContent,'Checkpoint '+(i+1)+' of 6');}"
+          if old not in s: raise SystemExit('progress assertion marker not found')
+          s=s.replace(old,new,1)
+          old='''assert.ok(document.querySelector('.home-cover-actions a[href="?page=journey"]'),'Homepage has a Learn RNA guided-journey path');\nassert.ok(document.getElementById('homeAnalyzeToggle'),'Homepage has an Analyze an RNA toggle');\nassert.ok(document.querySelector('#homeAnalyzeFork a[href="?page=secondary"]'),'Homepage Analyze fork has a 2D path');\nassert.ok(document.querySelector('#homeAnalyzeFork a[href="?page=tertiary"]'),'Homepage Analyze fork has a 3D path');'''
+          new='''assert.ok(document.querySelector('[data-home-path-toggle="learn"]'),'Homepage has a Learn path toggle');\nassert.ok(document.querySelector('[data-home-path-toggle="explore"]'),'Homepage has an Explore path toggle');\nassert.ok(document.querySelector('#homeLearnPanel a[href="?page=journey&scene=blocks"]'),'Homepage Learn panel has a guided starting point');\nassert.ok(document.querySelector('#homeExplorePanel a[href="?page=secondary"]'),'Homepage Explore panel has a 2D path');\nassert.ok(document.querySelector('#homeExplorePanel a[href="?page=tertiary"]'),'Homepage Explore panel has a 3D path');'''
+          if old not in s: raise SystemExit('home assertion marker not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+      - name: Validate syntax and static integration
+        run: |
+          node --check app.js
+          node --check tests/chemistry.cjs
+          npm install --no-save linkedom playwright
+          mkdir -p dist && cp index.html *.js *.css dist/ && cp -r data dist/data && cp -r assets dist/assets
+          node tests/chemistry.cjs
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run new and existing browser regressions
+        run: |
+          python3 -m http.server 4173 --directory dist > /tmp/rna-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID' EXIT
+          node tests/afternoon-updates-browser.mjs
+          node tests/learning-advanced-complete-browser.mjs
+      - name: Commit verified fixes
+        run: |
+          rm -f .github/workflows/finalize-afternoon-regressions.yml
+          rm -rf node_modules dist
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js tests/chemistry.cjs .github/workflows/finalize-afternoon-regressions.yml
+          git commit -m 'Fix Learn controls and refresh regression coverage'
+          git push
