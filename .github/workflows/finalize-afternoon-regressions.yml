@@ -34,6 +34,10 @@ jobs:
 
           p=Path('tests/chemistry.cjs')
           s=p.read_text()
+          old='''window.matchMedia=()=>({matches:false});'''
+          new='''window.matchMedia=()=>({matches:false});\nif(!window.location)Object.defineProperty(window,'location',{value:{href:'http://localhost/'},writable:true,configurable:true});'''
+          if old not in s: raise SystemExit('location shim marker not found')
+          s=s.replace(old,new,1)
           old='''const ctx=vm.createContext({document,window,console,CustomEvent:window.CustomEvent,Option:OptionCtor,\n  setTimeout(fn){const id=++serial;timers.set(id,fn);return id;},'''
           new='''const ctx=vm.createContext({document,window,console,CustomEvent:window.CustomEvent,Option:OptionCtor,URL,URLSearchParams,\n  setTimeout(fn){const id=++serial;timers.set(id,fn);return id;},'''
           if old not in s: raise SystemExit('test context marker not found')
