@@ -36,6 +36,10 @@ jobs:
               if marker not in s: raise SystemExit('browser smoke insertion marker not found')
               s=s.replace(marker,marker+line,1)
           p.write_text(s)
+          t=Path('tests/afternoon-updates-browser.mjs')
+          x=t.read_text()
+          x=x.replace("const q=(await page.locator('#flashcardText').textContent())?.trim();await page.click('#flashcardFlip');const a=(await page.locator('#flashcardText').textContent())?.trim();if(!q||!a||q===a)","const question=(await page.locator('#flashcardText').textContent())?.trim();await page.click('#flashcardFlip');const answer=(await page.locator('#flashcardText').textContent())?.trim();if(!question||!answer||question===answer)",1)
+          t.write_text(x)
           PY
       - name: Validate JavaScript syntax
         run: |
