@@ -1,0 +1,1788 @@
+const TertiaryExplorer = (() => {
+  const PALETTES = {
+    viridis:["#440154","#3b528b","#21918c","#5ec962","#fde725"],
+    magma:["#000004","#51127c","#b73779","#fc8961","#fcfdbf"],
+    blueRed:["#2166ac","#92c5de","#f7f7f7","#f4a582","#b2182b"],
+    cividis:["#00224e","#434e6c","#7d7c78","#bcae6c","#fee838"]
+  };
+  const CHAIN_COLORS=["#74d7b6","#e8bb69","#87a9cc","#d9808e","#a78bfa","#f0a36f","#7fd3e8","#d6a3e8"];
+  const REGION_COLORS={
+    "Acceptor stem":"#74d7b6","D arm":"#d9808e","Anticodon arm":"#e8bb69",
+    "Variable region":"#87a9cc","T arm":"#a78bfa","3′ CCA end":"#f0a36f",
+    "Connector":"#8fa2b3","Paired":"#74d7b6","Unpaired":"#e8bb69"
+  };
+  const SOURCES=[
+    "https://cdn.jsdelivr.net/npm/3dmol@2.5.5/build/3Dmol-min.js"
+  ];
+  const PDB_URL="https://files.rcsb.org/download/1EHZ.pdb";
+  const MOD_BASES={
+    A:"A",ADE:"A",RA:"A","1MA":"A","M1A":"A","6MA":"A","RIA":"A",
+    C:"C",CYT:"C",RC:"C","5MC":"C","OMC":"C","M5C":"C",
+    G:"G",GUA:"G",RG:"G","1MG":"G","M1G":"G","2MG":"G","M2G":"G","7MG":"G","M7G":"G","OMG":"G","YG":"G","YYG":"G",
+    U:"U",URA:"U",RU:"U","PSU":"U","H2U":"U","5MU":"U","4SU":"U","T":"U"
+  };
+  const WATER=new Set(["HOH","WAT","H2O","DOD"]);
+  const IONS=new Set(["NA","K","MG","CA","ZN","CL","MN","FE","CO","CU","NI","SR","CS","BA","CD","HG","PB","BR","IOD","F"]);
+  const AMINO=new Set(["ALA","ARG","ASN","ASP","CYS","GLN","GLU","GLY","HIS","ILE","LEU","LYS","MET","PHE","PRO","SER","THR","TRP","TYR","VAL","SEC","PYL"]);
+  const BACKBONE_ATOMS=["P","OP1","OP2","O1P","O2P","O5'","O5*","C5'","C5*","C4'","C4*","C3'","C3*","O3'","O3*"];
+  const BASE_HBOND_ROLES={
+    A:{donors:new Set(["N6"]),acceptors:new Set(["N1","N3","N7"])},
+    G:{donors:new Set(["N1","N2"]),acceptors:new Set(["O6","N3","N7"])},
+    C:{donors:new Set(["N4"]),acceptors:new Set(["N3","O2"])},
+    U:{donors:new Set(["N3"]),acceptors:new Set(["O2","O4"])}
+  };
+  const CANONICAL_PAIR_ATOMS={
+    GC:[["O6","N4"],["N1","N3"],["N2","O2"]],
+    CG:[["N4","O6"],["N3","N1"],["O2","N2"]],
+    AU:[["N6","O4"],["N1","N3"]],
+    UA:[["O4","N6"],["N3","N1"]],
+    GU:[["O6","N3"],["N1","O2"]],
+    UG:[["N3","O6"],["O2","N1"]]
+  };
+  const BASE_RING_ATOMS={
+    A:["N9","C8","N7","C5","C6","N1","C2","N3","C4"],
+    G:["N9","C8","N7","C5","C6","N1","C2","N3","C4"],
+    C:["N1","C2","N3","C4","C5","C6"],
+    U:["N1","C2","N3","C4","C5","C6"]
+  };
+  const BASE_PLANE_TRIPLE={A:["N9","C4","C8"],G:["N9","C4","C8"],C:["N1","C2","C6"],U:["N1","C2","C6"]};
+  const DEFAULT_LINE_STYLE={lineStyle:"dashed",color:"#ffffff",thickness:.07,opacity:.82,visible:true,labelVisible:true};
+  const DEFAULT_HBOND_STYLE={lineStyle:"dashed",color:"#74d7b6",thickness:.055,opacity:.95,visible:true,labelVisible:false};
+  const LEARNING_COLORS={amber:"#f2c66d",mint:"#74d7b6",rose:"#d9808e",blue:"#87a9cc",white:"#f7fbff"};
+  const LEARNING_LESSONS={
+    glycosidic:{
+      name:"Glycosidic angle (χ)",
+      definition:"The glycosidic angle describes how a nucleobase is rotated around the bond that links it to ribose.",
+      example:"A residue in the loaded RNA is selected automatically and the four atoms defining χ are highlighted.",
+      notice:"The four atoms define a dihedral angle. Rotating around the C1′–N bond changes how the base sits relative to the sugar."
+    },
+    pucker:{
+      name:"Sugar pucker",
+      definition:"Ribose is not flat. Sugar pucker describes the out-of-plane shape adopted by its five-membered ring.",
+      example:"The five ribose-ring atoms are highlighted so you can inspect their non-planar arrangement directly.",
+      notice:"Look especially at C2′ and C3′. In RNA helices, C3′-endo-like puckers are common and help support A-form geometry."
+    },
+    backbone:{
+      name:"Backbone torsions (α–ζ)",
+      definition:"Six torsion angles—α, β, γ, δ, ε, and ζ—describe rotations along the phosphodiester backbone.",
+      example:"Choose one torsion and the four atoms that define it will be highlighted on an internal nucleotide.",
+      notice:"Each torsion is local, but many torsions acting together determine the path and flexibility of the RNA backbone."
+    },
+    stacking:{
+      name:"Base stacking",
+      definition:"Base stacking is the close, roughly parallel packing of neighboring nucleobases.",
+      example:"A sequential pair with favorable base-plane geometry is selected automatically from the loaded RNA.",
+      notice:"The bases sit above and below one another rather than facing edge-to-edge as they do in a base pair."
+    },
+    basepair:{
+      name:"Base pairing & hydrogen bonds",
+      definition:"Base pairing brings nucleobase edges together; hydrogen bonds can provide directional stabilization and specificity.",
+      example:"A mapped base pair is highlighted, together with donor–acceptor contacts that pass the current geometric screen.",
+      notice:"Base pairing is edge-to-edge. Compare this orientation with the approximately face-to-face arrangement of stacked bases."
+    },
+    helix:{
+      name:"RNA helix",
+      definition:"An RNA helix is a repeating arrangement of paired and stacked nucleotides winding around a common axis.",
+      example:"The acceptor stem of the example tRNA is used as a compact RNA-helical segment.",
+      notice:"Follow the two strands and notice that pairing repeats while neighboring bases also stack along the helix."
+    },
+    loopjunction:{
+      name:"Loops & junctions",
+      definition:"Loops turn or expose the RNA chain; junctions are regions where multiple helical segments converge.",
+      example:"The example tRNA highlights an unpaired loop and a central core where several structural arms come together.",
+      notice:"These regions are not simply ‘empty space’ between helices—they help organize the overall 3D fold."
+    },
+    tertiarycontact:{
+      name:"Tertiary contacts",
+      definition:"Tertiary contacts bring residues that are distant in sequence close together in three-dimensional space.",
+      example:"The viewer finds a close non-neighboring residue pair that is not the mapped secondary-structure partner.",
+      notice:"Sequence distance and 3D distance are different. Spatial proximity can help stabilize the compact RNA fold."
+    }
+  };
+  const TORSION_DEFS={
+    alpha:{symbol:"α",atoms:[[-1,"O3'"],[0,"P"],[0,"O5'"],[0,"C5'"]]},
+    beta:{symbol:"β",atoms:[[0,"P"],[0,"O5'"],[0,"C5'"],[0,"C4'"]]},
+    gamma:{symbol:"γ",atoms:[[0,"O5'"],[0,"C5'"],[0,"C4'"],[0,"C3'"]]},
+    delta:{symbol:"δ",atoms:[[0,"C5'"],[0,"C4'"],[0,"C3'"],[0,"O3'"]]},
+    epsilon:{symbol:"ε",atoms:[[0,"C4'"],[0,"C3'"],[0,"O3'"],[1,"P"]]},
+    zeta:{symbol:"ζ",atoms:[[0,"C3'"],[0,"O3'"],[1,"P"],[1,"O5'"]]}
+  };
+
+  const state={
+    defaultSequence:"",defaultStructure:"",secondarySequence:"",structure:"",
+    colors:{},names:{},onSelect:()=>{},selected:0,
+    representation:"sticks",colorMode:"nucleotide",showPairs:false,showIndices:true,showSelectedLabel:true,
+    indexSelection:new Set(),metadata:{},heatEnabled:false,heatTheme:"viridis",heatRange:[0,1],
+    secondaryIsDefault:true,sourceIsDefault:true,sameMoleculeConfirmed:false,
+    proximityEnabled:false,proximityCutoff:12,contactEnabled:false,contactCutoff:4.0,
+    measurementMode:"off",measurementPicks:[],measurements:[],measurementSerial:1,
+    split:false,exportScale:2,currentFileName:"PDB 1EHZ",currentFormat:"pdb",sourceText:"",
+    chains:[],activeChain:null,chainNeedsChoice:false,residueIndexByKey:new Map(),
+    mapping:{enabled:false,level:"pending",message:""},
+    surfaceEnabled:false,surfaceOpacity:0.35,uniformColor:"#74d7b6",backgroundColor:"#07111c",orthographic:false,
+    visibility:{rna:true,protein:true,solvent:false,ions:true,other:true,hydrogen:false},
+    selectionIndices:new Set(),selectionLabels:false,selectionStyle:{color:"#f2c66d",thickness:.24,opacity:.32},
+    selectedPairs:new Set(),pairHbondStyles:{},hbondCutoff:3.5,
+    savedObjects:[],objectSerial:1,isolateObjectId:null,
+    savedViews:[],viewSerial:1,
+    comparison:{model:null,name:"",rmsd:null,count:0,visible:true,status:""},
+    clipEnabled:false,clipNear:-40,clipFar:40,
+    secondaryLayoutPositions:null,derivedSecondary:null,
+    learning:{key:"glycosidic",torsion:"alpha",geometry:null,flashPhase:false}
+  };
+
+  let viewer=null,model=null,viewerPromise=null,initialView=null,hoverLabel=null;
+  let pairs=[],partner=[],setupDone=false,surfaceToken=0,resizeTicket=0,learningPulseTimer=null,learningPulseStep=0;
+  function scheduleViewerResize(preserveView=true){
+    if(!viewer)return;
+    const ticket=++resizeTicket,view=preserveView&&viewer.getView?viewer.getView():null;
+    const run=()=>{if(ticket!==resizeTicket||!viewer)return;try{viewer.resize?.();if(view&&viewer.setView)viewer.setView(view);viewer.render();}catch(error){console.warn("Tertiary viewer resize:",error);}};
+    if(typeof requestAnimationFrame==="function")requestAnimationFrame(()=>requestAnimationFrame(run));else setTimeout(run,0);
+  }
+
+  const $=id=>document.getElementById(id);
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const residueKey=(chain,resi,icode="")=>String(chain||"")+"|"+String(resi)+"|"+String(icode||"");
+  const selectorForResidue=r=>{
+    const sel={resi:r.resi};
+    if(r.chain!==undefined&&r.chain!==null&&r.chain!=="")sel.chain=r.chain;
+    if(r.icode)sel.icode=r.icode;
+    return sel;
+  };
+
+  function normalizeBase(resn){
+    const key=String(resn||"").trim().toUpperCase();
+    if(MOD_BASES[key])return MOD_BASES[key];
+    if(/^[ACGU]$/.test(key))return key;
+    return "?";
+  }
+  function normalizeElement(atom){
+    const e=String(atom?.elem||"").trim().toUpperCase();
+    if(e)return e;
+    const name=String(atom?.atom||"").replace(/[^A-Za-z]/g,"").toUpperCase();
+    return name.slice(0,name.startsWith("CL")||name.startsWith("BR")?2:1);
+  }
+  function parseStructure(structure,n){
+    const stack=[],ps=[],pt=Array(n).fill(-1);
+    [...structure].forEach((c,i)=>{
+      if(c==="(")stack.push(i);
+      else if(c===")"){const a=stack.pop();if(a===undefined)return;ps.push([a,i]);pt[a]=i;pt[i]=a;}
+    });
+    return {pairs:ps.sort((a,b)=>a[0]-b[0]),partner:pt};
+  }
+  function regionFor(i){
+    if(!state.secondaryIsDefault)return partner[i]>=0?"Paired":"Unpaired";
+    const p=i+1;
+    if((p>=1&&p<=7)||(p>=66&&p<=72))return "Acceptor stem";
+    if(p>=10&&p<=25)return "D arm";
+    if(p>=26&&p<=44)return "Anticodon arm";
+    if(p>=45&&p<=48)return "Variable region";
+    if(p>=49&&p<=65)return "T arm";
+    if(p>=73&&p<=76)return "3′ CCA end";
+    return "Connector";
+  }
+  function regionIndices(r){return state.secondarySequence.split("").map((_,i)=>i).filter(i=>regionFor(i)===r);}
+  function activeResidues(){
+    const chain=state.chains.find(c=>c.id===state.activeChain);
+    return chain?chain.residues:[];
+  }
+  function coordFor(i){return activeResidues()[i]?.coord||null;}
+  function distance3D(a,b){
+    const x=coordFor(a),y=coordFor(b);if(!x||!y)return NaN;
+    return Math.hypot(x.x-y.x,x.y-y.y,x.z-y.z);
+  }
+  const pairKey=(a,b)=>Math.min(a,b)+":"+Math.max(a,b);
+  const atomName=a=>String(a?.atom||"").replace(/\*/g,"'").trim().toUpperCase();
+  function atomDistanceRaw(a,b){return Math.hypot(Number(a.x)-Number(b.x),Number(a.y)-Number(b.y),Number(a.z)-Number(b.z));}
+  function pairHydrogenBonds(a,b){
+    const residues=activeResidues(),ra=residues[a],rb=residues[b];if(!ra||!rb)return [];
+    const rolesA=BASE_HBOND_ROLES[baseAt(a)],rolesB=BASE_HBOND_ROLES[baseAt(b)];if(!rolesA||!rolesB)return [];
+    const candidates=[],seen=new Set();
+    const collect=(donorRes,donorRoles,acceptorRes,acceptorRoles)=>{
+      donorRes.atoms.forEach(d=>{
+        const dn=atomName(d);if(!donorRoles.donors.has(dn))return;
+        acceptorRes.atoms.forEach(ac=>{
+          const an=atomName(ac);if(!acceptorRoles.acceptors.has(an))return;
+          const distance=atomDistanceRaw(d,ac);if(distance>state.hbondCutoff||distance<1.5)return;
+          const id=String(d.serial??dn)+"-"+String(ac.serial??an);if(seen.has(id))return;seen.add(id);
+          candidates.push({id,donor:d,acceptor:ac,distance,donorName:dn,acceptorName:an});
+        });
+      });
+    };
+    collect(ra,rolesA,rb,rolesB);collect(rb,rolesB,ra,rolesA);
+    return candidates.sort((x,y)=>x.distance-y.distance);
+  }
+
+  function atomByName(residue,name){return residue?.atoms?.find(a=>atomName(a)===name)||null;}
+  function pointDistance(a,b){return Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);}
+  function baseCentroid(residue,base){
+    const atoms=(BASE_RING_ATOMS[base]||[]).map(name=>atomByName(residue,name)).filter(Boolean);
+    if(atoms.length<3)return null;
+    return {x:atoms.reduce((s,a)=>s+Number(a.x),0)/atoms.length,y:atoms.reduce((s,a)=>s+Number(a.y),0)/atoms.length,z:atoms.reduce((s,a)=>s+Number(a.z),0)/atoms.length};
+  }
+  function basePlaneNormal(residue,base){
+    const names=BASE_PLANE_TRIPLE[base]||[],pts=names.map(name=>atomByName(residue,name));if(pts.some(p=>!p))return null;
+    const u={x:pts[1].x-pts[0].x,y:pts[1].y-pts[0].y,z:pts[1].z-pts[0].z};
+    const v={x:pts[2].x-pts[0].x,y:pts[2].y-pts[0].y,z:pts[2].z-pts[0].z};
+    const n={x:u.y*v.z-u.z*v.y,y:u.z*v.x-u.x*v.z,z:u.x*v.y-u.y*v.x},len=Math.hypot(n.x,n.y,n.z);
+    return len>1e-6?{x:n.x/len,y:n.y/len,z:n.z/len}:null;
+  }
+  const CWW_RING_ATOMS={
+    A:["N9","C8","N7","C5","C6","N1","C2","N3","C4"],
+    G:["N9","C8","N7","C5","C6","N1","C2","N3","C4"],
+    C:["N1","C2","N3","C4","C5","C6"],U:["N1","C2","N3","C4","C5","C6"]
+  };
+  const CWW_EDGE_ATOMS={A:["N1","N6"],G:["O6","N1","N2"],C:["N4","N3","O2"],U:["O4","N3","O2"]};
+  const CWW_CUTOFFS={center:15,vertical:2.5,normal:65,glycoMin:4.5,edgeAngle:55,contact:3.7,minInplane:3.5};
+  const cwwVec=(x,y,z)=>({x:Number(x),y:Number(y),z:Number(z)});
+  const cwwSub=(a,b)=>cwwVec(a.x-b.x,a.y-b.y,a.z-b.z);
+  const cwwDot=(a,b)=>a.x*b.x+a.y*b.y+a.z*b.z;
+  const cwwCross=(a,b)=>cwwVec(a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x);
+  const cwwNorm=a=>Math.hypot(a.x,a.y,a.z);
+  const cwwScale=(a,s)=>cwwVec(a.x*s,a.y*s,a.z*s);
+  function cwwNormalize(a){const n=cwwNorm(a);return n>1e-12?cwwScale(a,1/n):null;}
+  function cwwMean(points){return points.reduce((s,p)=>cwwVec(s.x+p.x/points.length,s.y+p.y/points.length,s.z+p.z/points.length),cwwVec(0,0,0));}
+  function cwwAtom(residue,name){
+    const hits=(residue?.atoms||[]).filter(a=>atomName(a)===name);if(!hits.length)return null;
+    hits.sort((a,b)=>{
+      const oa=Number(a.occupancy??a.occ??-1),ob=Number(b.occupancy??b.occ??-1);if(ob!==oa)return ob-oa;
+      return String(a.altLoc??a.altloc??"").localeCompare(String(b.altLoc??b.altloc??""));
+    });return hits[0];
+  }
+  function cwwCoord(residue,name){const a=cwwAtom(residue,name);return a?cwwVec(a.x,a.y,a.z):null;}
+  function cwwCoords(residue,names){return names.map(name=>[name,cwwCoord(residue,name)]).filter(([,p])=>p);}
+  function cwwBestFitPlane(points){
+    if(points.length<3)return null;const center=cwwMean(points);
+    const a=[[0,0,0],[0,0,0],[0,0,0]];
+    points.forEach(p=>{const q=cwwSub(p,center);a[0][0]+=q.x*q.x;a[0][1]+=q.x*q.y;a[0][2]+=q.x*q.z;a[1][1]+=q.y*q.y;a[1][2]+=q.y*q.z;a[2][2]+=q.z*q.z;});
+    a[1][0]=a[0][1];a[2][0]=a[0][2];a[2][1]=a[1][2];
+    const v=[[1,0,0],[0,1,0],[0,0,1]];
+    for(let iter=0;iter<30;iter++){
+      let p=0,q=1,max=Math.abs(a[0][1]);[[0,2],[1,2]].forEach(([i,j])=>{const x=Math.abs(a[i][j]);if(x>max){max=x;p=i;q=j;}});if(max<1e-10)break;
+      const app=a[p][p],aqq=a[q][q],apq=a[p][q],phi=.5*Math.atan2(2*apq,aqq-app),c=Math.cos(phi),s=Math.sin(phi);
+      for(let k=0;k<3;k++)if(k!==p&&k!==q){const akp=a[k][p],akq=a[k][q];a[k][p]=a[p][k]=c*akp-s*akq;a[k][q]=a[q][k]=s*akp+c*akq;}
+      a[p][p]=c*c*app-2*s*c*apq+s*s*aqq;a[q][q]=s*s*app+2*s*c*apq+c*c*aqq;a[p][q]=a[q][p]=0;
+      for(let k=0;k<3;k++){const vkp=v[k][p],vkq=v[k][q];v[k][p]=c*vkp-s*vkq;v[k][q]=s*vkp+c*vkq;}
+    }
+    let idx=0;if(a[1][1]<a[idx][idx])idx=1;if(a[2][2]<a[idx][idx])idx=2;
+    const normal=cwwNormalize(cwwVec(v[0][idx],v[1][idx],v[2][idx]));return normal?{center,normal}:null;
+  }
+  function cwwFitNucleotide(residue,index){
+    const base=String(residue?.resn||"").trim().toUpperCase();if(!/^[ACGU]$/.test(base))return null;
+    const ring=cwwCoords(residue,CWW_RING_ATOMS[base]).map(([,p])=>p);if(ring.length<5)return null;
+    const plane=cwwBestFitPlane(ring);if(!plane)return null;
+    const edge=cwwCoords(residue,CWW_EDGE_ATOMS[base]).map(([,p])=>p);if(!edge.length)return null;
+    const edgeCenter=cwwMean(edge),raw=cwwSub(edgeCenter,plane.center),wcVec=cwwNormalize(cwwSub(raw,cwwScale(plane.normal,cwwDot(raw,plane.normal))));if(!wcVec)return null;
+    const glycoAtom=base==="A"||base==="G"?"N9":"N1",c1=cwwCoord(residue,"C1'"),gly=cwwCoord(residue,glycoAtom);if(!c1||!gly)return null;
+    return {index,residue,base,center:plane.center,normal:plane.normal,wcVec,glycoVec:cwwSub(gly,c1),glycoAtom};
+  }
+  function cwwAngleDeg(a,b,fold180=false){const na=cwwNorm(a),nb=cwwNorm(b);if(!na||!nb)return 180;let x=cwwDot(a,b)/(na*nb);if(fold180)x=Math.abs(x);return Math.acos(clamp(x,-1,1))*180/Math.PI;}
+  function cwwContactCount(a,b){
+    const left=cwwCoords(a.residue,CWW_EDGE_ATOMS[a.base]),right=cwwCoords(b.residue,CWW_EDGE_ATOMS[b.base]);let count=0,min=Infinity;
+    left.forEach(([nameA,p])=>{if(!/^[NO]/.test(nameA))return;right.forEach(([nameB,q])=>{if(!/^[NO]/.test(nameB))return;const d=pointDistance(p,q);if(d<=CWW_CUTOFFS.contact){count++;min=Math.min(min,d);}});});
+    return {count,min:Number.isFinite(min)?min:NaN};
+  }
+  function cwwClassify(a,b){
+    const dvec=cwwSub(b.center,a.center),centerDistance=cwwNorm(dvec),normalAngle=cwwAngleDeg(a.normal,b.normal,true);
+    const vertical=(Math.abs(cwwDot(dvec,a.normal))+Math.abs(cwwDot(dvec,b.normal)))/2;
+    const in1=cwwNorm(cwwSub(dvec,cwwScale(a.normal,cwwDot(dvec,a.normal)))),rev=cwwScale(dvec,-1),in2=cwwNorm(cwwSub(rev,cwwScale(b.normal,cwwDot(rev,b.normal)))),inplane=(in1+in2)/2;
+    const gly1=cwwCoord(a.residue,a.glycoAtom),gly2=cwwCoord(b.residue,b.glycoAtom),glycoDistance=gly1&&gly2?pointDistance(gly1,gly2):NaN;
+    const cisScore=cwwDot(cwwCross(dvec,a.glycoVec),cwwCross(dvec,b.glycoVec));
+    const p12=cwwSub(dvec,cwwScale(a.normal,cwwDot(dvec,a.normal))),p21=cwwSub(rev,cwwScale(b.normal,cwwDot(rev,b.normal)));
+    const edgeAngle1=cwwAngleDeg(a.wcVec,p12),edgeAngle2=cwwAngleDeg(b.wcVec,p21),contacts=cwwContactCount(a,b);
+    const ok=centerDistance<=CWW_CUTOFFS.center&&vertical<=CWW_CUTOFFS.vertical&&normalAngle<=CWW_CUTOFFS.normal&&Number.isFinite(glycoDistance)&&glycoDistance>=CWW_CUTOFFS.glycoMin&&inplane>=CWW_CUTOFFS.minInplane&&cisScore>=0&&edgeAngle1<=CWW_CUTOFFS.edgeAngle&&edgeAngle2<=CWW_CUTOFFS.edgeAngle&&contacts.count>=1;
+    return {isCww:ok,centerDistance,vertical,inplane,normalAngle,glycoDistance,cisScore,edgeAngle1,edgeAngle2,nWcContacts:contacts.count,minWcContactDistance:contacts.min};
+  }
+  function detectCwwPairs(residues){
+    const fitted=residues.map((r,i)=>cwwFitNucleotide(r,i)).filter(Boolean),cell=CWW_CUTOFFS.center,buckets=new Map();
+    const cellKey=(x,y,z)=>x+","+y+","+z;
+    fitted.forEach(nt=>{const c=[Math.floor(nt.center.x/cell),Math.floor(nt.center.y/cell),Math.floor(nt.center.z/cell)];nt.cell=c;const key=cellKey(...c);if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push(nt);});
+    const detected=[];let candidateCount=0;
+    fitted.forEach(a=>{for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)for(let dz=-1;dz<=1;dz++){
+      const list=buckets.get(cellKey(a.cell[0]+dx,a.cell[1]+dy,a.cell[2]+dz))||[];
+      list.forEach(b=>{if(b.index<=a.index||pointDistance(a.center,b.center)>CWW_CUTOFFS.center)return;candidateCount++;const geom=cwwClassify(a,b);if(geom.isCww)detected.push({i:a.index,j:b.index,identity:a.base+b.base,geom});});
+    }});
+    return {detected,candidateCount,fittedCount:fitted.length};
+  }
+  function deriveSecondaryFromResidues(residues){
+    if(!Array.isArray(residues)||residues.length<2)throw new Error("Choose an RNA chain before generating a 2D structure.");
+    if(residues.length>1000)throw new Error("3D → 2D generation currently supports RNA chains up to 1,000 residues.");
+    const sequence=residues.map(r=>r.base).join(""),unknown=[...sequence].map((b,i)=>b==="?"?i+1:null).filter(Boolean);
+    if(unknown.length)throw new Error("Cannot derive a complete 2D structure because "+unknown.length+" residue"+(unknown.length===1?" is":"s are")+" not recognized as A, C, G, or U (first: "+unknown.slice(0,8).join(", ")+(unknown.length>8?", …":"")+").");
+    const result=detectCwwPairs(residues),detected=result.detected;
+    if(!detected.length)throw new Error("No cWW pairs passed the current geometry detector for this chain.");
+    const ranked=detected.slice().sort((a,b)=>b.geom.nWcContacts-a.geom.nWcContacts||(a.geom.minWcContactDistance||99)-(b.geom.minWcContactDistance||99)||a.geom.vertical-b.geom.vertical||(a.geom.edgeAngle1+a.geom.edgeAngle2)-(b.geom.edgeAngle1+b.geom.edgeAngle2));
+    const chosen=[],used=new Set(),crosses=(x,y)=>chosen.some(p=>(p.i<x&&x<p.j&&p.j<y)||(x<p.i&&p.i<y&&y<p.j));
+    ranked.forEach(pair=>{if(used.has(pair.i)||used.has(pair.j)||crosses(pair.i,pair.j))return;chosen.push(pair);used.add(pair.i);used.add(pair.j);});chosen.sort((a,b)=>a.i-b.i);
+    const chars=Array(sequence.length).fill(".");chosen.forEach(({i,j})=>{chars[i]="(";chars[j]=")";});
+    return {sequence,structure:chars.join(""),pairs:chosen,detectedPairs:detected,candidateCount:result.candidateCount,fittedCount:result.fittedCount,omittedCount:detected.length-chosen.length};
+  }
+  function generateSecondaryFrom3D(){
+    const chain=state.chains.find(c=>c.id===state.activeChain);if(!chain)throw new Error("Choose an RNA chain first.");
+    const derived=deriveSecondaryFromResidues(chain.residues);
+    state.secondarySequence=derived.sequence;state.structure=derived.structure;state.secondaryIsDefault=false;state.sameMoleculeConfirmed=true;
+    state.derivedSecondary={sequence:derived.sequence,structure:derived.structure,chainId:chain.id,source:state.currentFileName,pairCount:derived.pairs.length,detectedCwwCount:derived.detectedPairs.length,omittedPairCount:derived.omittedCount,candidateCount:derived.candidateCount};
+    const parsed=parseStructure(state.structure,state.secondarySequence.length);pairs=parsed.pairs;partner=parsed.partner;
+    state.selectionIndices.clear();state.selectedPairs.clear();state.pairHbondStyles={};state.secondaryLayoutPositions=null;state.split=true;
+    if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.loadDerived){
+      SecondaryExplorer.loadDerived(derived.sequence,derived.structure,{source:state.currentFileName+" · chain "+(chain.id||"(blank)"),pairCount:derived.pairs.length,detectedCwwCount:derived.detectedPairs.length,omittedPairCount:derived.omittedCount});
+    }
+    state.sameMoleculeConfirmed=true;evaluateMapping();state.indexSelection=defaultIndices();buildIndexChoices();
+    const status=$("teDerivedStatus");
+    if(status){status.hidden=false;status.textContent="Derived from 3D coordinates · cWW only · experimental · "+derived.detectedPairs.length+" cWW pairs detected; "+derived.pairs.length+" displayed"+(derived.omittedCount?"; "+derived.omittedCount+" competing/crossing pair"+(derived.omittedCount===1?" omitted":"s omitted"):"")+". The cWW detector is still being evaluated for accuracy. Use this as a rough visualization for learning/exploration, not as a publication-ready secondary-structure annotation.";}
+    const openButton=$("teOpenDerivedSecondary");if(openButton)openButton.hidden=false;
+    const split=$("teSplit");if(split){split.disabled=false;split.checked=true;}
+    render();scheduleViewerResize(true);return derived;
+  }
+
+  function ensurePairHbondStyle(key,bonds){
+    const group=state.pairHbondStyles[key]??={...DEFAULT_HBOND_STYLE,bonds:{}};
+    group.bonds??={};
+    bonds.forEach(b=>{group.bonds[b.id]??={};});
+    return group;
+  }
+  function drawStyledConnector(start,end,style){
+    if(!viewer||style.visible===false)return;
+    const radius=Math.max(.012,Number(style.thickness)||.05),opacity=clamp(Number(style.opacity)||0,0,1),color=style.color||"#ffffff";
+    const mode=style.lineStyle||"solid",dx=end.x-start.x,dy=end.y-start.y,dz=end.z-start.z;
+    const point=t=>({x:start.x+dx*t,y:start.y+dy*t,z:start.z+dz*t});
+    if(mode==="solid"){viewer.addCylinder({start,end,radius,color,opacity,fromCap:1,toCap:1});return;}
+    if(mode==="dotted"){
+      for(let i=1;i<10;i++)viewer.addSphere({center:point(i/10),radius:radius*1.65,color,opacity});
+      return;
+    }
+    const n=11;
+    for(let i=0;i<n;i+=2)viewer.addCylinder({start:point(i/n),end:point(Math.min(1,(i+1)/n)),radius,color,opacity,fromCap:1,toCap:1});
+  }
+
+  function baseAt(i){
+    if(state.mapping.enabled&&state.secondarySequence[i])return state.secondarySequence[i];
+    return activeResidues()[i]?.base||"?";
+  }
+  function heatColor(value){
+    const min=state.heatRange[0],max=state.heatRange[1];
+    const t=max===min?0.5:clamp((value-min)/(max-min),0,1),stops=PALETTES[state.heatTheme]||PALETTES.viridis;
+    const x=t*(stops.length-1),i=Math.min(stops.length-2,Math.floor(x)),f=x-i;
+    return "#"+[1,3,5].map(k=>{
+      const a=parseInt(stops[i].slice(k,k+2),16),b=parseInt(stops[i+1].slice(k,k+2),16);
+      return Math.round(a*(1-f)+b*f).toString(16).padStart(2,"0");
+    }).join("");
+  }
+  function chainColor(chainId){
+    const ids=state.chains.map(c=>c.id);
+    const idx=Math.max(0,ids.indexOf(chainId));
+    return CHAIN_COLORS[idx%CHAIN_COLORS.length];
+  }
+  function residueColor(i,r){
+    if(state.colorMode==="uniform")return state.uniformColor;
+    if(state.colorMode==="region"&&state.mapping.enabled)return REGION_COLORS[regionFor(i)]||"#8fa2b3";
+    if(state.colorMode==="metadata"&&state.mapping.enabled&&state.heatEnabled&&state.metadata[i]?.value!=null)return heatColor(state.metadata[i].value);
+    if(state.colorMode==="chain")return chainColor(r?.chain||state.activeChain);
+    return state.colors[baseAt(i)]||"#8fa2b3";
+  }
+  function defaultIndices(){
+    const n=state.mapping.enabled?state.secondarySequence.length:activeResidues().length;
+    return new Set(Array.from({length:n},(_,i)=>i).filter(i=>i===0||(i+1)%5===0||i===n-1));
+  }
+  function setStatus(message,kind){
+    const el=$("teMolecularStatus");if(!el)return;
+    el.textContent=message||"";el.dataset.kind=kind||"info";el.hidden=!message;
+  }
+  function loadScript(src){
+    return new Promise((resolve,reject)=>{
+      const scripts=document.scripts?[...document.scripts]:[];const existing=scripts.find(s=>s.src===src);
+      if(existing){
+        if(window.$3Dmol)return resolve();
+        existing.addEventListener("load",resolve,{once:true});existing.addEventListener("error",reject,{once:true});return;
+      }
+      const script=document.createElement("script");script.src=src;script.async=true;script.crossOrigin="anonymous";script.referrerPolicy="no-referrer";
+      script.onload=resolve;script.onerror=()=>reject(new Error("Could not load "+src));document.head.append(script);
+    });
+  }
+  async function load3Dmol(){
+    if(window.$3Dmol)return window.$3Dmol;
+    let error=null;
+    for(const src of SOURCES){try{await loadScript(src);if(window.$3Dmol)return window.$3Dmol;}catch(e){error=e;}}
+    throw error||new Error("3Dmol.js failed to load");
+  }
+  async function fetchDefaultPdb(){
+    const r=await fetch(PDB_URL,{mode:"cors",cache:"force-cache"});
+    if(!r.ok)throw new Error("PDB download failed: "+r.status);
+    return r.text();
+  }
+
+  function residuesFromAtoms(atoms){
+    const residues=new Map();
+    atoms.forEach((atom,index)=>{
+      const key=residueKey(atom.chain,atom.resi,atom.icode);
+      let r=residues.get(key);
+      if(!r){
+        r={chain:atom.chain||"",resi:atom.resi,icode:atom.icode||"",resn:atom.resn||"",base:normalizeBase(atom.resn),
+          first:index,atoms:[],coord:null,coordRank:-1,hasSugar:false,hasP:false,sum:{x:0,y:0,z:0,n:0}};
+        residues.set(key,r);
+      }
+      r.atoms.push(atom);
+      const atomName=String(atom.atom||"").toUpperCase();
+      if(["C4'","C4*","C1'","C1*","O4'","O4*"].includes(atomName))r.hasSugar=true;
+      if(atomName==="P")r.hasP=true;
+      r.sum.x+=Number(atom.x)||0;r.sum.y+=Number(atom.y)||0;r.sum.z+=Number(atom.z)||0;r.sum.n++;
+      const rank=(atomName==="C4'"||atomName==="C4*")?4:atomName==="P"?3:(atomName==="C1'"||atomName==="C1*")?2:0;
+      if(rank>r.coordRank){r.coord={x:Number(atom.x),y:Number(atom.y),z:Number(atom.z)};r.coordRank=rank;}
+    });
+    return [...residues.values()].sort((a,b)=>a.first-b.first).map(r=>{
+      if(!r.coord&&r.sum.n)r.coord={x:r.sum.x/r.sum.n,y:r.sum.y/r.sum.n,z:r.sum.z/r.sum.n};
+      return r;
+    });
+  }
+  function rnaChainsFromAtoms(atoms){
+    const byChain=new Map();
+    residuesFromAtoms(atoms).forEach(r=>{
+      if(r.base==="?"&&!r.hasSugar)return;
+      if(!byChain.has(r.chain))byChain.set(r.chain,[]);
+      byChain.get(r.chain).push(r);
+    });
+    return [...byChain.entries()].map(([id,list])=>({
+      id,residues:list,sequence:list.map(r=>r.base).join(""),recognized:list.filter(r=>r.base!=="?").length
+    })).filter(c=>c.residues.length);
+  }
+  function extractChains(){state.chains=rnaChainsFromAtoms(model?.selectedAtoms?model.selectedAtoms({}):[]);}
+  function compareChain(chain,sequence){
+    if(!chain)return {lengthMatch:false,mismatches:[],unknown:0,exact:false};
+    const lengthMatch=chain.residues.length===sequence.length,mismatches=[];
+    const n=Math.min(chain.residues.length,sequence.length);let unknown=0;
+    for(let i=0;i<n;i++){const base=chain.residues[i].base;if(base==="?"){unknown++;continue;}if(base!==sequence[i])mismatches.push(i);}
+    return {lengthMatch,mismatches,unknown,exact:lengthMatch&&mismatches.length===0&&unknown===0};
+  }
+  function chooseBestChain(){
+    const sequence=state.secondarySequence;if(!state.chains.length){state.activeChain=null;return;}
+    state.chainNeedsChoice=false;
+    if(state.sourceIsDefault){const a=state.chains.find(c=>c.id==="A");state.activeChain=(a||state.chains[0]).id;return;}
+    const scored=state.chains.map(chain=>{
+      const cmp=compareChain(chain,sequence);
+      return {chain,score:Math.abs(chain.residues.length-sequence.length)*1000+cmp.mismatches.length*100+cmp.unknown};
+    }).sort((a,b)=>a.score-b.score);
+    if(scored.length>1&&scored[0].score===scored[1].score){state.activeChain=null;state.chainNeedsChoice=true;}
+    else state.activeChain=scored[0].chain.id;
+  }
+  function populateChainSelect(){
+    const select=$("teChainSelect");if(!select)return;select.replaceChildren();
+    if(state.chainNeedsChoice)select.append(new Option("Choose an RNA chain…",""));
+    state.chains.forEach(chain=>{
+      select.append(new Option((chain.id||"(blank)")+" · "+chain.residues.length+" RNA-like residues · "+chain.recognized+" recognized",chain.id));
+    });
+    select.value=state.activeChain??"";select.disabled=state.chains.length<=1;
+  }
+  function isCuratedDefaultPair(){return state.secondaryIsDefault&&state.sourceIsDefault;}
+  function evaluateMapping(){
+    const chain=state.chains.find(c=>c.id===state.activeChain),sequence=state.secondarySequence;
+    let level="error",message="",enabled=false;
+    if(!chain){
+      message=state.chainNeedsChoice?"Multiple RNA chains are equally compatible with the Secondary sequence. Choose the intended RNA chain before linking.":"No RNA-like chain is available for 2D/3D mapping.";
+    }else if(state.derivedSecondary&&state.derivedSecondary.chainId===chain.id&&state.derivedSecondary.sequence===sequence&&state.derivedSecondary.structure===state.structure){
+      enabled=true;level="verified";message="Linked: this Secondary structure was derived from the active 3D coordinates for chain "+(chain.id||"(blank)")+".";
+    }else if(isCuratedDefaultPair()){
+      if(chain.residues.length===sequence.length){enabled=true;level="verified";message="Linked: the default Secondary example and PDB 1EHZ use the curated 76-residue tRNA mapping.";}
+      else message="The default 1EHZ RNA chain length does not match the default Secondary sequence.";
+    }else{
+      const cmp=compareChain(chain,sequence);
+      if(!cmp.lengthMatch)message="Not linked: Secondary has "+sequence.length+" residues but 3D chain "+(chain.id||"(blank)")+" has "+chain.residues.length+".";
+      else if(cmp.mismatches.length){
+        const shown=cmp.mismatches.slice(0,6).map(i=>(i+1)+":"+sequence[i]+"≠"+chain.residues[i].base).join(", ");
+        message="Not linked: residue identities disagree at "+cmp.mismatches.length+" position"+(cmp.mismatches.length===1?"":"s")+" ("+shown+(cmp.mismatches.length>6?", …":"")+").";
+      }else if(!state.sameMoleculeConfirmed){
+        level="pending";
+        message=cmp.unknown?"Sequence length matches and all recognizable residues agree; "+cmp.unknown+" modified/unrecognized residues remain. Confirm the same molecule to enable linking.":"Sequence and length match. Confirm that the 2D and 3D inputs describe the same molecule to enable linking.";
+      }else{
+        enabled=true;level=cmp.unknown?"warning":"verified";
+        message=cmp.unknown?"Linked with caution: recognizable residues agree; modified/unrecognized residues were mapped by residue order.":"Linked: sequence identity and residue count match, and you confirmed that the 2D and 3D inputs describe the same molecule.";
+      }
+    }
+    state.mapping={enabled,level,message};if(!enabled)state.split=false;
+    const status=$("teMappingStatus");if(status){status.textContent=message;status.dataset.level=level;}
+    const confirm=$("teSameMolecule");if(confirm){confirm.disabled=isCuratedDefaultPair();confirm.checked=isCuratedDefaultPair()||state.sameMoleculeConfirmed;}
+    const pairToggle=$("teShowPairs");if(pairToggle)pairToggle.disabled=!enabled;
+    const split=$("teSplit");if(split){split.disabled=!enabled;split.checked=state.split&&enabled;}
+    const color=$("teColorMode");
+    if(color){
+      const region=color.querySelector('option[value="region"]'),metadata=color.querySelector('option[value="metadata"]');
+      if(region)region.disabled=!enabled;if(metadata)metadata.disabled=!enabled||!state.heatEnabled;
+      if(!enabled&&(state.colorMode==="region"||state.colorMode==="metadata"))state.colorMode="nucleotide";
+      color.value=state.colorMode;
+    }
+    const n=enabled?sequence.length:(chain?.residues.length||0);
+    state.selected=clamp(state.selected,0,Math.max(0,n-1));buildIndexChoices();renderSequencePanel();return state.mapping;
+  }
+  function buildResidueLookup(){
+    state.residueIndexByKey=new Map();
+    activeResidues().forEach((r,i)=>state.residueIndexByKey.set(residueKey(r.chain,r.resi,r.icode),i));
+  }
+
+  function setupInteractions(){
+    if(!viewer)return;viewer.setClickable({},false);viewer.setHoverable({},false);
+    const chain=state.chains.find(c=>c.id===state.activeChain);if(!chain)return;
+    const chainSel=chain.id?{chain:chain.id}:{};
+    viewer.setClickable(chainSel,true,atom=>{
+      const i=state.residueIndexByKey.get(residueKey(atom.chain,atom.resi,atom.icode));
+      if(Number.isInteger(i))state.selected=i;
+      if(state.measurementMode!=="off"){handleAtomMeasurementClick(atom);return;}
+      if(Number.isInteger(i))chooseResidue(i);
+    });
+    viewer.setHoverDuration(80);
+    viewer.setHoverable(chainSel,true,(atom,v)=>{
+      const i=state.residueIndexByKey.get(residueKey(atom.chain,atom.resi,atom.icode));if(!Number.isInteger(i))return;
+      if(hoverLabel)v.removeLabel(hoverLabel);
+      const base=baseAt(i),mate=state.mapping.enabled&&partner[i]>=0?baseAt(partner[i])+(partner[i]+1):"not mapped";
+      const info=state.mapping.enabled?state.metadata[i]?.value:null;
+      hoverLabel=v.addLabel(base+(i+1)+" · "+(state.mapping.enabled?regionFor(i):"3D residue")+" · pair "+mate+(info==null?"":" · info "+info),
+        {position:atom,fontSize:13,fontColor:"#f7fbff",backgroundColor:"#08111e",backgroundOpacity:.9,borderColor:"#6f8798",borderThickness:1,inFront:true});
+      v.render();
+    },(_,v)=>{if(hoverLabel){v.removeLabel(hoverLabel);hoverLabel=null;v.render();}});
+  }
+  function resetModelState(){
+    cancelLearningPulse();hoverLabel=null;initialView=null;state.selected=0;state.measurementPicks=[];state.measurements=[];state.measurementMode="off";state.derivedSecondary=null;state.learning.geometry=null;
+    state.selectionIndices.clear();state.selectedPairs.clear();state.pairHbondStyles={};state.savedObjects=[];state.isolateObjectId=null;state.savedViews=[];clearComparison(false);
+  }
+  async function setModelFromText(text,format,sourceIsDefault,fileName){
+    if(!viewer)throw new Error("3D viewer is not ready.");
+    resetModelState();viewer.removeAllModels();viewer.removeAllShapes();viewer.removeAllLabels();if(viewer.removeAllSurfaces)viewer.removeAllSurfaces();
+    const derivedStatus=$("teDerivedStatus");if(derivedStatus){derivedStatus.hidden=true;derivedStatus.textContent="";}const openDerived=$("teOpenDerivedSecondary");if(openDerived)openDerived.hidden=true;
+    model=viewer.addModel(text,format,{keepH:true});
+    if(!model||!model.selectedAtoms({}).length)throw new Error("No atoms could be parsed from this structure file.");
+    state.sourceIsDefault=sourceIsDefault;state.currentFileName=fileName;state.currentFormat=format;state.sourceText=String(text||"");state.sameMoleculeConfirmed=false;
+    extractChains();
+    if(!sourceIsDefault&&state.chains.length>1){state.activeChain=null;state.chainNeedsChoice=true;}else chooseBestChain();
+    populateChainSelect();buildResidueLookup();evaluateMapping();
+    state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();renderSequencePanel();renderObjectList();renderSavedViews();
+    try{applyStyles(false);}catch(error){console.warn("Initial 3D styling:",error);}
+    viewer.zoomTo({},0);viewer.render();scheduleViewerResize(false);initialView=viewer.getView?viewer.getView():null;updateSourceCopy();setStatus("");
+  }
+  async function loadDefaultStructure(){
+    setStatus("Loading all-atom PDB 1EHZ…");const pdb=await fetchDefaultPdb();await setModelFromText(pdb,"pdb",true,"PDB 1EHZ");setStatus("");
+  }
+  async function createViewer(){
+    const container=$("tertiaryMolecularViewer");if(!container)throw new Error("Molecular viewer container missing");
+    const lib=await load3Dmol();
+    viewer=lib.createViewer(container,{backgroundColor:state.backgroundColor||"#08111e",antialias:true});
+    try{viewer.setViewStyle?.({style:"outline",color:"#02060b",width:.08});}catch(_){}
+    try{await loadDefaultStructure();}
+    catch(error){
+      console.error("Default 3D structure:",error);
+      setStatus("The 3D viewer loaded, but the default 1EHZ structure could not be loaded: "+error.message,"error");
+    }
+    scheduleViewerResize(false);return viewer;
+  }
+  function ensureViewer(){
+    if(viewer)return Promise.resolve(viewer);
+    if(!viewerPromise) viewerPromise=createViewer().catch(error=>{
+      viewerPromise=null;viewer=null;
+      const message=/3dmol|script|load/i.test(String(error?.message||""))
+        ?"The 3Dmol viewer library could not be loaded. Check the network connection and reload the page."
+        :"The molecular viewer could not initialize: "+(error?.message||"unknown error");
+      setStatus(message,"error");console.error("Tertiary viewer:",error);throw error;
+    });
+    return viewerPromise;
+  }
+
+  function styleFor(color,elementMode=false){
+    const colorSpec=elementMode?{colorscheme:"Jmol"}:{color};
+    if(state.representation==="ballstick")return {stick:{radius:.12,...colorSpec},sphere:{radius:.24,...colorSpec}};
+    if(state.representation==="wire")return {line:{linewidth:2,...colorSpec}};
+    if(state.representation==="spheres")return {sphere:{scale:.34,...colorSpec}};
+    if(state.representation==="cartoon")return {cartoon:{...colorSpec,thickness:.4}};
+    return {stick:{radius:.14,...colorSpec}};
+  }
+  function guidedLearningActive(){
+    return document.body?.dataset?.pageMode==="journey"&&!!state.learning.geometry;
+  }
+  function applyResidueRepresentation(r,i){
+    const sel=selectorForResidue(r);
+    if(guidedLearningActive()){
+      // In Guided Journey, mute the complete molecule so the requested feature is unmistakable.
+      model.setStyle(sel,{stick:{radius:.08,color:"#435363",opacity:.16}});
+      return;
+    }
+    const journeyOverview=document.body?.dataset?.pageMode==="journey";
+    const elementMode=state.colorMode==="element",color=residueColor(i,r);
+    if(journeyOverview){
+      // Cleaner overview: smooth-looking backbone sticks plus thin base lines.
+      model.setStyle(sel,{line:{linewidth:1.4,color,opacity:.72}});
+      model.addStyle({...sel,atom:BACKBONE_ATOMS},{stick:{radius:.11,color:"#9cabb8",opacity:.9}});
+      return;
+    }
+    if(state.representation==="backbone"){
+      const b={...sel,atom:BACKBONE_ATOMS};
+      model.setStyle(b,{stick:{radius:.14,...(elementMode?{colorscheme:"Jmol"}:{color})}});
+    }else model.setStyle(sel,styleFor(color,elementMode));
+  }
+  function isVisibleIndex(i){
+    if(state.isolateObjectId==null)return true;
+    const object=state.savedObjects.find(o=>o.id===state.isolateObjectId);
+    return object?object.indices.has(i):true;
+  }
+  function applyCategoryStyles(){
+    const atoms=model?.selectedAtoms?model.selectedAtoms({}):[];if(!atoms.length)return;
+    const activeKeys=new Set(activeResidues().map(r=>residueKey(r.chain,r.resi,r.icode)));
+    const protein=[],water=[],ions=[],other=[];
+    atoms.forEach(a=>{
+      const resn=String(a.resn||"").toUpperCase(),key=residueKey(a.chain,a.resi,a.icode);
+      if(activeKeys.has(key))return;
+      if(WATER.has(resn))water.push(a.serial);
+      else if(IONS.has(resn))ions.push(a.serial);
+      else if(AMINO.has(resn))protein.push(a.serial);
+      else other.push(a.serial);
+    });
+    if(state.visibility.protein&&protein.length)model.setStyle({serial:protein},{cartoon:{color:"#8092a2",opacity:.72}});
+    if(state.visibility.solvent&&water.length)model.setStyle({serial:water},{sphere:{radius:.16,color:"#8fc7e8",opacity:.5}});
+    if(state.visibility.ions&&ions.length)model.setStyle({serial:ions},{sphere:{radius:.42,colorscheme:"Jmol"}});
+    if(state.visibility.other&&other.length)model.setStyle({serial:other},{stick:{radius:.1,colorscheme:"Jmol",opacity:.75}});
+    if(!state.visibility.hydrogen)model.setStyle({elem:"H"},{});
+  }
+  function addPairs(){
+    if(!viewer||!state.showPairs||!state.mapping.enabled)return;
+    const residues=activeResidues();
+    pairs.forEach(([a,b])=>{
+      if(!isVisibleIndex(a)||!isVisibleIndex(b))return;
+      const x=residues[a]?.coord,y=residues[b]?.coord;if(!x||!y)return;
+      const shape=viewer.addShape({clickable:true,callback:()=>choosePair(a,b)});
+      shape.addCylinder({start:x,end:y,radius:.045,color:"#71879a",opacity:.32,fromCap:1,toCap:1});
+    });
+  }
+  function selectedPairResidues(){
+    const out=new Set();state.selectedPairs.forEach(key=>{const [a,b]=key.split(":").map(Number);out.add(a);out.add(b);});return out;
+  }
+  function addSelectedPairHighlights(){
+    const residues=activeResidues(),indices=selectedPairResidues();
+    indices.forEach(i=>{if(residues[i]&&isVisibleIndex(i))model.addStyle(selectorForResidue(residues[i]),{stick:{radius:.28,color:"#74d7b6"},sphere:{radius:.29,color:"#74d7b6",opacity:.28}});});
+  }
+  function addSelectedPairHydrogenBonds(){
+    if(!viewer||!state.mapping.enabled)return;
+    state.selectedPairs.forEach(key=>{
+      const [a,b]=key.split(":").map(Number);if(!isVisibleIndex(a)||!isVisibleIndex(b))return;
+      const bonds=pairHydrogenBonds(a,b),group=ensurePairHbondStyle(key,bonds);
+      bonds.forEach(bond=>{
+        const style={...group,...group.bonds[bond.id]};if(style.visible===false)return;
+        drawStyledConnector(bond.donor,bond.acceptor,style);
+        if(style.labelVisible){
+          const mid={x:(bond.donor.x+bond.acceptor.x)/2,y:(bond.donor.y+bond.acceptor.y)/2,z:(bond.donor.z+bond.acceptor.z)/2};
+          viewer.addLabel(bond.distance.toFixed(2)+" Å",{position:mid,fontSize:11,fontColor:"#f7fbff",backgroundColor:"#08111e",backgroundOpacity:.8,inFront:true});
+        }
+      });
+    });
+  }
+  function addIndices(){
+    if(!viewer||!state.showIndices)return;
+    const residues=activeResidues();
+    state.indexSelection.forEach(i=>{
+      if(!isVisibleIndex(i))return;const r=residues[i];if(!r?.coord)return;
+      viewer.addLabel(String(i+1),{position:r.coord,fontSize:12,fontColor:"#e9f3f8",backgroundColor:"#08111e",backgroundOpacity:.65,borderColor:"#50677a",borderThickness:1,inFront:true});
+    });
+  }
+  function addSelectedLabel(){
+    if(!state.showSelectedLabel)return;
+    const r=activeResidues()[state.selected];if(!r?.coord||!isVisibleIndex(state.selected)||(!state.selectionIndices.has(state.selected)&&!selectedPairResidues().has(state.selected)))return;
+    viewer.addLabel(baseAt(state.selected)+(state.selected+1)+(r.chain?" · "+r.chain:""),{position:r.coord,fontSize:13,fontColor:"#07111c",backgroundColor:"#ffffff",backgroundOpacity:.92,borderColor:"#d7e2e8",borderThickness:1,inFront:true});
+  }
+  function nearby(i){
+    if(!state.proximityEnabled)return [];
+    return activeResidues().map((_,j)=>j).filter(j=>j!==i&&Math.abs(j-i)>1&&distance3D(i,j)<=state.proximityCutoff);
+  }
+  function addProximity(){
+    if(!viewer)return;
+    const residues=activeResidues(),list=nearby(state.selected);
+    list.forEach(i=>{if(residues[i]?.coord&&isVisibleIndex(i))viewer.addSphere({center:residues[i].coord,radius:.65,color:"#f2c66d",opacity:.32});});
+    const s=$("teProximityStatus");if(!s)return;
+    if(!state.proximityEnabled){s.textContent="Highlights C4′ spatial neighbors that are not immediate sequence neighbors.";return;}
+    const ordered=[...list].sort((a,b)=>distance3D(state.selected,a)-distance3D(state.selected,b));
+    s.textContent=ordered.length?ordered.length+" non-neighboring residues within "+state.proximityCutoff+" Å of "+baseAt(state.selected)+(state.selected+1)+": "+ordered.slice(0,8).map(i=>baseAt(i)+(i+1)).join(", ")+(ordered.length>8?"…":""):"No non-neighboring residues within "+state.proximityCutoff+" Å of "+baseAt(state.selected)+(state.selected+1)+".";
+  }
+  function addContacts(){
+    const status=$("teContactStatus");if(!status)return;
+    if(!state.contactEnabled){status.textContent="Shows close atom contacts; N/O pairs ≤3.5 Å are flagged as possible hydrogen-bond contacts.";return;}
+    const r=activeResidues()[state.selected];if(!r){status.textContent="Select an RNA residue first.";return;}
+    const all=model.selectedAtoms({}),own=new Set(r.atoms),contacts=[];
+    r.atoms.forEach(a=>all.forEach(b=>{
+      if(own.has(b))return;
+      const dx=a.x-b.x,dy=a.y-b.y,dz=a.z-b.z,d=Math.hypot(dx,dy,dz);
+      if(d<=state.contactCutoff&&d>0.4){
+        const ea=normalizeElement(a),eb=normalizeElement(b),hbond=(ea==="N"||ea==="O")&&(eb==="N"||eb==="O")&&d<=3.5;
+        contacts.push({a,b,d,hbond});
+      }
+    }));
+    contacts.sort((x,y)=>x.d-y.d);
+    const unique=[],seen=new Set();
+    contacts.forEach(c=>{const k=[c.a.serial,c.b.serial].sort().join("|");if(!seen.has(k)){seen.add(k);unique.push(c);}});
+    unique.slice(0,40).forEach(c=>viewer.addCylinder({start:c.a,end:c.b,radius:c.hbond?.055:.035,color:c.hbond?"#74d7b6":"#f2c66d",opacity:c.hbond?.9:.48,fromCap:1,toCap:1,dashed:true}));
+    const hb=unique.filter(c=>c.hbond).length;
+    status.textContent=unique.length+" atom contacts within "+state.contactCutoff+" Å; "+hb+" N/O pairs meet the simple ≤3.5 Å possible H-bond screen.";
+    const list=$("teContactList");if(list){list.replaceChildren();unique.slice(0,20).forEach(c=>{const row=document.createElement("div");row.textContent=atomLabel(c.a)+" ↔ "+atomLabel(c.b)+" · "+c.d.toFixed(2)+" Å"+(c.hbond?" · possible H-bond":"");list.append(row);});if(unique.length>20){const more=document.createElement("div");more.textContent="… "+(unique.length-20)+" more contacts";list.append(more);}}
+  }
+
+  function atomSnapshot(atom){return {x:Number(atom.x),y:Number(atom.y),z:Number(atom.z),atom:String(atom.atom||"atom"),resn:String(atom.resn||""),resi:atom.resi,chain:String(atom.chain||""),icode:String(atom.icode||"")};}
+  function atomLabel(a){return a.atom+" · "+(a.resn||"res")+" "+String(a.resi??"")+(a.chain?" · chain "+a.chain:"");}
+  const vsub=(a,b)=>({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z});
+  const vdot=(a,b)=>a.x*b.x+a.y*b.y+a.z*b.z;
+  const vcross=(a,b)=>({x:a.y*b.z-a.z*b.y,y:a.z*b.x-a.x*b.z,z:a.x*b.y-a.y*b.x});
+  const vnorm=a=>Math.hypot(a.x,a.y,a.z);
+  function atomDistance(a,b){return Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);}
+  function atomAngle(a,b,c){const u=vsub(a,b),v=vsub(c,b),den=vnorm(u)*vnorm(v);if(!den)return NaN;return Math.acos(clamp(vdot(u,v)/den,-1,1))*180/Math.PI;}
+  function atomDihedral(a,b,c,d){
+    const b0=vsub(b,a),b1=vsub(c,b),b2=vsub(d,c),n1=vcross(b0,b1),n2=vcross(b1,b2),b1n=vnorm(b1);
+    if(!vnorm(n1)||!vnorm(n2)||!b1n)return NaN;
+    const ub1={x:b1.x/b1n,y:b1.y/b1n,z:b1.z/b1n},m1=vcross(n1,ub1);
+    return Math.atan2(vdot(m1,n2),vdot(n1,n2))*180/Math.PI;
+  }
+  function learningResidueOrder(){
+    const n=activeResidues().length,out=[];
+    if(Number.isInteger(state.selected)&&state.selected>=0&&state.selected<n)out.push(state.selected);
+    for(let i=0;i<n;i++)if(!out.includes(i))out.push(i);
+    return out;
+  }
+  function residueAtomSet(index,names){
+    const residue=activeResidues()[index];if(!residue)return null;
+    const atoms=names.map(name=>atomByName(residue,name));
+    return atoms.every(Boolean)?{index,residue,atoms}:null;
+  }
+  function meanPoint(points){
+    if(!points.length)return null;
+    return points.reduce((sum,p)=>({x:sum.x+Number(p.x)/points.length,y:sum.y+Number(p.y)/points.length,z:sum.z+Number(p.z)/points.length}),{x:0,y:0,z:0});
+  }
+  function residueText(index){
+    const residue=activeResidues()[index];
+    return baseAt(index)+(index+1)+(residue?.resn&&String(residue.resn).toUpperCase()!==baseAt(index)?" ("+residue.resn+")":"");
+  }
+  function atomPoint(atom,label,color=LEARNING_COLORS.amber,radius=.25){
+    return {point:atom,label,color,radius};
+  }
+  function connector(a,b,color=LEARNING_COLORS.white,thickness=.055,lineStyle="solid"){
+    return {a,b,color,thickness,lineStyle};
+  }
+  function glycosidicLearningGeometry(){
+    for(const i of learningResidueOrder()){
+      const base=baseAt(i),purine=base==="A"||base==="G";
+      if(!purine&&!["C","U"].includes(base))continue;
+      const names=purine?["O4'","C1'","N9","C4"]:["O4'","C1'","N1","C2"];
+      const set=residueAtomSet(i,names);if(!set)continue;
+      const value=atomDihedral(...set.atoms);
+      return {
+        groups:[{indices:[i],color:LEARNING_COLORS.amber}],
+        points:set.atoms.map((a,k)=>atomPoint(a,names[k],k===1||k===2?LEARNING_COLORS.rose:LEARNING_COLORS.amber,.27)),
+        connectors:set.atoms.slice(0,-1).map((a,k)=>connector(a,set.atoms[k+1],LEARNING_COLORS.white,.06)),
+        focusIndices:[i],
+        status:residueText(i)+" · χ from "+names.join("–")+" = "+value.toFixed(1)+"°. The C1′–"+names[2]+" bond is the glycosidic bond."
+      };
+    }
+    throw new Error("No residue with the atoms needed to display a glycosidic angle was found.");
+  }
+  function sugarPuckerLearningGeometry(){
+    const names=["O4'","C1'","C2'","C3'","C4'"];
+    for(const i of learningResidueOrder()){
+      const set=residueAtomSet(i,names);if(!set)continue;
+      const edges=set.atoms.map((a,k)=>connector(a,set.atoms[(k+1)%set.atoms.length],LEARNING_COLORS.mint,.055));
+      return {
+        groups:[{indices:[i],color:LEARNING_COLORS.mint}],
+        points:set.atoms.map((a,k)=>atomPoint(a,names[k],names[k]==="C2'"?LEARNING_COLORS.rose:names[k]==="C3'"?LEARNING_COLORS.amber:LEARNING_COLORS.mint,.26)),
+        connectors:edges,focusIndices:[i],
+        status:residueText(i)+" · ribose ring highlighted. Rotate the model edge-on to see that O4′, C1′, C2′, C3′, and C4′ do not lie in one plane."
+      };
+    }
+    throw new Error("No complete ribose ring was found in the active RNA chain.");
+  }
+  function backboneLearningGeometry(){
+    const def=TORSION_DEFS[state.learning.torsion]||TORSION_DEFS.alpha,residues=activeResidues();
+    for(const i of learningResidueOrder()){
+      const atoms=def.atoms.map(([offset,name])=>atomByName(residues[i+offset],name));
+      if(atoms.every(Boolean)){
+        const labels=def.atoms.map(([offset,name])=>name+(offset<0?"(i−1)":offset>0?"(i+1)":""));
+        const value=atomDihedral(...atoms);
+        return {
+          groups:[{indices:[...new Set(def.atoms.map(([offset])=>i+offset))],color:LEARNING_COLORS.blue}],
+          points:atoms.map((a,k)=>atomPoint(a,labels[k],k===1||k===2?LEARNING_COLORS.rose:LEARNING_COLORS.blue,.27)),
+          connectors:atoms.slice(0,-1).map((a,k)=>connector(a,atoms[k+1],LEARNING_COLORS.white,.06)),
+          focusIndices:[...new Set(def.atoms.map(([offset])=>i+offset))],
+          status:residueText(i)+" · "+def.symbol+" = "+value.toFixed(1)+"° from "+labels.join("–")+"."
+        };
+      }
+    }
+    throw new Error("No internal residue contains all atoms required for this backbone torsion.");
+  }
+  function stackingLearningGeometry(){
+    const residues=activeResidues();let best=null;
+    for(let i=0;i<residues.length-1;i++){
+      const a=baseAt(i),b=baseAt(i+1);if(!BASE_RING_ATOMS[a]||!BASE_RING_ATOMS[b])continue;
+      const ca=baseCentroid(residues[i],a),cb=baseCentroid(residues[i+1],b),na=basePlaneNormal(residues[i],a),nb=basePlaneNormal(residues[i+1],b);
+      if(!ca||!cb||!na||!nb)continue;
+      const distance=pointDistance(ca,cb),dot=clamp(Math.abs(vdot(na,nb)),-1,1),tilt=Math.acos(dot)*180/Math.PI;
+      if(distance<2.5||distance>7.0||tilt>55)continue;
+      const score=Math.abs(distance-4.2)+tilt/30;
+      if(!best||score<best.score)best={i,j:i+1,ca,cb,distance,tilt,score};
+    }
+    if(!best)throw new Error("No suitable sequential base-stacking example was found.");
+    return {
+      groups:[{indices:[best.i],color:LEARNING_COLORS.amber},{indices:[best.j],color:LEARNING_COLORS.mint}],
+      points:[{point:best.ca,label:residueText(best.i)+" base",color:LEARNING_COLORS.amber,radius:.18},{point:best.cb,label:residueText(best.j)+" base",color:LEARNING_COLORS.mint,radius:.18}],
+      connectors:[connector(best.ca,best.cb,LEARNING_COLORS.white,.045,"dashed")],focusIndices:[best.i,best.j],
+      status:residueText(best.i)+" / "+residueText(best.j)+" · base-center separation "+best.distance.toFixed(2)+" Å · plane tilt "+best.tilt.toFixed(1)+"°. Rotate to compare their approximately parallel faces."
+    };
+  }
+  function basePairLearningGeometry(){
+    const ranked=pairs.map(([a,b])=>({a,b,bonds:pairHydrogenBonds(a,b)})).sort((x,y)=>y.bonds.length-x.bonds.length);
+    const hit=ranked.find(x=>x.bonds.length)||ranked[0];if(!hit)throw new Error("No mapped base pair is available in the current RNA.");
+    const groups=[{indices:[hit.a],color:LEARNING_COLORS.amber},{indices:[hit.b],color:LEARNING_COLORS.mint}];
+    const connectors=hit.bonds.map(b=>connector(b.donor,b.acceptor,LEARNING_COLORS.mint,.055,"dashed"));
+    const points=[
+      {point:activeResidues()[hit.a].coord,label:residueText(hit.a),color:LEARNING_COLORS.amber,radius:.16},
+      {point:activeResidues()[hit.b].coord,label:residueText(hit.b),color:LEARNING_COLORS.mint,radius:.16}
+    ];
+    return {
+      groups,points,connectors,focusIndices:[hit.a,hit.b],
+      status:residueText(hit.a)+" ↔ "+residueText(hit.b)+" · "+hit.bonds.length+" donor–acceptor contact"+(hit.bonds.length===1?"":"s")+" pass the ≤"+state.hbondCutoff.toFixed(1)+" Å geometric screen"+(hit.bonds.length?": "+hit.bonds.map(b=>b.distance.toFixed(2)+" Å").join(", "):".")
+    };
+  }
+  function helixLearningGeometry(){
+    let left=[],right=[];
+    if(state.secondaryIsDefault&&activeResidues().length>=72){left=[0,1,2,3,4,5,6];right=[65,66,67,68,69,70,71];}
+    else{
+      const chosen=pairs.slice(0,4);left=chosen.map(p=>p[0]);right=chosen.map(p=>p[1]);
+    }
+    const indices=[...left,...right].filter(i=>activeResidues()[i]);if(indices.length<4)throw new Error("Not enough mapped paired residues are available to show a helix.");
+    const links=[];
+    left.forEach(i=>{const j=partner[i];if(right.includes(j)&&coordFor(i)&&coordFor(j))links.push(connector(coordFor(i),coordFor(j),LEARNING_COLORS.white,.035,"dashed"));});
+    return {
+      groups:[{indices:left,color:LEARNING_COLORS.amber},{indices:right,color:LEARNING_COLORS.mint}],
+      points:[],connectors:links,focusIndices:indices,
+      status:(state.secondaryIsDefault?"Acceptor stem":"Paired segment")+" · two strands are highlighted in different colors. Follow the repeating paired-and-stacked arrangement along the stem."
+    };
+  }
+  function longestUnpairedRun(){
+    let best=[],run=[];for(let i=0;i<activeResidues().length;i++){if(partner[i]<0)run.push(i);else{if(run.length>best.length)best=run;run=[];}}if(run.length>best.length)best=run;return best;
+  }
+  function loopJunctionLearningGeometry(){
+    const loop=longestUnpairedRun().slice(0,9);if(!loop.length)throw new Error("No unpaired loop-like segment is available.");
+    let core=[];
+    if(state.secondaryIsDefault&&activeResidues().length>=65)core=[7,8,25,43,44,45,46,47,64].filter(i=>activeResidues()[i]);
+    else core=[...new Set(pairs.slice(0,3).flat())].filter(i=>!loop.includes(i));
+    const loopCenter=meanPoint(loop.map(coordFor).filter(Boolean)),coreCenter=meanPoint(core.map(coordFor).filter(Boolean));
+    const points=[];if(loopCenter)points.push({point:loopCenter,label:"loop",color:LEARNING_COLORS.amber,radius:.18});if(coreCenter)points.push({point:coreCenter,label:"junction / core",color:LEARNING_COLORS.mint,radius:.18});
+    return {
+      groups:[{indices:loop,color:LEARNING_COLORS.amber},{indices:core,color:LEARNING_COLORS.mint}],
+      points,connectors:[],focusIndices:[...loop,...core],
+      status:"Amber marks an unpaired loop-like segment; mint marks the compact central core where several tRNA arms converge. Rotate the RNA to see that these regions occupy distinct 3D neighborhoods."
+    };
+  }
+  function tertiaryContactLearningGeometry(){
+    const residues=activeResidues();let best=null;
+    for(let i=0;i<residues.length;i++)for(let j=i+5;j<residues.length;j++){
+      if(partner[i]===j)continue;
+      const ai=residues[i].atoms.filter(a=>normalizeElement(a)!=="H"),aj=residues[j].atoms.filter(a=>normalizeElement(a)!=="H");
+      for(const a of ai)for(const b of aj){
+        const d=atomDistanceRaw(a,b);if(d<1.8||d>5.0)continue;
+        if(!best||d<best.distance)best={i,j,a,b,distance:d};
+      }
+    }
+    if(!best)throw new Error("No close non-neighboring residue contact was found with the current geometric screen.");
+    return {
+      groups:[{indices:[best.i],color:LEARNING_COLORS.rose},{indices:[best.j],color:LEARNING_COLORS.blue}],
+      points:[atomPoint(best.a,atomName(best.a),LEARNING_COLORS.rose,.25),atomPoint(best.b,atomName(best.b),LEARNING_COLORS.blue,.25)],
+      connectors:[connector(best.a,best.b,LEARNING_COLORS.white,.055,"dashed")],focusIndices:[best.i,best.j],
+      status:residueText(best.i)+" ↔ "+residueText(best.j)+" · "+atomName(best.a)+"…"+atomName(best.b)+" = "+best.distance.toFixed(2)+" Å. This is a close tertiary-proximity example; distance alone does not prove a specific chemical interaction."
+    };
+  }
+  function buildLearningGeometry(key){
+    if(key==="glycosidic")return glycosidicLearningGeometry();
+    if(key==="pucker")return sugarPuckerLearningGeometry();
+    if(key==="backbone")return backboneLearningGeometry();
+    if(key==="stacking")return stackingLearningGeometry();
+    if(key==="basepair")return basePairLearningGeometry();
+    if(key==="helix")return helixLearningGeometry();
+    if(key==="loopjunction")return loopJunctionLearningGeometry();
+    if(key==="tertiarycontact")return tertiaryContactLearningGeometry();
+    throw new Error("Unknown learning feature.");
+  }
+  function addLearningFeature(){
+    const g=state.learning.geometry;if(!g||!viewer||!model)return;
+    const guided=guidedLearningActive(),targetColor=guided?(state.learning.flashPhase?"#f2c66d":"#ffffff"):null;
+    (g.groups||[]).forEach(group=>(group.indices||[]).forEach(i=>{
+      const residue=activeResidues()[i];if(!residue)return;
+      const color=targetColor||group.color;
+      model.addStyle(selectorForResidue(residue),{stick:{radius:guided?.27:.23,color,opacity:.99},sphere:{radius:guided?.31:.25,color,opacity:guided?.32:.24}});
+    }));
+    (g.connectors||[]).forEach(c=>drawStyledConnector(c.a,c.b,{lineStyle:c.lineStyle||"solid",color:c.color||LEARNING_COLORS.white,thickness:c.thickness||.055,opacity:.95,visible:true,labelVisible:false}));
+    (g.points||[]).forEach(p=>{
+      if(!p.point)return;
+      viewer.addSphere({center:p.point,radius:p.radius||.22,color:p.color||LEARNING_COLORS.amber,opacity:.92});
+      if(p.label)viewer.addLabel(p.label,{position:p.point,fontSize:11,fontColor:"#07111c",backgroundColor:p.color||LEARNING_COLORS.amber,backgroundOpacity:.92,borderColor:"#ffffff",borderThickness:.5,inFront:true});
+    });
+  }
+  function focusLearningGeometry(g){
+    if(!viewer||!g?.focusIndices?.length)return;
+    const residues=activeResidues(),selected=g.focusIndices.map(i=>residues[i]).filter(Boolean);if(!selected.length)return;
+    const resi=selected.map(r=>r.resi),chain=state.activeChain,sel=chain?{chain,resi}:{resi};
+    viewer.zoomTo(sel,0);viewer.render();
+  }
+  function renderLearningPanel(){
+    const lesson=LEARNING_LESSONS[state.learning.key]||LEARNING_LESSONS.glycosidic;
+    const name=$("teLearningName"),definition=$("teLearningDefinition"),example=$("teLearningExample"),notice=$("teLearningNotice"),torsion=$("teLearningTorsionWrap");
+    if(name)name.textContent=lesson.name;if(definition)definition.textContent=lesson.definition;if(example)example.textContent=lesson.example;if(notice)notice.textContent=lesson.notice;
+    if(torsion)torsion.hidden=state.learning.key!=="backbone";
+    if($("teLearningTorsion"))$("teLearningTorsion").value=state.learning.torsion;
+    document.querySelectorAll("[data-learning-feature]").forEach(button=>{const active=button.dataset.learningFeature===state.learning.key;button.classList.toggle("active",active);button.setAttribute("aria-selected",String(active));});
+  }
+  function setLearningStatus(message,error=false){
+    const node=$("teLearningStatus");if(!node)return;node.textContent=message;node.dataset.level=error?"error":"ok";
+  }
+  function cancelLearningPulse(){
+    if(learningPulseTimer!==null)clearTimeout(learningPulseTimer);
+    learningPulseTimer=null;learningPulseStep=0;state.learning.flashPhase=false;
+  }
+  function setLearningTargetColor(color){
+    const g=state.learning.geometry;if(!g||!model)return;
+    (g.groups||[]).forEach(group=>(group.indices||[]).forEach(i=>{
+      const residue=activeResidues()[i];if(!residue)return;
+      model.setStyle(selectorForResidue(residue),{stick:{radius:.27,color,opacity:.99},sphere:{radius:.31,color,opacity:.32}});
+    }));
+    viewer?.render();
+  }
+  function pulseLearningFeature(){
+    cancelLearningPulse();
+    if(!guidedLearningActive()||window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches)return;
+    const tick=()=>{
+      learningPulseStep++;
+      state.learning.flashPhase=learningPulseStep%2===1;
+      setLearningTargetColor(state.learning.flashPhase?"#f2c66d":"#ffffff");
+      if(learningPulseStep<6)learningPulseTimer=setTimeout(tick,250);
+      else{
+        learningPulseTimer=null;state.learning.flashPhase=false;setLearningTargetColor("#ffffff");
+      }
+    };
+    tick();
+  }
+  async function showLearningFeature(key=state.learning.key){
+    state.learning.key=LEARNING_LESSONS[key]?key:"glycosidic";renderLearningPanel();setLearningStatus("Preparing the 3D example…");
+    try{
+      await ensureViewer();if(!model)throw new Error("The 3D structure is not available.");
+      const g=buildLearningGeometry(state.learning.key);state.learning.geometry=g;state.learning.flashPhase=false;
+      applyStyles(false);focusLearningGeometry(g);viewer.render();
+      pulseLearningFeature();
+      setLearningStatus(g.status+" The target flashes briefly, then remains white while the rest of the RNA is muted.");return g;
+    }catch(error){cancelLearningPulse();state.learning.geometry=null;setLearningStatus(error.message||"This example could not be shown.",true);throw error;}
+  }
+  function clearLearningFeature(){
+    cancelLearningPulse();state.learning.geometry=null;setLearningStatus("Highlight cleared. Choose a concept to locate it in the RNA.");
+    if(viewer&&model){applyStyles(false);viewer.render();}
+  }
+  function setupLearningPanel(){
+    renderLearningPanel();
+    document.querySelectorAll("[data-learning-feature]").forEach(button=>button.addEventListener("click",()=>{
+      cancelLearningPulse();
+      state.learning.key=LEARNING_LESSONS[button.dataset.learningFeature]?button.dataset.learningFeature:"glycosidic";
+      state.learning.geometry=null;
+      renderLearningPanel();
+      setLearningStatus("Study the small model, then choose “Show me in the 3D structure” to locate a representative example in the full RNA.");
+      if(viewer&&model){applyStyles(false);viewer.render();}
+    }));
+    $("teLearningTorsion")?.addEventListener("change",event=>{state.learning.torsion=event.target.value;renderLearningPanel();});
+    $("teLearningShow")?.addEventListener("click",async()=>{
+      await showLearningFeature().catch(()=>{});
+      if(document.body?.dataset?.pageMode==="journey")$("tertiaryViewport")?.scrollIntoView({behavior:"smooth",block:"center"});
+    });
+    $("teLearningClear")?.addEventListener("click",clearLearningFeature);
+  }
+
+  function measurementValue(type,p){if(type==="distance")return atomDistance(p[0],p[1]);if(type==="angle")return atomAngle(p[0],p[1],p[2]);if(type==="dihedral")return atomDihedral(p[0],p[1],p[2],p[3]);return NaN;}
+  function measurementUnit(type){return type==="distance"?"Å":"°";}
+  function requiredPicks(type){return type==="distance"?2:type==="angle"?3:type==="dihedral"?4:0;}
+  function handleAtomMeasurementClick(atom){
+    const type=state.measurementMode,required=requiredPicks(type);if(!required)return;
+    state.measurementPicks.push(atomSnapshot(atom));
+    if(state.measurementPicks.length>=required){
+      const points=state.measurementPicks.slice(0,required),value=measurementValue(type,points);
+      if(Number.isFinite(value))state.measurements.push({id:state.measurementSerial++,type,points,value,style:{...DEFAULT_LINE_STYLE}});
+      state.measurementPicks=[];
+    }
+    render();
+  }
+  function createDistanceMeasurementFromAtomIndices(firstIndex=0,secondIndex=1){
+    if(state.measurementMode!=="distance")throw new Error("Distance measurement mode must be active.");
+    if(!model?.selectedAtoms)throw new Error("No active 3D model is available.");
+    const atoms=model.selectedAtoms({});
+    const a=Number(firstIndex),b=Number(secondIndex);
+    if(!Number.isInteger(a)||!Number.isInteger(b)||a<0||b<0||a>=atoms.length||b>=atoms.length||a===b)throw new Error("Choose two different valid atom indices.");
+    const before=state.measurements.length;
+    state.measurementPicks=[];
+    handleAtomMeasurementClick(atoms[a]);
+    handleAtomMeasurementClick(atoms[b]);
+    const measurement=state.measurements.at(-1);
+    if(state.measurements.length!==before+1||!measurement||measurement.type!=="distance")throw new Error("Distance measurement was not created.");
+    return {id:measurement.id,type:measurement.type,value:measurement.value,points:measurement.points};
+  }
+  function measurementCentroid(points){return points.reduce((o,p)=>({x:o.x+p.x/points.length,y:o.y+p.y/points.length,z:o.z+p.z/points.length}),{x:0,y:0,z:0});}
+  function styleEditor(style,onChange,{label=true,fallback={}}={}){
+    const wrap=document.createElement("div");wrap.className="te-style-editor";
+    const make=(caption,input)=>{const l=document.createElement("label");l.append(document.createTextNode(caption),input);wrap.append(l);return input;};
+    const visible=document.createElement("input");visible.type="checkbox";visible.checked=(style.visible??fallback.visible)!==false;visible.addEventListener("change",()=>{style.visible=visible.checked;onChange();});make("Show",visible);
+    const mode=document.createElement("select");["solid","dashed","dotted"].forEach(v=>mode.append(new Option(v[0].toUpperCase()+v.slice(1),v)));mode.value=style.lineStyle??fallback.lineStyle??"dashed";mode.addEventListener("change",()=>{style.lineStyle=mode.value;onChange();});make("Line",mode);
+    const color=document.createElement("input");color.type="color";color.value=style.color??fallback.color??"#ffffff";color.addEventListener("input",()=>{style.color=color.value;onChange();});make("Color",color);
+    const thick=document.createElement("input");thick.type="range";thick.min=".02";thick.max=".22";thick.step=".01";thick.value=style.thickness??fallback.thickness??.07;thick.addEventListener("input",()=>{style.thickness=Number(thick.value);onChange();});make("Thickness",thick);
+    const opacity=document.createElement("input");opacity.type="range";opacity.min=".05";opacity.max="1";opacity.step=".05";opacity.value=style.opacity??fallback.opacity??.82;opacity.addEventListener("input",()=>{style.opacity=Number(opacity.value);onChange();});make("Opacity",opacity);
+    if(label){const labelBox=document.createElement("input");labelBox.type="checkbox";labelBox.checked=(style.labelVisible??fallback.labelVisible)!==false;labelBox.addEventListener("change",()=>{style.labelVisible=labelBox.checked;onChange();});make("Label",labelBox);}
+    return wrap;
+  }
+  function renderMeasurementList(){
+    const box=$("teMeasurementList");if(!box)return;box.replaceChildren();
+    if(!state.measurements.length){box.textContent="No saved measurements.";return;}
+    state.measurements.forEach(m=>{
+      m.style??={...DEFAULT_LINE_STYLE};
+      const row=document.createElement("div");row.className="te-measurement-row";
+      const text=document.createElement("span");text.textContent=m.type[0].toUpperCase()+m.type.slice(1)+" "+m.value.toFixed(2)+" "+measurementUnit(m.type)+" · "+m.points.map(atomLabel).join(" → ");
+      const del=document.createElement("button");del.type="button";del.textContent="Delete";del.addEventListener("click",()=>{state.measurements=state.measurements.filter(x=>x.id!==m.id);render();});
+      row.append(text,del,styleEditor(m.style,render));box.append(row);
+    });
+  }
+  function addMeasurements(){
+    const status=$("teMeasureStatus"),type=state.measurementMode,required=requiredPicks(type);
+    state.measurements.forEach(m=>{
+      m.style??={...DEFAULT_LINE_STYLE};if(m.style.visible===false)return;
+      m.points.forEach(p=>viewer.addSphere({center:p,radius:.22,color:m.style.color||"#ffffff",opacity:m.style.opacity??.9}));
+      for(let i=0;i<m.points.length-1;i++)drawStyledConnector(m.points[i],m.points[i+1],m.style);
+      if(m.style.labelVisible!==false){const c=measurementCentroid(m.points);viewer.addLabel(m.value.toFixed(2)+" "+measurementUnit(m.type),{position:c,fontSize:13,fontColor:"#fff",backgroundColor:"#08111e",backgroundOpacity:.88,borderColor:m.style.color||"#6f8798",borderThickness:1,inFront:true});}
+    });
+    state.measurementPicks.forEach(p=>viewer.addSphere({center:p,radius:.3,color:"#f2c66d",opacity:.75}));
+    renderMeasurementList();if(!status)return;
+    if(type==="off"){status.textContent="Choose distance, angle, or dihedral, then click atoms in the 3D structure.";return;}
+    const left=required-state.measurementPicks.length;
+    status.textContent=state.measurementPicks.length?type[0].toUpperCase()+type.slice(1)+": "+state.measurementPicks.length+" atoms selected · choose "+left+" more.":type[0].toUpperCase()+type.slice(1)+" mode: choose "+required+" atoms.";
+  }
+
+  function addSelectionHighlights(){
+    const residues=activeResidues(),st=state.selectionStyle;
+    state.selectionIndices.forEach(i=>{
+      if(!isVisibleIndex(i)||!residues[i])return;
+      model.addStyle(selectorForResidue(residues[i]),{stick:{radius:st.thickness,color:st.color,opacity:st.opacity},sphere:{radius:Math.max(.22,st.thickness*1.18),color:st.color,opacity:st.opacity}});
+      if(state.selectionLabels&&residues[i].coord)viewer.addLabel(baseAt(i)+(i+1),{position:residues[i].coord,fontSize:11,fontColor:"#07111c",backgroundColor:st.color,backgroundOpacity:.9,inFront:true});
+    });
+  }
+  function addObjectHighlights(){
+    const residues=activeResidues();
+    state.savedObjects.filter(o=>o.visible&&state.isolateObjectId==null).forEach((o,oi)=>{
+      o.style??={color:CHAIN_COLORS[(oi+2)%CHAIN_COLORS.length],thickness:.2,opacity:.25};
+      const st=o.style;
+      o.indices.forEach(i=>{if(residues[i])model.addStyle(selectorForResidue(residues[i]),{stick:{radius:st.thickness,color:st.color,opacity:st.opacity},sphere:{radius:Math.max(.22,st.thickness*1.2),color:st.color,opacity:st.opacity}});});
+    });
+  }
+  function updateSurface(){
+    if(!viewer)return;
+    if(viewer.removeAllSurfaces)viewer.removeAllSurfaces();
+    if(!state.surfaceEnabled||!state.visibility.rna)return;
+    const token=++surfaceToken,chain=state.chains.find(c=>c.id===state.activeChain);if(!chain)return;
+    const sel=chain.id?{chain:chain.id}:{};
+    try{
+      const result=viewer.addSurface(window.$3Dmol?.SurfaceType?.VDW??1,{opacity:state.surfaceOpacity,color:"#8fa2b3"},sel,sel);
+      if(result&&typeof result.then==="function")result.then(()=>{if(token===surfaceToken)viewer.render();}).catch(()=>{});
+    }catch(_){}
+  }
+  function applyClipping(){
+    if(!viewer||typeof viewer.setSlab!=="function")return;
+    try{if(state.clipEnabled)viewer.setSlab(state.clipNear,state.clipFar);else viewer.setSlab(-999,999);}catch(error){console.warn("3D clipping:",error);}
+  }
+  function applyStyles(renderNow=true){
+    if(!viewer||!model)return;
+    const safe=(label,fn)=>{try{fn();}catch(error){console.warn("3D "+label+":",error);}};
+    safe("shape cleanup",()=>viewer.removeAllShapes());safe("label cleanup",()=>viewer.removeAllLabels());hoverLabel=null;
+    safe("base style reset",()=>model.setStyle({},{}));
+    if(state.comparison.model)safe("comparison reset",()=>state.comparison.model.setStyle({},{}));
+    const residues=activeResidues();
+    if(state.visibility.rna)residues.forEach((r,i)=>{if(isVisibleIndex(i))safe("residue style "+(i+1),()=>applyResidueRepresentation(r,i));});
+    safe("component styles",applyCategoryStyles);
+    if(state.comparison.model&&state.comparison.visible)safe("comparison style",()=>state.comparison.model.setStyle({},{line:{linewidth:2,color:"#f0a36f",opacity:.8}}));
+    safe("selection highlights",addSelectionHighlights);safe("selected pair highlights",addSelectedPairHighlights);safe("object highlights",addObjectHighlights);
+    safe("optional pair guides",addPairs);safe("selected pair hydrogen bonds",addSelectedPairHydrogenBonds);
+    safe("indices",addIndices);safe("selected label",addSelectedLabel);safe("proximity",addProximity);safe("contacts",addContacts);
+    safe("measurements",addMeasurements);safe("surface",updateSurface);safe("clipping",applyClipping);safe("guided learning",addLearningFeature);
+    if(renderNow)safe("render",()=>viewer.render());
+  }
+
+  function chooseResidue(index,{toggle=true,notify=true}={}){
+    state.selected=clamp(index,0,Math.max(0,activeResidues().length-1));
+    if(toggle){
+      if(state.selectionIndices.has(state.selected))state.selectionIndices.delete(state.selected);
+      else state.selectionIndices.add(state.selected);
+    }
+    if(notify&&state.mapping.enabled){
+      if(isCuratedDefaultPair())state.onSelect(state.selected);
+      if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.followExternal)SecondaryExplorer.followExternal(state.selected,state.selectionIndices.has(state.selected));
+    }
+    render();
+  }
+  function choosePair(a,b,{toggle=true,notify=true}={}){
+    const key=pairKey(a,b);state.selected=a;
+    if(toggle){if(state.selectedPairs.has(key))state.selectedPairs.delete(key);else state.selectedPairs.add(key);}
+    if(notify&&state.mapping.enabled&&typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.followPairExternal)SecondaryExplorer.followPairExternal(a,b,state.selectedPairs.has(key));
+    render();
+  }
+  function updateSourceCopy(){
+    const source=$("teStructureSource");if(source)source.textContent=state.currentFileName+" · "+(state.activeChain==null?"no RNA chain selected":"chain "+(state.activeChain||"(blank)"));
+  }
+  function updateCopy(){
+    const title=document.querySelector("#scene-tertiary .selected-residue-title"),p=document.querySelector("#scene-tertiary .selected-residue-copy");if(!p)return;
+    const i=state.selected,base=baseAt(i),m=state.mapping.enabled?partner[i]:-1,info=state.mapping.enabled?state.metadata[i]?.value:null;
+    if(title)title.textContent=(state.names[base]||base||"Residue")+" · "+base+(i+1);
+    const pair=state.mapping.enabled?(m>=0?" Paired with "+baseAt(m)+(m+1)+".":" Unpaired in the Secondary structure."):" 2D/3D linking is not active.";
+    p.textContent=(state.mapping.enabled?regionFor(i)+".":"3D residue "+(i+1)+".")+pair+(info==null?"":" Residue information: "+info+".")+" Source: "+state.currentFileName+".";
+  }
+  function heatLegend(){
+    const box=$("teHeatLegend");if(!box)return;
+    const active=state.mapping.enabled&&state.colorMode==="metadata"&&state.heatEnabled;box.hidden=!active;if(!active)return;
+    const stops=PALETTES[state.heatTheme]||PALETTES.viridis;
+    box.replaceChildren();
+    const heading=document.createElement("strong");heading.textContent="Residue information · "+state.heatTheme;
+    const bar=document.createElement("div");bar.className="te-heat-bar";bar.style.background="linear-gradient(to right,"+stops.join(",")+")";
+    const note=document.createElement("p");note.textContent=state.heatRange[0]+" → "+state.heatRange[1]+" · Same scale as Secondary.";
+    box.append(heading,bar,note);
+  }
+  function regionLegend(){
+    [$("teRegionLegend"),$("teRegionLegendStage")].filter(Boolean).forEach(box=>{
+      box.hidden=!(state.mapping.enabled&&state.colorMode==="region");if(box.hidden)return;box.replaceChildren();
+      const entries=state.secondaryIsDefault?Object.entries(REGION_COLORS).filter(([k])=>!["Paired","Unpaired"].includes(k)):[["Paired",REGION_COLORS.Paired],["Unpaired",REGION_COLORS.Unpaired]];
+      entries.forEach(([name,color])=>{const s=document.createElement("span"),i=document.createElement("i");i.style.background=color;s.append(i,document.createTextNode(name));box.append(s);});
+    });
+  }
+  function miniSecondary(){
+    const panel=$("tertiaryMiniPanel"),root=$("tertiaryMiniSvg");if(!panel||!root)return;
+    panel.hidden=!state.split||!state.mapping.enabled;
+    const shell=$("tertiarySplitShell");if(shell)shell.classList.toggle("linked",!panel.hidden);
+    if(panel.hidden){scheduleViewerResize(true);return;}
+    root.replaceChildren();
+    const markLinkedSelection=()=>{
+      const pairResidues=selectedPairResidues();
+      root.querySelectorAll("[data-residue-index]").forEach(node=>{
+        const i=Number(node.getAttribute("data-residue-index"));
+        node.classList.toggle("te-linked-selected",state.selectionIndices.has(i));
+        node.classList.toggle("te-linked-pair-residue",pairResidues.has(i));
+      });
+      root.querySelectorAll("[data-pair]").forEach(node=>node.classList.toggle("te-linked-pair-selected",state.selectedPairs.has(node.getAttribute("data-pair"))));
+    };
+    const source=$("secondarySvg");
+    let context=null;try{context=typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.getContext?SecondaryExplorer.getContext():null;}catch(_){}
+    if(source&&source.children.length&&context?.sequence===state.secondarySequence&&context?.structure===state.structure){
+      const vb=source.dataset.fullViewBox||source.getAttribute("viewBox");if(vb)root.setAttribute("viewBox",vb);
+      [...source.children].forEach(child=>root.append(child.cloneNode(true)));
+      root.querySelectorAll("[data-export-remove]").forEach(el=>el.remove());
+      root.querySelectorAll("[tabindex]").forEach(el=>el.removeAttribute("tabindex"));
+      root.querySelectorAll("[data-residue-index]").forEach(node=>{
+        const i=Number(node.getAttribute("data-residue-index"));node.style.cursor="pointer";
+        node.addEventListener("click",event=>{event.stopPropagation();chooseResidue(i);});
+      });
+      root.querySelectorAll("[data-pair]").forEach(node=>{
+        const [a,b]=String(node.getAttribute("data-pair")).split(":").map(Number);node.style.cursor="pointer";
+        node.addEventListener("click",event=>{event.stopPropagation();choosePair(a,b);});
+      });
+      markLinkedSelection();scheduleViewerResize(true);return;
+    }
+    let pos=Array.isArray(state.secondaryLayoutPositions)&&state.secondaryLayoutPositions.length===state.secondarySequence.length
+      ?state.secondaryLayoutPositions.map(p=>({x:Number(p.x),y:Number(p.y)})):null;
+    try{
+      if(!pos?.length&&typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.getCurrentPositions)pos=SecondaryExplorer.getCurrentPositions();
+      if(!pos?.length&&typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.radial){
+        pos=SecondaryExplorer.radial(state.secondarySequence.length,partner);
+        if(SecondaryExplorer.orientEndsBottom)pos=SecondaryExplorer.orientEndsBottom(pos);
+      }
+    }catch(_){}
+    if(!pos?.length){scheduleViewerResize(true);return;}
+    const NS="http://www.w3.org/2000/svg",make=(name,attrs={})=>{const e=document.createElementNS(NS,name);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));return e;};
+    const minX=Math.min(...pos.map(p=>p.x)),maxX=Math.max(...pos.map(p=>p.x)),minY=Math.min(...pos.map(p=>p.y)),maxY=Math.max(...pos.map(p=>p.y));
+    const pad=34,scale=Math.min((340-2*pad)/Math.max(1,maxX-minX),(430-2*pad)/Math.max(1,maxY-minY));
+    const map=pos.map(p=>({x:pad+(p.x-minX)*scale,y:pad+(p.y-minY)*scale}));root.setAttribute("viewBox","0 0 340 430");
+    pairs.forEach(([a,b])=>{
+      const key=pairKey(a,b),g=make("g",{"data-pair":key,class:"te-mini-pair-group"+(state.selectedPairs.has(key)?" te-linked-pair-selected":"")});
+      g.append(make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,class:"te-mini-pair"}));
+      const hit=make("line",{x1:map[a].x,y1:map[a].y,x2:map[b].x,y2:map[b].y,stroke:"transparent","stroke-width":14,"pointer-events":"stroke"});
+      g.append(hit);g.addEventListener("click",event=>{event.stopPropagation();choosePair(a,b);});root.append(g);
+    });
+    root.append(make("polyline",{points:map.map(p=>p.x+","+p.y).join(" "),class:"te-mini-backbone"}));
+    const pairResidues=selectedPairResidues();
+    map.forEach((p,i)=>{
+      const cls="te-mini-node"+(state.selectionIndices.has(i)?" te-linked-selected":"")+(pairResidues.has(i)?" te-linked-pair-residue":"");
+      const g=make("g",{class:cls,transform:"translate("+p.x+" "+p.y+")",role:"button","data-residue-index":i,"aria-label":state.secondarySequence[i]+(i+1)});
+      g.append(make("circle",{r:11,fill:residueColor(i,activeResidues()[i]),stroke:"#d5e2e9","stroke-width":1}));
+      const label=make("text",{x:0,y:1,fill:"#07111c","font-size":10,"font-family":"monospace","text-anchor":"middle","dominant-baseline":"central"});label.textContent=state.secondarySequence[i];g.append(label);
+      g.addEventListener("click",event=>{event.stopPropagation();chooseResidue(i);});root.append(g);
+    });
+    scheduleViewerResize(true);
+  }
+  function buildIndexChoices(){
+    const box=$("teIndexChoices");if(!box)return;box.replaceChildren();
+    const n=state.mapping.enabled?state.secondarySequence.length:activeResidues().length;
+    for(let i=0;i<n;i++){
+      const label=document.createElement("label"),input=document.createElement("input");input.type="checkbox";input.checked=state.indexSelection.has(i);
+      input.addEventListener("change",()=>{input.checked?state.indexSelection.add(i):state.indexSelection.delete(i);render();});
+      label.append(input,document.createTextNode(baseAt(i)+(i+1)));box.append(label);
+    }
+  }
+  function renderSequencePanel(){
+    const box=$("teSequencePanel");if(!box)return;box.replaceChildren();
+    activeResidues().forEach((r,i)=>{
+      const b=document.createElement("button");b.type="button";b.className="te-seq-residue"+(i===state.selected?" active":"")+(state.selectionIndices.has(i)?" chosen":"")+(selectedPairResidues().has(i)?" paired-chosen":"");
+      b.textContent=baseAt(i)+(i+1);b.title=(r.resn||baseAt(i))+(r.chain?" · chain "+r.chain:"");b.addEventListener("click",()=>chooseResidue(i));box.append(b);
+    });
+  }
+  function renderObjectList(){
+    const box=$("teObjectList");if(!box)return;box.replaceChildren();
+    if(!state.savedObjects.length){box.textContent="No saved objects.";return;}
+    state.savedObjects.forEach((o,oi)=>{
+      o.style??={color:CHAIN_COLORS[(oi+2)%CHAIN_COLORS.length],thickness:.2,opacity:.25};
+      const row=document.createElement("div");row.className="te-object-row";
+      const name=document.createElement("input");name.value=o.name;name.setAttribute("aria-label","Object name");
+      name.addEventListener("change",()=>{o.name=name.value.trim()||o.name;});
+      const show=document.createElement("button");show.type="button";show.textContent=o.visible?"Hide":"Show";show.addEventListener("click",()=>{o.visible=!o.visible;renderObjectList();refreshExportObjectOptions();render();});
+      const isolate=document.createElement("button");isolate.type="button";isolate.textContent=state.isolateObjectId===o.id?"Show all":"Isolate";isolate.addEventListener("click",()=>{state.isolateObjectId=state.isolateObjectId===o.id?null:o.id;renderObjectList();refreshExportObjectOptions();render();});
+      const pdb=document.createElement("button");pdb.type="button";pdb.textContent="PDB";pdb.addEventListener("click",()=>downloadStructure("pdb",o.indices,o.name));
+      const cif=document.createElement("button");cif.type="button";cif.textContent="mmCIF";cif.addEventListener("click",()=>downloadStructure("cif",o.indices,o.name));
+      const del=document.createElement("button");del.type="button";del.textContent="Delete";del.addEventListener("click",()=>{state.savedObjects=state.savedObjects.filter(x=>x.id!==o.id);if(state.isolateObjectId===o.id)state.isolateObjectId=null;renderObjectList();refreshExportObjectOptions();render();});
+      row.append(name,show,isolate,pdb,cif,del,styleEditor(o.style,render,{label:false}));box.append(row);
+    });
+  }
+  function renderSavedViews(){
+    const box=$("teSavedViews");if(!box)return;box.replaceChildren();
+    if(!state.savedViews.length){box.textContent="No saved views.";return;}
+    state.savedViews.forEach(v=>{
+      const row=document.createElement("div");row.className="te-view-row";
+      const label=document.createElement("span");label.textContent=v.name;
+      const restore=document.createElement("button");restore.type="button";restore.textContent="Restore";restore.addEventListener("click",()=>{if(viewer?.setView){viewer.setView(v.view);viewer.render();}});
+      const del=document.createElement("button");del.type="button";del.textContent="Delete";del.addEventListener("click",()=>{state.savedViews=state.savedViews.filter(x=>x.id!==v.id);renderSavedViews();});
+      row.append(label,restore,del);box.append(row);
+    });
+  }
+  function renderContextPanel(){
+    const box=$("teContextPanel");if(!box)return;box.replaceChildren();
+    const title=document.createElement("div");title.className="te-context-title";
+    const residueCount=state.selectionIndices.size,pairCount=state.selectedPairs.size;
+    title.innerHTML="<strong>Current selection</strong><span>"+residueCount+" residue"+(residueCount===1?"":"s")+" · "+pairCount+" base pair"+(pairCount===1?"":"s")+"</span>";
+    box.append(title);
+    if(!residueCount&&!pairCount){
+      const empty=document.createElement("p");empty.textContent="Click residues or base pairs in the linked 2D view, sequence, or 3D structure. Selections stay active until you click them again or clear them.";box.append(empty);return;
+    }
+    if(residueCount){
+      const section=document.createElement("details");section.open=true;section.innerHTML="<summary>Selected residue appearance</summary>";
+      const grid=document.createElement("div");grid.className="te-context-grid";
+      const color=document.createElement("input");color.type="color";color.value=state.selectionStyle.color;color.addEventListener("input",()=>{state.selectionStyle.color=color.value;render();});
+      const thick=document.createElement("input");thick.type="range";thick.min=".08";thick.max=".5";thick.step=".01";thick.value=state.selectionStyle.thickness;thick.addEventListener("input",()=>{state.selectionStyle.thickness=Number(thick.value);render();});
+      const opacity=document.createElement("input");opacity.type="range";opacity.min=".05";opacity.max="1";opacity.step=".05";opacity.value=state.selectionStyle.opacity;opacity.addEventListener("input",()=>{state.selectionStyle.opacity=Number(opacity.value);render();});
+      [["Color",color],["Thickness",thick],["Opacity",opacity]].forEach(([label,input])=>{const l=document.createElement("label");l.append(document.createTextNode(label),input);grid.append(l);});
+      const actions=document.createElement("div");actions.className="te-button-row";
+      const focus=document.createElement("button");focus.type="button";focus.textContent="Center / zoom";focus.addEventListener("click",focusSelection);
+      const clear=document.createElement("button");clear.type="button";clear.textContent="Clear residues";clear.addEventListener("click",()=>{state.selectionIndices.clear();render();});
+      actions.append(focus,clear);section.append(grid,actions);box.append(section);
+    }
+    state.selectedPairs.forEach(key=>{
+      const [a,b]=key.split(":").map(Number),bonds=pairHydrogenBonds(a,b),group=ensurePairHbondStyle(key,bonds);
+      const section=document.createElement("details");section.open=true;section.className="te-hbond-pair";
+      const summary=document.createElement("summary");summary.textContent=baseAt(a)+(a+1)+" — "+baseAt(b)+(b+1)+" · "+bonds.length+" H-bond"+(bonds.length===1?"":"s")+" detected";section.append(summary);
+      const note=document.createElement("p");note.className="te-tool-note";
+      note.textContent=bonds.length
+        ?"Hydrogen bonds shown here pass the base donor/acceptor heavy-atom distance screen (≤ "+state.hbondCutoff.toFixed(1)+" Å)."
+        :"The 2D structure marks this pair, but no donor–acceptor heavy-atom contact currently meets the ≤ "+state.hbondCutoff.toFixed(1)+" Å screen in the 3D coordinates.";
+      section.append(note);
+      if(bonds.length){
+        const groupHead=document.createElement("strong");groupHead.textContent="Style all H-bonds in this pair";section.append(groupHead,styleEditor(group,render,{label:true}));
+        const list=document.createElement("div");list.className="te-hbond-list";
+        bonds.forEach((bond,n)=>{
+          const row=document.createElement("details");row.className="te-hbond-row";
+          const sum=document.createElement("summary");sum.textContent=(n+1)+". "+bond.donorName+" → "+bond.acceptorName+" · "+bond.distance.toFixed(2)+" Å";row.append(sum);
+          const individual=group.bonds[bond.id]??={};
+          row.append(styleEditor(individual,render,{label:true,fallback:group}));list.append(row);
+        });
+        section.append(list);
+      }
+      const remove=document.createElement("button");remove.type="button";remove.textContent="Remove this base-pair selection";remove.addEventListener("click",()=>{state.selectedPairs.delete(key);render();});section.append(remove);
+      box.append(section);
+    });
+  }
+
+  function updateControls(){
+    evaluateMapping();const focusDetails=$("teFocusDetails");if(focusDetails)focusDetails.hidden=!state.secondaryIsDefault||!state.mapping.enabled;updateSourceCopy();
+  }
+  function render(selected){
+    if(selected!==undefined)state.selected=clamp(selected,0,Math.max(0,(state.mapping.enabled?state.secondarySequence.length:activeResidues().length)-1));
+    miniSecondary();heatLegend();regionLegend();updateCopy();updateControls();renderSequencePanel();renderContextPanel();renderObjectList();renderSavedViews();
+    const scene=$("scene-tertiary");if(!scene||scene.hidden)return;
+    ensureViewer().then(()=>{scheduleViewerResize(true);applyStyles();}).catch(error=>console.error("Tertiary render:",error));
+  }
+
+  function resetView(){if(!viewer)return;if(initialView&&viewer.setView)viewer.setView(initialView);else viewer.zoomTo({},400);viewer.render();}
+  function centerSelected(){const r=activeResidues()[state.selected];if(viewer&&r){viewer.zoomTo(selectorForResidue(r),450);viewer.render();}}
+  function focus(indices){
+    if(!viewer||!indices.length)return;const sels=indices.map(i=>activeResidues()[i]).filter(Boolean);if(!sels.length)return;
+    const chain=state.activeChain,resi=sels.map(r=>r.resi);viewer.zoomTo(chain?{chain,resi}:{resi},450);viewer.render();
+  }
+  function focusSelection(){focus([...state.selectionIndices]);}
+  async function showLinkedRegion(indices,{focusView=true}={}){
+    await ensureViewer();
+    evaluateMapping();
+    const n=state.mapping.enabled?state.secondarySequence.length:activeResidues().length;
+    const clean=[...new Set((Array.isArray(indices)?indices:[]).filter(i=>Number.isInteger(i)&&i>=0&&i<n))];
+    state.selectionIndices=new Set(clean);state.selectedPairs.clear();
+    if(clean.length)state.selected=clean[0];
+    if(state.mapping.enabled)state.split=true;
+    const split=$("teSplit");if(split){split.disabled=!state.mapping.enabled;split.checked=state.split;}
+    render();
+    if(focusView&&clean.length)setTimeout(()=>focus(clean),80);
+    return {indices:clean,linked:state.split,mappingEnabled:state.mapping.enabled};
+  }
+  function clearLinkedRegion(){
+    state.selectionIndices.clear();state.selectedPairs.clear();render();
+  }
+  function saveView(){
+    if(!viewer?.getView)return;const name=prompt("Name this view","View "+state.viewSerial);if(name===null)return;
+    state.savedViews.push({id:state.viewSerial,name:name.trim()||("View "+state.viewSerial),view:viewer.getView().slice()});state.viewSerial++;renderSavedViews();
+  }
+
+  function indicesFromRange(start,end){
+    const n=activeResidues().length,a=clamp(Math.floor(Number(start)||1),1,n),b=clamp(Math.floor(Number(end)||a),1,n),lo=Math.min(a,b),hi=Math.max(a,b);
+    return new Set(Array.from({length:hi-lo+1},(_,k)=>lo-1+k));
+  }
+  function selectRange(){state.selectionIndices=indicesFromRange($("teSelectStart")?.value,$("teSelectEnd")?.value);render();}
+  function selectBase(){
+    const base=$("teSelectBase")?.value||"A";state.selectionIndices=new Set(activeResidues().map((_,i)=>i).filter(i=>baseAt(i)===base));render();
+  }
+  function selectNearby(){
+    const cutoff=clamp(Number($("teSelectNearCutoff")?.value)||5,1,30),center=state.selected;
+    state.selectionIndices=new Set(activeResidues().map((_,i)=>i).filter(i=>i===center||distance3D(center,i)<=cutoff));render();
+  }
+  function addCurrentToSelection(){state.selectionIndices.add(state.selected);render();}
+  function subtractCurrentFromSelection(){state.selectionIndices.delete(state.selected);render();}
+  function invertSelection(){const all=new Set(activeResidues().map((_,i)=>i));state.selectionIndices=new Set([...all].filter(i=>!state.selectionIndices.has(i)));render();}
+  function selectActiveChain(){state.selectionIndices=new Set(activeResidues().map((_,i)=>i));render();}
+  function createObject(){
+    const indices=state.selectionIndices.size?new Set(state.selectionIndices):new Set([state.selected]);
+    const name=prompt("Object name","object_"+state.objectSerial);if(name===null)return;
+    state.savedObjects.push({id:state.objectSerial,name:name.trim()||("object_"+state.objectSerial),indices,visible:true,style:{color:CHAIN_COLORS[(state.objectSerial+1)%CHAIN_COLORS.length],thickness:.2,opacity:.25}});state.objectSerial++;renderObjectList();refreshExportObjectOptions();render();
+  }
+
+  function atomLinePdb(atom,serial){
+    const rec=atom.hetflag?"HETATM":"ATOM  ",name=String(atom.atom||atom.elem||"X").slice(0,4).padStart(4),resn=String(atom.resn||"UNK").slice(0,3).padStart(3);
+    const chain=String(atom.chain||" ").slice(0,1),resi=String(atom.resi??1).slice(-4).padStart(4),icode=String(atom.icode||" ").slice(0,1);
+    const x=Number(atom.x||0).toFixed(3).padStart(8),y=Number(atom.y||0).toFixed(3).padStart(8),z=Number(atom.z||0).toFixed(3).padStart(8);
+    const occ=Number(atom.occupancy??atom.occ??1).toFixed(2).padStart(6),b=Number(atom.b??atom.bfactor??0).toFixed(2).padStart(6),elem=normalizeElement(atom).padStart(2);
+    return rec+String(serial).padStart(5)+" "+name+" "+resn+" "+chain+resi+icode+"   "+x+y+z+occ+b+"          "+elem;
+  }
+  function serializePdb(atoms){return atoms.map((a,i)=>atomLinePdb(a,i+1)).join("\n")+"\nEND\n";}
+  function cifToken(value){const s=String(value??"?");return /\s|['"]/.test(s)?"'"+s.replace(/'/g,"''")+"'":s||"?";}
+  function serializeCif(atoms){
+    const headers=["group_PDB","id","type_symbol","label_atom_id","label_comp_id","label_asym_id","label_seq_id","Cartn_x","Cartn_y","Cartn_z","occupancy","B_iso_or_equiv"];
+    const lines=["data_rna_explorer","#","loop_",...headers.map(h=>"_atom_site."+h)];
+    atoms.forEach((a,i)=>lines.push([
+      a.hetflag?"HETATM":"ATOM",i+1,normalizeElement(a)||"?",cifToken(a.atom||"?"),cifToken(a.resn||"UNK"),cifToken(a.chain||"A"),a.resi??i+1,
+      Number(a.x||0).toFixed(3),Number(a.y||0).toFixed(3),Number(a.z||0).toFixed(3),Number(a.occupancy??a.occ??1).toFixed(2),Number(a.b??a.bfactor??0).toFixed(2)
+    ].join(" ")));
+    lines.push("#");return lines.join("\n")+"\n";
+  }
+  function atomsForIndices(indices){
+    const residues=activeResidues();return [...indices].sort((a,b)=>a-b).flatMap(i=>residues[i]?.atoms||[]);
+  }
+  function downloadText(text,name,type){
+    const blob=new Blob([text],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+  function downloadStructure(format,indices=null,label="structure"){
+    if(!model)return;const atoms=indices?atomsForIndices(indices):model.selectedAtoms({});
+    if(!atoms.length){setStatus("Nothing is selected for structure export.","error");return;}
+    const safe=String(label||"structure").replace(/[^a-z0-9_-]+/gi,"-").replace(/^-|-$/g,"").toLowerCase()||"structure";
+    if(format==="cif")downloadText(serializeCif(atoms),safe+".cif","chemical/x-cif");
+    else downloadText(serializePdb(atoms),safe+".pdb","chemical/x-pdb");
+    setStatus("Exported "+atoms.length+" atoms as "+(format==="cif"?"mmCIF":"PDB")+".");
+  }
+
+  async function exportPng(){
+    const button=$("teDownload"),status=$("teExportStatus");if(!viewer||!button||!status)return;
+    button.disabled=true;status.textContent="Rendering PNG…";
+    const viewport=$("tertiaryViewport"),view=viewer.getView?viewer.getView():null;
+    const baseW=Math.max(1,Math.round(viewport.clientWidth||720)),baseH=Math.max(1,Math.round(viewport.clientHeight||560));
+    const scale=Math.min(state.exportScale,4096/baseW,4096/baseH,Math.sqrt(16000000/(baseW*baseH))),width=Math.max(1,Math.round(baseW*scale)),height=Math.max(1,Math.round(baseH*scale));
+    try{
+      viewer.setWidth(width);viewer.setHeight(height);if(view)viewer.setView(view);viewer.render();
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      const uri=viewer.pngURI(),link=document.createElement("a");link.href=uri;link.download="rna-tertiary-"+(state.currentFileName.replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase()||"structure")+".png";
+      document.body.append(link);link.click();link.remove();status.textContent="PNG downloaded ("+width+" × "+height+").";
+    }catch(error){status.textContent="Export failed: "+error.message;}
+    finally{viewer.setWidth(baseW);viewer.setHeight(baseH);if(view)viewer.setView(view);viewer.render();button.disabled=false;}
+  }
+
+  function centroid(points){return points.reduce((c,p)=>({x:c.x+p.x/points.length,y:c.y+p.y/points.length,z:c.z+p.z/points.length}),{x:0,y:0,z:0});}
+  function hornFit(moving,reference){
+    if(moving.length!==reference.length||moving.length<3)throw new Error("At least three matched points are required.");
+    const cm=centroid(moving),cr=centroid(reference);let Sxx=0,Sxy=0,Sxz=0,Syx=0,Syy=0,Syz=0,Szx=0,Szy=0,Szz=0;
+    for(let i=0;i<moving.length;i++){
+      const q={x:moving[i].x-cm.x,y:moving[i].y-cm.y,z:moving[i].z-cm.z},p={x:reference[i].x-cr.x,y:reference[i].y-cr.y,z:reference[i].z-cr.z};
+      Sxx+=q.x*p.x;Sxy+=q.x*p.y;Sxz+=q.x*p.z;Syx+=q.y*p.x;Syy+=q.y*p.y;Syz+=q.y*p.z;Szx+=q.z*p.x;Szy+=q.z*p.y;Szz+=q.z*p.z;
+    }
+    const N=[
+      [Sxx+Syy+Szz,Syz-Szy,Szx-Sxz,Sxy-Syx],
+      [Syz-Szy,Sxx-Syy-Szz,Sxy+Syx,Szx+Sxz],
+      [Szx-Sxz,Sxy+Syx,-Sxx+Syy-Szz,Syz+Szy],
+      [Sxy-Syx,Szx+Sxz,Syz+Szy,-Sxx-Syy+Szz]
+    ];
+    let q=[1,0,0,0];
+    for(let k=0;k<40;k++){
+      const nq=N.map(row=>row.reduce((s,v,j)=>s+v*q[j],0)),norm=Math.hypot(...nq)||1;q=nq.map(v=>v/norm);
+    }
+    const [w,x,y,z]=q,R=[
+      [1-2*(y*y+z*z),2*(x*y-z*w),2*(x*z+y*w)],
+      [2*(x*y+z*w),1-2*(x*x+z*z),2*(y*z-x*w)],
+      [2*(x*z-y*w),2*(y*z+x*w),1-2*(x*x+y*y)]
+    ];
+    const transform=p=>{
+      const a=[p.x-cm.x,p.y-cm.y,p.z-cm.z];
+      return {x:R[0][0]*a[0]+R[0][1]*a[1]+R[0][2]*a[2]+cr.x,y:R[1][0]*a[0]+R[1][1]*a[1]+R[1][2]*a[2]+cr.y,z:R[2][0]*a[0]+R[2][1]*a[1]+R[2][2]*a[2]+cr.z};
+    };
+    let ss=0;moving.forEach((p,i)=>{const t=transform(p),r=reference[i];ss+=(t.x-r.x)**2+(t.y-r.y)**2+(t.z-r.z)**2;});
+    return {transform,rmsd:Math.sqrt(ss/moving.length)};
+  }
+  function clearComparison(doRender=true){
+    if(viewer&&state.comparison.model){try{viewer.removeModel(state.comparison.model);}catch(_){}}
+    state.comparison={model:null,name:"",rmsd:null,count:0,visible:true,status:""};if(doRender){updateComparisonStatus();render();}
+  }
+  function updateComparisonStatus(){
+    const s=$("teAlignmentStatus");if(!s)return;
+    s.textContent=state.comparison.model?state.comparison.name+" aligned on "+state.comparison.count+" matched RNA residues · RMSD "+state.comparison.rmsd.toFixed(3)+" Å.":(state.comparison.status||"Upload a second PDB/mmCIF structure to superimpose it on the active RNA chain.");
+  }
+  async function alignComparison(file){
+    if(!file)return;await ensureViewer();clearComparison(false);
+    const lower=file.name.toLowerCase(),format=lower.endsWith(".cif")||lower.endsWith(".mmcif")?"cif":lower.endsWith(".pdb")||lower.endsWith(".ent")?"pdb":null;
+    if(!format)throw new Error("Comparison structure must be PDB or mmCIF.");const text=await file.text();
+    let temp=viewer.addModel(text,format,{keepH:true});if(!temp?.selectedAtoms({}).length)throw new Error("No atoms could be parsed from the comparison file.");
+    const chains=rnaChainsFromAtoms(temp.selectedAtoms({})),ref=activeResidues();
+    if(!chains.length||ref.length<3){viewer.removeModel(temp);throw new Error("Could not find comparable RNA residues.");}
+    const cmp=chains.slice().sort((a,b)=>Math.abs(a.residues.length-ref.length)-Math.abs(b.residues.length-ref.length))[0],n=Math.min(ref.length,cmp.residues.length);
+    let indices=Array.from({length:n},(_,i)=>i);
+    if($("teAlignScope")?.value==="selection"){indices=[...state.selectionIndices].filter(i=>i<n).sort((a,b)=>a-b);if(indices.length<3)throw new Error("Select at least three corresponding residues for selection-based alignment.");}
+    const mov=indices.map(i=>cmp.residues[i].coord),target=indices.map(i=>ref[i].coord);
+    const fit=hornFit(mov,target),alignedAtoms=temp.selectedAtoms({});
+    alignedAtoms.forEach(a=>{const p=fit.transform(a);a.x=p.x;a.y=p.y;a.z=p.z;});
+    const alignedPdb=serializePdb(alignedAtoms);viewer.removeModel(temp);temp=viewer.addModel(alignedPdb,"pdb",{keepH:true});
+    state.comparison={model:temp,name:file.name,rmsd:fit.rmsd,count:indices.length,visible:true,status:""};updateComparisonStatus();render();
+  }
+
+  async function loadFromRcsbId(rawId){
+    const id=String(rawId||"").trim().toUpperCase();
+    if(!/^[A-Z0-9]{4}$/.test(id))throw new Error("Enter a four-character PDB ID, for example 1EHZ.");
+    const url="https://files.rcsb.org/download/"+encodeURIComponent(id)+".cif";
+    let response;try{response=await fetch(url,{mode:"cors",cache:"no-store"});}catch(_){throw new Error("RCSB PDB could not be reached. Check the network connection and try again.");}
+    if(response.status===404)throw new Error("PDB ID "+id+" was not found at RCSB PDB.");
+    if(!response.ok)throw new Error("RCSB PDB returned HTTP "+response.status+" for "+id+".");
+    const text=await response.text();if(!text.trim())throw new Error("RCSB returned an empty structure file for "+id+".");
+    await ensureViewer();await setModelFromText(text,"cif",id==="1EHZ","RCSB PDB · "+id);
+    if(!state.chains.length)throw new Error("Structure "+id+" loaded, but no RNA-like chain was detected.");
+    scheduleViewerResize(false);return id;
+  }
+
+    async function handleStructureUpload(file){
+    if(!file)return;if(file.size>25*1024*1024)throw new Error("3D structure file must be smaller than 25 MB.");
+    const name=file.name||"uploaded structure",lower=name.toLowerCase(),format=lower.endsWith(".cif")||lower.endsWith(".mmcif")?"cif":lower.endsWith(".pdb")||lower.endsWith(".ent")?"pdb":null;
+    if(!format)throw new Error("Upload a PDB (.pdb/.ent) or mmCIF (.cif/.mmcif) file.");
+    const text=await file.text();if(!text.trim())throw new Error("The uploaded structure file is empty.");
+    await ensureViewer();await setModelFromText(text,format,false,name);viewer.zoomTo({},250);viewer.render();initialView=viewer.getView?viewer.getView():null;
+  }
+  function ensureEnhancementStyles(){
+    if(document.getElementById("teEnhancementStyles"))return;
+    const style=document.createElement("style");style.id="teEnhancementStyles";style.textContent=`
+      .te-sequence-panel{display:flex;flex-wrap:wrap;gap:.28rem;max-height:9rem;overflow:auto;padding:.45rem 0}
+      .te-seq-residue{font:inherit;font-size:.75rem;padding:.28rem .38rem;min-width:2.3rem;border-radius:.45rem}
+      .te-seq-residue.active{outline:2px solid #fff}.te-seq-residue.chosen{box-shadow:inset 0 0 0 2px #f2c66d}
+      .te-object-row,.te-view-row{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin:.4rem 0}
+      .te-object-row input{min-width:8rem;flex:1}.te-visibility-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.3rem}
+      .te-inline-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem}
+      .te-tool-note{font-size:.78rem;opacity:.8}.te-object-row button,.te-view-row button{padding:.35rem .5rem}
+    `;document.head.append(style);
+  }
+  function setupControls(){
+    const box=$("tertiaryControls");if(!box)return;ensureEnhancementStyles();
+    box.innerHTML=
+      '<div class="te-controls">'+
+      '<details open><summary>Import structure &amp; 2D/3D mapping</summary>'+
+      '<p id="teStructureSource">PDB 1EHZ</p>'+
+      '<label>Import PDB / mmCIF<input id="teStructureFile" type="file" accept=".pdb,.ent,.cif,.mmcif,chemical/x-pdb,chemical/x-cif"></label>'+
+      '<div class="te-pdb-id-row"><label>PDB ID<input id="tePdbId" type="text" inputmode="text" maxlength="4" placeholder="1EHZ" autocomplete="off"></label><button type="button" id="teLoadPdbId">Load from RCSB PDB</button></div><p class="te-tool-note" id="tePdbIdStatus">Enter a four-character PDB ID to fetch its mmCIF coordinates directly from RCSB PDB.</p>'+
+      '<button type="button" id="teRestoreStructure">Restore example 1EHZ</button>'+
+      '<label>RNA chain<select id="teChainSelect"></select></label>'+
+      '<div class="te-button-row"><button type="button" id="teGenerateSecondary">Generate 2D from 3D</button><button type="button" id="teOpenDerivedSecondary" hidden>Open generated 2D in Secondary workspace</button></div>'+
+      '<p class="te-derived-warning te-tool-note"><strong>Experimental:</strong> automatic 3D → 2D shows only cWW base pairs detected from coordinates. The detector is still being evaluated for accuracy; treat the result as a rough learning/exploration view, not a publication-ready secondary-structure annotation.</p>'+
+      '<p id="teDerivedStatus" class="te-derived-status te-tool-note" role="status" hidden></p>'+
+      '<label class="te-check"><input id="teSameMolecule" type="checkbox"> I confirm that the Secondary and 3D inputs describe the same RNA molecule</label>'+
+      '<p id="teMappingStatus" class="te-mapping-status" role="status"></p></details>'+
+      '<section id="teContextPanel" class="te-context-panel" aria-live="polite"></section>'+
+      '<details open><summary>Display</summary>'+
+      '<label>Representation<select id="teRepresentation"><option value="sticks">PyMOL-style sticks</option><option value="ballstick">Ball &amp; stick</option><option value="wire">Wire</option><option value="spheres">Spheres</option><option value="backbone">RNA backbone</option><option value="cartoon">Cartoon</option></select></label>'+
+      '<label>Color by<select id="teColorMode"><option value="nucleotide">Nucleotide / residue type</option><option value="chain">Chain</option><option value="element">Element</option><option value="uniform">Uniform custom color</option><option value="region">Secondary element</option><option value="metadata" disabled>Residue information</option></select></label>'+
+      '<label>Uniform color<input id="teUniformColor" type="color" value="#74d7b6"></label>'+
+      '<label>Background color<input id="teBackgroundColor" type="color" value="#07111c"></label>'+
+      '<label class="te-check"><input id="teOrthographic" type="checkbox"> Orthographic projection</label>'+
+      '<button type="button" id="teFullscreen">Full-screen viewer</button>'+
+      '<label class="te-check"><input id="teSplit" type="checkbox"> 2D + 3D linked view</label>'+
+      '<label class="te-check"><input id="teShowPairs" type="checkbox"> Show all mapped pair guides (advanced)</label>'+
+      '<label class="te-check"><input id="teShowIndices" type="checkbox" checked> Show residue indices</label>'+
+      '<label class="te-check"><input id="teShowSelectedLabel" type="checkbox" checked> Label selected residue</label>'+
+      '<div class="te-visibility-grid"><label class="te-check"><input id="teShowRNA" type="checkbox" checked> RNA</label><label class="te-check"><input id="teShowProtein" type="checkbox" checked> Protein</label><label class="te-check"><input id="teShowSolvent" type="checkbox"> Solvent</label><label class="te-check"><input id="teShowIons" type="checkbox" checked> Ions</label><label class="te-check"><input id="teShowOther" type="checkbox" checked> Other ligands</label><label class="te-check"><input id="teShowHydrogen" type="checkbox"> Hydrogens</label></div>'+
+      '<label class="te-check"><input id="teSurface" type="checkbox"> Molecular surface</label>'+
+      '<label>Surface transparency<input id="teSurfaceOpacity" type="range" min="0.05" max="0.9" step="0.05" value="0.35"></label></details>'+
+      '<details><summary>Select · sequence &amp; ranges</summary><p class="te-tool-note">Selections are additive. Click a selected residue again to remove it.</p><div id="teSequencePanel" class="te-sequence-panel"></div>'+
+      '<div class="te-inline-grid"><label>From residue<input id="teSelectStart" type="number" min="1" value="1"></label><label>To residue<input id="teSelectEnd" type="number" min="1" value="10"></label></div>'+
+      '<div class="te-button-row"><button type="button" id="teSelectRange">Select range</button><button type="button" id="teSelectCurrent">Add current</button><button type="button" id="teSelectSubtract">Subtract current</button><button type="button" id="teSelectChain">Select RNA chain</button><button type="button" id="teSelectInvert">Invert</button><button type="button" id="teSelectClear">Clear selection</button></div>'+
+      '<label>Nucleotide type<select id="teSelectBase"><option>A</option><option>C</option><option>G</option><option>U</option></select></label><button type="button" id="teSelectBaseButton">Select nucleotide type</button>'+
+      '<label>Within distance (Å)<input id="teSelectNearCutoff" type="number" min="1" max="30" step="0.5" value="5"></label><button type="button" id="teSelectNearButton">Select around current residue</button>'+
+      '<div class="te-button-row"><button type="button" id="teFocusSelection">Center / zoom selection</button><label class="te-check"><input id="teSelectionLabels" type="checkbox"> Label selection</label></div></details>'+
+      '<details><summary>Saved objects</summary><p class="te-tool-note">Create a named object from the current selection, then show, hide, isolate, or export it.</p><button type="button" id="teCreateObject">Create object from selection</button><div id="teObjectList">No saved objects.</div></details>'+
+      '<details><summary>Residue index</summary><p>Default labels: 1, every 5 residues, and the final residue.</p><details class="te-index-dropdown"><summary>Choose indices</summary><div id="teIndexChoices"></div></details><div class="te-button-row"><button type="button" id="teIndexDefault">Default</button><button type="button" id="teIndexAll">All</button><button type="button" id="teIndexNone">None</button></div></details>'+
+      '<details><summary>Analyze · measurements &amp; contacts</summary>'+
+      '<label class="te-check"><input id="teProximity" type="checkbox"> Highlight 3D proximity</label><label>Proximity cutoff (Å)<input id="teProximityCutoff" type="number" min="6" max="30" step="0.5" value="12"></label><p id="teProximityStatus">Highlights C4′ spatial neighbors that are not immediate sequence neighbors.</p>'+
+      '<label class="te-check"><input id="teContacts" type="checkbox"> Show close atom contacts / possible H-bond contacts</label><label>Contact cutoff (Å)<input id="teContactCutoff" type="number" min="2.5" max="8" step="0.1" value="4.0"></label><p id="teContactStatus">Shows close atom contacts; N/O pairs ≤3.5 Å are flagged as possible hydrogen-bond contacts.</p><div id="teContactList" class="te-contact-list"></div>'+
+      '<fieldset class="te-measure-tools"><legend>Atom measurements</legend><label>Measurement<select id="teMeasureMode"><option value="off">Off</option><option value="distance">Distance · 2 atoms</option><option value="angle">Angle · 3 atoms</option><option value="dihedral">Dihedral · 4 atoms</option></select></label><div class="te-button-row"><button type="button" id="teMeasureUndo">Undo pick</button><button type="button" id="teMeasureClear">Clear all</button></div><p id="teMeasureStatus">Choose distance, angle, or dihedral, then click atoms in the 3D structure.</p><div id="teMeasurementList" class="te-measurement-list">No saved measurements.</div></fieldset>'+
+      '</details>'+
+      '<details><summary>Clipping</summary><label class="te-check"><input id="teClipEnabled" type="checkbox"> Enable clipping slab</label><div class="te-inline-grid"><label>Near<input id="teClipNear" type="range" min="-100" max="0" step="1" value="-40"></label><label>Far<input id="teClipFar" type="range" min="0" max="100" step="1" value="40"></label></div><p class="te-tool-note">Clipping changes only what is visible; it does not delete atoms.</p></details>'+
+      '<details><summary>Compare / align structures</summary><label>Alignment scope<select id="teAlignScope"><option value="full">Whole active RNA chain</option><option value="selection">Current residue selection</option></select></label><label>Comparison PDB / mmCIF<input id="teAlignFile" type="file" accept=".pdb,.ent,.cif,.mmcif"></label><label class="te-check"><input id="teCompareVisible" type="checkbox" checked> Show aligned comparison</label><button type="button" id="teClearAlignment">Clear comparison</button><p id="teAlignmentStatus">Upload a second PDB/mmCIF structure to superimpose it on the active RNA chain.</p></details>'+
+      '<details><summary>Saved camera views</summary><button type="button" id="teSaveView">Save current view</button><div id="teSavedViews">No saved views.</div></details>'+
+
+      '<details id="teFocusDetails"><summary>Focus on structural region</summary><div class="te-button-row te-region-buttons"><button type="button" data-te-region="Acceptor stem">Acceptor</button><button type="button" data-te-region="Anticodon arm">Anticodon</button><button type="button" data-te-region="elbow">D/T-loop elbow</button><button type="button" data-te-region="full">Full structure</button></div></details>'+
+      '<div class="te-region-legend" id="teRegionLegend" hidden></div></div>';
+
+    $("teRepresentation").value=state.representation;$("teColorMode").value=state.colorMode;$("teShowPairs").checked=state.showPairs;$("teShowIndices").checked=state.showIndices;
+    $("teRepresentation").addEventListener("change",e=>{state.representation=e.target.value;render();});
+    $("teColorMode").addEventListener("change",e=>{state.colorMode=e.target.value;render();});
+    $("teUniformColor").addEventListener("input",e=>{state.uniformColor=e.target.value;if(state.colorMode==="uniform")render();});
+    $("teBackgroundColor").addEventListener("input",e=>{state.backgroundColor=e.target.value;if(viewer){viewer.setBackgroundColor(state.backgroundColor,1);viewer.render();}});
+    $("teOrthographic").addEventListener("change",e=>{state.orthographic=e.target.checked;if(viewer?.setCameraParameters){viewer.setCameraParameters({orthographic:state.orthographic});viewer.render();}});
+    $("teFullscreen").addEventListener("click",()=>{$("tertiaryStage")?.requestFullscreen?.();});
+    $("teShowPairs").addEventListener("change",e=>{state.showPairs=e.target.checked;render();});
+    $("teShowIndices").addEventListener("change",e=>{state.showIndices=e.target.checked;render();});
+    $("teShowSelectedLabel").addEventListener("change",e=>{state.showSelectedLabel=e.target.checked;render();});
+    ["RNA","Protein","Solvent","Ions","Other","Hydrogen"].forEach(k=>$("teShow"+k).addEventListener("change",e=>{state.visibility[k.toLowerCase()]=e.target.checked;render();}));
+    $("teSurface").addEventListener("change",e=>{state.surfaceEnabled=e.target.checked;render();});
+    $("teSurfaceOpacity").addEventListener("input",e=>{state.surfaceOpacity=Number(e.target.value);render();});
+    $("teProximity").addEventListener("change",e=>{state.proximityEnabled=e.target.checked;render();});
+    $("teProximityCutoff").addEventListener("input",e=>{if(e.target.checkValidity()){state.proximityCutoff=Number(e.target.value);render();}});
+    $("teContacts").addEventListener("change",e=>{state.contactEnabled=e.target.checked;render();});
+    $("teContactCutoff").addEventListener("input",e=>{if(e.target.checkValidity()){state.contactCutoff=Number(e.target.value);render();}});
+    $("teMeasureMode").addEventListener("change",e=>{state.measurementMode=e.target.value;state.measurementPicks=[];render();});
+    $("teMeasureUndo").addEventListener("click",()=>{state.measurementPicks.pop();render();});
+    $("teMeasureClear").addEventListener("click",()=>{state.measurementPicks=[];state.measurements=[];render();});
+    $("teSplit").addEventListener("change",e=>{state.split=e.target.checked&&state.mapping.enabled;render();scheduleViewerResize(true);});
+    $("teSameMolecule").addEventListener("change",e=>{state.sameMoleculeConfirmed=e.target.checked;evaluateMapping();render();});
+    $("teChainSelect").addEventListener("change",e=>{state.activeChain=e.target.value;state.chainNeedsChoice=false;state.sameMoleculeConfirmed=false;state.derivedSecondary=null;state.learning.geometry=null;buildResidueLookup();evaluateMapping();state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();const ds=$("teDerivedStatus");if(ds){ds.hidden=true;ds.textContent="";}const od=$("teOpenDerivedSecondary");if(od)od.hidden=true;render();});
+    $("teGenerateSecondary").addEventListener("click",()=>{const button=$("teGenerateSecondary"),status=$("teDerivedStatus");button.disabled=true;if(status){status.hidden=false;status.textContent="Detecting cWW pairs from the active 3D RNA chain…";}try{generateSecondaryFrom3D();}catch(error){if(status){status.hidden=false;status.textContent="3D → 2D generation failed: "+error.message;}}finally{button.disabled=false;}});
+    $("teOpenDerivedSecondary").addEventListener("click",()=>{window.location.href="?page=secondary";});
+    $("teStructureFile").addEventListener("change",async e=>{const file=e.target.files[0];if(!file)return;setStatus("Loading "+file.name+"…");try{await handleStructureUpload(file);setStatus("");}catch(error){setStatus("Upload failed: "+error.message,"error");}});
+    const loadPdbId=async()=>{const status=$("tePdbIdStatus"),button=$("teLoadPdbId");button.disabled=true;status.textContent="Loading from RCSB PDB…";setStatus("Fetching structure from RCSB PDB…");try{const id=await loadFromRcsbId($("tePdbId").value);status.textContent="Loaded RCSB PDB · "+id+" as mmCIF.";setStatus("");render();}catch(error){status.textContent=error.message;setStatus("RCSB import failed: "+error.message,"error");}finally{button.disabled=false;}};
+    $("teLoadPdbId").addEventListener("click",loadPdbId);$("tePdbId").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();loadPdbId();}});
+    $("teRestoreStructure").addEventListener("click",async()=>{$("teStructureFile").value="";setStatus("Restoring PDB 1EHZ…");try{await ensureViewer();await loadDefaultStructure();render();}catch(error){setStatus("Restore failed: "+error.message,"error");}});
+    $("teIndexDefault").addEventListener("click",()=>{state.indexSelection=defaultIndices();buildIndexChoices();render();});
+    $("teIndexAll").addEventListener("click",()=>{const n=state.mapping.enabled?state.secondarySequence.length:activeResidues().length;state.indexSelection=new Set(Array.from({length:n},(_,i)=>i));buildIndexChoices();render();});
+    $("teIndexNone").addEventListener("click",()=>{state.indexSelection.clear();buildIndexChoices();render();});
+    $("teSelectRange").addEventListener("click",selectRange);$("teSelectCurrent").addEventListener("click",addCurrentToSelection);$("teSelectSubtract").addEventListener("click",subtractCurrentFromSelection);$("teSelectChain").addEventListener("click",selectActiveChain);$("teSelectInvert").addEventListener("click",invertSelection);$("teSelectClear").addEventListener("click",()=>{state.selectionIndices.clear();state.selectedPairs.clear();render();});
+    $("teSelectBaseButton").addEventListener("click",selectBase);$("teSelectNearButton").addEventListener("click",selectNearby);$("teFocusSelection").addEventListener("click",focusSelection);
+    $("teSelectionLabels").addEventListener("change",e=>{state.selectionLabels=e.target.checked;render();});$("teCreateObject").addEventListener("click",createObject);
+    $("teClipEnabled").addEventListener("change",e=>{state.clipEnabled=e.target.checked;render();});$("teClipNear").addEventListener("input",e=>{state.clipNear=Number(e.target.value);render();});$("teClipFar").addEventListener("input",e=>{state.clipFar=Number(e.target.value);render();});
+    $("teAlignFile").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;state.comparison.status="Aligning "+f.name+"…";updateComparisonStatus();try{await alignComparison(f);}catch(err){state.comparison.status="Alignment failed: "+err.message;updateComparisonStatus();}});
+    $("teCompareVisible").addEventListener("change",e=>{state.comparison.visible=e.target.checked;render();});$("teClearAlignment").addEventListener("click",()=>clearComparison());
+    $("teSaveView").addEventListener("click",saveView);
+    box.querySelectorAll("[data-te-region]").forEach(b=>b.addEventListener("click",()=>{const r=b.dataset.teRegion;if(r==="full")resetView();else if(r==="elbow")focus([...regionIndices("D arm"),...regionIndices("T arm")]);else focus(regionIndices(r));}));
+  }
+  async function exportViewerImage(format,scale,background){
+    if(!viewer)throw new Error("3D viewer is not ready.");
+    const status=$("teExportStatus"),viewport=$("tertiaryViewport"),view=viewer.getView?viewer.getView():null;
+    const baseW=Math.max(1,Math.round(viewport.clientWidth||720)),baseH=Math.max(1,Math.round(viewport.clientHeight||560));
+    const actual=Math.min(Number(scale)||2,4096/baseW,4096/baseH,Math.sqrt(16000000/(baseW*baseH))),width=Math.max(1,Math.round(baseW*actual)),height=Math.max(1,Math.round(baseH*actual));
+    const oldBg=state.backgroundColor;
+    try{
+      viewer.setWidth(width);viewer.setHeight(height);if(view)viewer.setView(view);
+      if(background==="transparent")viewer.setBackgroundColor("#000000",0);else viewer.setBackgroundColor(background,1);
+      viewer.render();await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      const dataUrl=viewer.pngURI(),base="rna-tertiary-"+(state.currentFileName.replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase()||"structure");
+      if(format==="pdf")await ExportTools.exportRasterPdf(dataUrl,width,height,base);
+      else if(format==="svg"){
+        const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'" viewBox="0 0 '+width+' '+height+'"><image href="'+dataUrl+'" width="'+width+'" height="'+height+'"/></svg>';
+        ExportTools.downloadText(svg,base+".svg","image/svg+xml;charset=utf-8");
+      } else {const response=await fetch(dataUrl);ExportTools.downloadBlob(await response.blob(),base+".png");}
+      if(status)status.textContent=(format==="pdf"?"PDF":format==="svg"?"SVG":"PNG")+" exported · "+width+" × "+height+".";
+    } finally {
+      viewer.setWidth(baseW);viewer.setHeight(baseH);if(view)viewer.setView(view);viewer.setBackgroundColor(oldBg,1);viewer.render();
+    }
+  }
+  function refreshExportObjectOptions(){
+    const select=$("teExportScope");if(!select)return;const current=select.value;select.replaceChildren(new Option("Entire loaded structure","full"),new Option("Current RNA selection","selection"));
+    state.savedObjects.forEach(o=>select.append(new Option("Saved object · "+o.name,"object:"+o.id)));if([...select.options].some(o=>o.value===current))select.value=current;
+  }
+  function setupToolbar(){
+    const toolbar=document.querySelector("#scene-tertiary .te-toolbar");if(!toolbar)return;
+    toolbar.insertAdjacentHTML("beforeend",'<button id="teFitAll" type="button">Fit all</button><button id="teOpenExport" type="button">Export…</button>');
+    const status=document.createElement("p");status.id="teExportStatus";status.className="te-export-status";status.setAttribute("role","status");toolbar.insertAdjacentElement("afterend",status);
+    const dialog=document.createElement("dialog");dialog.id="teExportDialog";dialog.className="te-export-dialog";
+    dialog.innerHTML='<button type="button" class="dialog-close" id="teExportClose" aria-label="Close">×</button><h3>Export Tertiary Structure</h3><label>Export type<select id="teExportType"><option value="image">Image</option><option value="structure">Structure</option></select></label><div id="teImageExportOptions"><label>Format<select id="teImageFormat"><option value="png">PNG</option><option value="pdf">PDF</option><option value="svg">SVG (raster embedded)</option></select></label><label>Resolution / scale<input id="teImageScale" type="range" min="1" max="5" step=".5" value="2"><output id="teImageScaleValue">2×</output></label><label>DPI target<select id="teImageDpi"><option value="96">96</option><option value="150">150</option><option value="300" selected>300</option><option value="600">600</option></select></label><label>Background<select id="teImageBackground"><option value="#ffffff">White</option><option value="#07111c">Dark</option><option value="transparent">Transparent</option></select></label><p class="te-tool-note">The 3D viewer is WebGL. SVG export contains the rendered view as an embedded raster image.</p></div><div id="teStructureExportOptions" hidden><label>Scope<select id="teExportScope"><option value="full">Entire loaded structure</option><option value="selection">Current RNA selection</option></select></label><label>Format<select id="teExportFormat"><option value="pdb">PDB</option><option value="cif">mmCIF</option></select></label></div><button type="button" id="teExportNow" class="primary-action">Export</button><p id="teExportDialogStatus" role="status"></p>';
+    document.body.append(dialog);refreshExportObjectOptions();
+    $("teOpenExport").addEventListener("click",()=>{refreshExportObjectOptions();dialog.showModal();});$("teExportClose").addEventListener("click",()=>dialog.close());
+    $("teExportType").addEventListener("change",e=>{$("teImageExportOptions").hidden=e.target.value!=="image";$("teStructureExportOptions").hidden=e.target.value!=="structure";});
+    $("teImageScale").addEventListener("input",e=>$("teImageScaleValue").textContent=e.target.value+"×");
+    $("teExportNow").addEventListener("click",async()=>{
+      const out=$("teExportDialogStatus");out.textContent="Preparing export…";
+      try{
+        if($("teExportType").value==="image"){const dpi=Number($("teImageDpi").value)||96,scale=(Number($("teImageScale").value)||1)*(dpi/96);await exportViewerImage($("teImageFormat").value,scale,$("teImageBackground").value);out.textContent="Image exported.";}
+        else{
+          const scope=$("teExportScope").value,fmt=$("teExportFormat").value;let indices=null,label=state.currentFileName.replace(/\.[^.]+$/,"");
+          if(scope==="selection")indices=state.selectionIndices;
+          else if(scope.startsWith("object:")){const o=state.savedObjects.find(x=>x.id===Number(scope.split(":")[1]));if(!o)throw new Error("Saved object is no longer available.");indices=o.indices;label=o.name;}
+          downloadStructure(fmt,indices,label);out.textContent=(fmt==="cif"?"mmCIF":"PDB")+" structure exported.";
+        }
+      }catch(error){out.textContent="Export failed: "+error.message;}
+    });
+    $("teFitAll").addEventListener("click",()=>{if(viewer){viewer.zoomTo({},350);viewer.render();}});
+    $("teZoomIn")?.addEventListener("click",()=>{if(viewer){viewer.zoom(1.25,250);viewer.render();}});
+    $("teZoomOut")?.addEventListener("click",()=>{if(viewer){viewer.zoom(.8,250);viewer.render();}});
+    $("teResetView")?.addEventListener("click",resetView);$("teCenterSelected")?.addEventListener("click",centerSelected);
+  }
+
+  function getWorkspaceSnapshot(){
+    const comparison=state.comparison?.model?{
+      name:state.comparison.name||"comparison",rmsd:state.comparison.rmsd,count:state.comparison.count,visible:state.comparison.visible!==false,
+      structureText:serializePdb(state.comparison.model.selectedAtoms({}))
+    }:null;
+    return {
+      version:2,currentFileName:state.currentFileName,currentFormat:state.currentFormat,sourceText:state.sourceText,sourceIsDefault:state.sourceIsDefault,
+      activeChain:state.activeChain,secondarySequence:state.secondarySequence,structure:state.structure,secondaryIsDefault:state.secondaryIsDefault,
+      sameMoleculeConfirmed:state.sameMoleculeConfirmed,derivedSecondary:state.derivedSecondary,selected:state.selected,
+      representation:state.representation,colorMode:state.colorMode,showPairs:state.showPairs,showIndices:state.showIndices,showSelectedLabel:state.showSelectedLabel,
+      indexSelection:[...state.indexSelection],metadata:state.metadata,heatEnabled:state.heatEnabled,heatTheme:state.heatTheme,heatRange:state.heatRange,
+      proximityEnabled:state.proximityEnabled,proximityCutoff:state.proximityCutoff,contactEnabled:state.contactEnabled,contactCutoff:state.contactCutoff,
+      measurementMode:state.measurementMode,measurementPicks:state.measurementPicks,measurements:state.measurements,measurementSerial:state.measurementSerial,
+      split:state.split,exportScale:state.exportScale,surfaceEnabled:state.surfaceEnabled,surfaceOpacity:state.surfaceOpacity,
+      uniformColor:state.uniformColor,backgroundColor:state.backgroundColor,orthographic:state.orthographic,visibility:state.visibility,
+      selectionIndices:[...state.selectionIndices],selectionLabels:state.selectionLabels,selectionStyle:state.selectionStyle,
+      selectedPairs:[...state.selectedPairs],pairHbondStyles:state.pairHbondStyles,hbondCutoff:state.hbondCutoff,
+      savedObjects:state.savedObjects.map(o=>({...o,indices:[...o.indices]})),objectSerial:state.objectSerial,isolateObjectId:state.isolateObjectId,
+      savedViews:state.savedViews,viewSerial:state.viewSerial,
+      clipEnabled:state.clipEnabled,clipNear:state.clipNear,clipFar:state.clipFar,
+      secondaryLayoutPositions:state.secondaryLayoutPositions,
+      viewerView:viewer?.getView?viewer.getView().slice():null,comparison
+    };
+  }
+  function syncWorkspaceControls(){
+    const setValue=(id,value)=>{const el=$(id);if(el&&value!==undefined&&value!==null)el.value=String(value);};
+    const setChecked=(id,value)=>{const el=$(id);if(el)el.checked=Boolean(value);};
+    setValue("teRepresentation",state.representation);setValue("teColorMode",state.colorMode);
+    setValue("teUniformColor",state.uniformColor);setValue("teBackgroundColor",state.backgroundColor);
+    setChecked("teOrthographic",state.orthographic);setChecked("teSplit",state.split);setChecked("teShowPairs",state.showPairs);
+    setChecked("teShowIndices",state.showIndices);setChecked("teShowSelectedLabel",state.showSelectedLabel);
+    setChecked("teShowRNA",state.visibility.rna);setChecked("teShowProtein",state.visibility.protein);setChecked("teShowSolvent",state.visibility.solvent);
+    setChecked("teShowIons",state.visibility.ions);setChecked("teShowOther",state.visibility.other);setChecked("teShowHydrogen",state.visibility.hydrogen);
+    setChecked("teSurface",state.surfaceEnabled);setValue("teSurfaceOpacity",state.surfaceOpacity);
+    setChecked("teProximity",state.proximityEnabled);setValue("teProximityCutoff",state.proximityCutoff);
+    setChecked("teContacts",state.contactEnabled);setValue("teContactCutoff",state.contactCutoff);
+    setValue("teMeasureMode",state.measurementMode);setChecked("teSelectionLabels",state.selectionLabels);
+    setChecked("teClipEnabled",state.clipEnabled);setValue("teClipNear",state.clipNear);setValue("teClipFar",state.clipFar);
+    setChecked("teCompareVisible",state.comparison.visible!==false);
+    if($("teChainSelect")&&state.activeChain!==null)$("teChainSelect").value=state.activeChain;
+    if(viewer?.setBackgroundColor)viewer.setBackgroundColor(state.backgroundColor,1);
+    if(viewer?.setCameraParameters)viewer.setCameraParameters({orthographic:state.orthographic});
+  }
+  function restoredEnum(value,allowed,fallback){return allowed.includes(value)?value:fallback;}
+  function restoredNumber(value,fallback,min=-Infinity,max=Infinity){
+    const n=Number(value);return Number.isFinite(n)?clamp(n,min,max):fallback;
+  }
+  function restoredColor(value,fallback){return /^#[0-9a-f]{6}$/i.test(String(value||""))?String(value):fallback;}
+  async function restoreWorkspaceSnapshot(w){
+    if(!w||typeof w!=="object"||Array.isArray(w))throw new Error("Project file is missing the Tertiary workspace.");
+    if(!w.sourceText)throw new Error("Project file does not contain the 3D structure coordinates needed to restore this workspace.");
+    await ensureViewer();
+    await setModelFromText(w.sourceText,w.currentFormat==="cif"?"cif":"pdb",Boolean(w.sourceIsDefault),w.currentFileName||"Restored project structure");
+    if(w.activeChain!==undefined&&state.chains.some(chain=>chain.id===w.activeChain)){state.activeChain=w.activeChain;state.chainNeedsChoice=false;}
+    state.secondarySequence=String(w.secondarySequence||state.secondarySequence);
+    state.structure=String(w.structure||state.structure);
+    state.secondaryIsDefault=Boolean(w.secondaryIsDefault);
+    state.sameMoleculeConfirmed=Boolean(w.sameMoleculeConfirmed);
+    state.derivedSecondary=w.derivedSecondary||null;
+    const parsed=parseStructure(state.structure,state.secondarySequence.length);pairs=parsed.pairs;partner=parsed.partner;
+    state.selected=Number.isInteger(w.selected)?clamp(w.selected,0,Math.max(0,activeResidues().length-1)):0;
+    state.representation=restoredEnum(w.representation,["sticks","ballstick","wire","spheres","backbone","cartoon"],"sticks");
+    state.colorMode=restoredEnum(w.colorMode,["nucleotide","chain","element","uniform","region","metadata"],"nucleotide");
+    state.showPairs=Boolean(w.showPairs);state.showIndices=w.showIndices!==false;state.showSelectedLabel=w.showSelectedLabel!==false;
+    state.indexSelection=new Set(Array.isArray(w.indexSelection)?w.indexSelection.filter(Number.isInteger):[]);state.metadata=w.metadata&&typeof w.metadata==="object"&&!Array.isArray(w.metadata)?w.metadata:{};state.heatEnabled=Boolean(w.heatEnabled);
+    state.heatTheme=restoredEnum(w.heatTheme,Object.keys(PALETTES),"viridis");
+    state.heatRange=Array.isArray(w.heatRange)&&w.heatRange.length===2?w.heatRange.map((v,i)=>restoredNumber(v,i, -1e9,1e9)):[0,1];
+    state.proximityEnabled=Boolean(w.proximityEnabled);state.proximityCutoff=restoredNumber(w.proximityCutoff,12,6,30);
+    state.contactEnabled=Boolean(w.contactEnabled);state.contactCutoff=restoredNumber(w.contactCutoff,4,2.5,8);
+    state.measurementMode=restoredEnum(w.measurementMode,["off","distance","angle","dihedral"],"off");state.measurementPicks=Array.isArray(w.measurementPicks)?w.measurementPicks:[];
+    state.measurements=Array.isArray(w.measurements)?w.measurements:[];state.measurementSerial=Number(w.measurementSerial)||1;
+    state.split=Boolean(w.split);state.exportScale=restoredNumber(w.exportScale,2,1,5);state.surfaceEnabled=Boolean(w.surfaceEnabled);
+    state.surfaceOpacity=restoredNumber(w.surfaceOpacity,.35,0,1);state.uniformColor=restoredColor(w.uniformColor,"#74d7b6");state.backgroundColor=restoredColor(w.backgroundColor,"#07111c");
+    state.orthographic=Boolean(w.orthographic);
+    state.visibility={
+      rna:w.visibility?.rna!==false,protein:w.visibility?.protein!==false,solvent:Boolean(w.visibility?.solvent),
+      ions:w.visibility?.ions!==false,other:w.visibility?.other!==false,hydrogen:Boolean(w.visibility?.hydrogen)
+    };
+    state.selectionIndices=new Set(Array.isArray(w.selectionIndices)?w.selectionIndices.filter(Number.isInteger):[]);state.selectionLabels=Boolean(w.selectionLabels);
+    state.selectionStyle={
+      color:restoredColor(w.selectionStyle?.color,"#f2c66d"),
+      thickness:restoredNumber(w.selectionStyle?.thickness,.24,.01,2),
+      opacity:restoredNumber(w.selectionStyle?.opacity,.32,0,1)
+    };
+    state.selectedPairs=new Set(w.selectedPairs||[]);state.pairHbondStyles=w.pairHbondStyles||{};state.hbondCutoff=Number(w.hbondCutoff)||3.5;
+    state.savedObjects=(w.savedObjects||[]).map(o=>({...o,indices:new Set(o.indices||[])}));state.objectSerial=Number(w.objectSerial)||1;state.isolateObjectId=w.isolateObjectId??null;
+    state.savedViews=Array.isArray(w.savedViews)?w.savedViews:[];state.viewSerial=Number(w.viewSerial)||1;
+    state.clipEnabled=Boolean(w.clipEnabled);state.clipNear=Number.isFinite(Number(w.clipNear))?Number(w.clipNear):-40;state.clipFar=Number.isFinite(Number(w.clipFar))?Number(w.clipFar):40;
+    state.secondaryLayoutPositions=Array.isArray(w.secondaryLayoutPositions)?w.secondaryLayoutPositions:null;
+    buildResidueLookup();populateChainSelect();evaluateMapping();buildIndexChoices();setupInteractions();
+    if(w.comparison?.structureText){
+      const cmp=viewer.addModel(w.comparison.structureText,"pdb",{keepH:true});
+      state.comparison={model:cmp,name:w.comparison.name||"comparison",rmsd:Number(w.comparison.rmsd)||0,count:Number(w.comparison.count)||0,visible:w.comparison.visible!==false,status:""};
+    } else state.comparison={model:null,name:"",rmsd:null,count:0,visible:true,status:""};
+    syncWorkspaceControls();renderObjectList();renderSavedViews();updateComparisonStatus();render();
+    if(Array.isArray(w.viewerView)&&viewer?.setView){viewer.setView(w.viewerView);viewer.render();}
+    const ds=$("teDerivedStatus"),od=$("teOpenDerivedSecondary");
+    if(state.derivedSecondary&&ds){ds.hidden=false;ds.textContent="Restored project · Secondary structure derived from the saved 3D coordinates.";}
+    if(od)od.hidden=!state.derivedSecondary;
+    return getWorkspaceSnapshot();
+  }
+
+  function applyMetadata(detail){
+    if(!detail||detail.sequence!==state.secondarySequence){state.metadata={};state.heatEnabled=false;if(state.colorMode==="metadata")state.colorMode="nucleotide";render();return;}
+    state.metadata=detail.metadata||{};state.heatEnabled=Boolean(detail.heatEnabled)&&Object.keys(state.metadata).length>0;
+    state.heatTheme=detail.heatTheme||"viridis";state.heatRange=Array.isArray(detail.heatRange)?detail.heatRange:[0,1];
+    if(!state.heatEnabled&&state.colorMode==="metadata")state.colorMode="nucleotide";render();
+  }
+  function handleSecondaryLayout(detail){
+    if(!detail||detail.sequence!==state.secondarySequence||detail.structure!==state.structure)return;
+    if(Array.isArray(detail.positions)&&detail.positions.length===state.secondarySequence.length)state.secondaryLayoutPositions=detail.positions.map(p=>({x:Number(p.x),y:Number(p.y)}));
+    if(state.split)miniSecondary();
+  }
+  function handleSecondaryContext(detail){
+    if(!detail)return;const changed=detail.sequence!==state.secondarySequence||detail.structure!==state.structure;
+    const matchesDerived=Boolean(state.derivedSecondary&&detail.sequence===state.derivedSecondary.sequence&&detail.structure===state.derivedSecondary.structure);
+    state.secondarySequence=detail.sequence;state.structure=detail.structure;state.secondaryIsDefault=Boolean(detail.isDefault);if(changed)state.secondaryLayoutPositions=null;
+    const parsed=parseStructure(state.structure,state.secondarySequence.length);pairs=parsed.pairs;partner=parsed.partner;
+    if(changed&&!isCuratedDefaultPair()&&!matchesDerived){state.sameMoleculeConfirmed=false;state.derivedSecondary=null;state.metadata={};state.heatEnabled=false;}
+    if(matchesDerived)state.sameMoleculeConfirmed=true;
+    evaluateMapping();if(changed){state.indexSelection=defaultIndices();buildIndexChoices();}render();
+  }
+  function setup(config){
+    if(setupDone)return;setupDone=true;
+    state.defaultSequence=config.sequence;state.defaultStructure=config.structure;state.secondarySequence=config.sequence;state.structure=config.structure;state.colors=config.colors;state.names=config.names;state.onSelect=config.onSelect;
+    const journeyRequested=document.body?.dataset?.pageMode==="journey"||/[?&]page=journey(?:&|$)/.test(String(window.location?.search||""));if(journeyRequested){state.showIndices=false;state.showSelectedLabel=false;state.representation="backbone";}
+    const parsed=parseStructure(state.structure,state.secondarySequence.length);pairs=parsed.pairs;partner=parsed.partner;
+    setupControls();setupToolbar();setupLearningPanel();
+    $("followButton")?.addEventListener("click",()=>{const n=activeResidues().length;if(n<2)return;let next=state.selected;while(next===state.selected)next=Math.floor(Math.random()*n);chooseResidue(next);});
+    window.addEventListener("rna-metadata-change",e=>applyMetadata(e.detail));
+    window.addEventListener("rna-secondary-context",e=>handleSecondaryContext(e.detail));
+    window.addEventListener("rna-secondary-layout",e=>handleSecondaryLayout(e.detail));
+    window.addEventListener("rna-secondary-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){state.selected=clamp(e.detail.index,0,state.secondarySequence.length-1);if(e.detail.selected===true)state.selectionIndices.add(state.selected);else if(e.detail.selected===false)state.selectionIndices.delete(state.selected);render();}});
+    window.addEventListener("rna-secondary-pair-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){const key=pairKey(e.detail.a,e.detail.b);if(e.detail.selected)state.selectedPairs.add(key);else state.selectedPairs.delete(key);render();}});
+    window.addEventListener("resize",()=>scheduleViewerResize(true));
+    if(typeof ResizeObserver!=="undefined"){const viewport=$("tertiaryViewport");if(viewport)new ResizeObserver(()=>scheduleViewerResize(true)).observe(viewport);}
+    try{const p=typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.getCurrentPositions?SecondaryExplorer.getCurrentPositions():null;if(Array.isArray(p)&&p.length===state.secondarySequence.length)state.secondaryLayoutPositions=p.map(x=>({x:Number(x.x),y:Number(x.y)}));}catch(_){}
+    render();
+  }
+
+  return {setup,render,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,getWorkspaceSnapshot,restoreWorkspaceSnapshot,showLearningFeature,clearLearningFeature,showLinkedRegion,clearLinkedRegion,createDistanceMeasurementFromAtomIndices,
+    getDiagnostics(){return {viewerReady:!!viewer,modelReady:!!model,atomCount:model?.selectedAtoms?model.selectedAtoms({}).length:0,representation:state.representation,colorMode:state.colorMode,split:state.split,mappingEnabled:state.mapping.enabled,source:state.currentFileName,derivedSecondary:state.derivedSecondary,
+      surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
+      selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
+      comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count,selectedPairCount:state.selectedPairs.size,
+      learningKey:state.learning.key,learningTorsion:state.learning.torsion,learningActive:!!state.learning.geometry,learningFlashActive:learningPulseTimer!==null,learningGuidedDimmed:guidedLearningActive(),learningStatus:state.learning.geometry?.status||"",
+      selectedPairKeys:[...state.selectedPairs],hbondCounts:Object.fromEntries([...state.selectedPairs].map(key=>{const [a,b]=key.split(":").map(Number);return [key,pairHydrogenBonds(a,b).length];}))};}
+  };
+})();
