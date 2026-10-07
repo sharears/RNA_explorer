@@ -2,6 +2,19 @@ import { chromium } from 'playwright';
 const browser=await chromium.launch({headless:true});
 const page=await browser.newPage({viewport:{width:1280,height:900}});
 const errors=[];page.on('pageerror',e=>errors.push(String(e)));
+
+async function centralNodeBox(){
+  return page.evaluate(()=>{
+    const svg=document.getElementById('secondarySvg'),sr=svg.getBoundingClientRect();
+    const boxes=[...svg.querySelectorAll('.se-node')].map((node,index)=>{
+      const r=node.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
+      const margin=Math.min(cx-sr.left,sr.right-cx,cy-sr.top,sr.bottom-cy);
+      return {index,left:r.left,top:r.top,width:r.width,height:r.height,cx,cy,margin};
+    }).filter(x=>x.width>0&&x.height>0).sort((a,b)=>b.margin-a.margin);
+    return boxes[0]||null;
+  });
+}
+
 try{
   await page.goto('http://127.0.0.1:4173/',{waitUntil:'networkidle'});
   if(await page.locator('#rnaFactStrip').count()!==1)throw new Error('Did-you-know fact strip is missing');
@@ -24,15 +37,17 @@ try{
   const rotation=await page.evaluate(()=>SecondaryExplorer.getTransformState().wholeRotation);
   if(rotation!==45)throw new Error(`Whole rotation did not update: ${rotation}`);
 
+  // Exercise lasso using a residue safely inside the SVG viewport, rather than assuming residue 1 is away from an edge.
   await page.click('#seLassoSelectTool');
-  const node=page.locator('#secondarySvg .se-node').nth(0),box=await node.boundingBox();
-  if(!box)throw new Error('Could not locate a secondary-structure nucleotide');
-  const cx=box.x+box.width/2,cy=box.y+box.height/2,r=Math.max(18,Math.max(box.width,box.height)*.8);
-  const pts=[[cx-r,cy-r],[cx+r,cy-r],[cx+r,cy+r],[cx-r,cy+r],[cx-r,cy-r]];
-  await page.mouse.move(...pts[0]);await page.mouse.down();for(const [x,y] of pts.slice(1))await page.mouse.move(x,y,{steps:4});await page.mouse.up();await page.waitForTimeout(150);
+  const target=await centralNodeBox();
+  if(!target||target.margin<20)throw new Error('Could not locate a well-inside secondary-structure nucleotide for lasso testing');
+  const r=Math.max(20,Math.max(target.width,target.height)*.9);
+  const pts=[[target.cx-r,target.cy-r],[target.cx+r,target.cy-r],[target.cx+r,target.cy+r],[target.cx-r,target.cy+r],[target.cx-r,target.cy-r]];
+  await page.mouse.move(...pts[0]);await page.mouse.down();for(const [x,y] of pts.slice(1))await page.mouse.move(x,y,{steps:5});await page.mouse.up();await page.waitForTimeout(150);
   const lassoSelected=await page.evaluate(()=>SecondaryExplorer.getContext().selectedResidues.length);
   if(lassoSelected<1)throw new Error('Lasso selected no residues');
 
+  // Regional transform must move selected residues without moving an unselected residue.
   await page.evaluate(()=>{SecondaryExplorer.highlightResidues([0,1,2]);SecondaryExplorer.setWholeRotation(0);SecondaryExplorer.setSelectionTransform({rotation:0,scale:1});});
   const before=await page.evaluate(()=>SecondaryExplorer.getCurrentPositions());
   await page.locator('#seSelectedRotation').evaluate(el=>{el.value='30';el.dispatchEvent(new Event('input',{bubbles:true}));});
@@ -43,9 +58,11 @@ try{
   if(moved<1)throw new Error('Selected regional transform did not move selected residues');
   if(untouched>1e-6)throw new Error(`Unselected residue moved during regional transform: ${untouched}`);
 
+  // Box selection is a separate working selection mode.
   await page.click('#seBoxSelectTool');
-  const boxNode=page.locator('#secondarySvg .se-node').nth(5),b=await boxNode.boundingBox();if(!b)throw new Error('Could not locate node for box selection');
-  await page.mouse.move(b.x-4,b.y-4);await page.mouse.down();await page.mouse.move(b.x+b.width+4,b.y+b.height+4,{steps:6});await page.mouse.up();await page.waitForTimeout(120);
+  const target2=await centralNodeBox();if(!target2)throw new Error('Could not locate node for box selection');
+  const pad=10;
+  await page.mouse.move(target2.left-pad,target2.top-pad);await page.mouse.down();await page.mouse.move(target2.left+target2.width+pad,target2.top+target2.height+pad,{steps:6});await page.mouse.up();await page.waitForTimeout(120);
   const boxSelected=await page.evaluate(()=>SecondaryExplorer.getContext().selectedResidues.length);
   if(boxSelected<1)throw new Error('Box select selected no residues');
 
