@@ -1,4 +1,5 @@
 name: Add secondary selection and learning v2
+# Retry after making the lasso browser gesture stay inside the SVG viewport.
 
 on:
   push:
