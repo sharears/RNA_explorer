@@ -1,0 +1,531 @@
+name: Add secondary selection and learning v2
+
+on:
+  push:
+    paths:
+      - .github/workflows/add-secondary-selection-and-learning-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Patch secondary transform state and homepage wiring
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p=Path(path); s=p.read_text()
+              if old not in s:
+                  raise SystemExit(f'marker not found in {path}: {old[:100]!r}')
+              p.write_text(s.replace(old,new,1))
+
+          # Secondary transform state: full-structure rotation + selected-region rotation/scale.
+          replace_once('secondary.js',
+            'let manualOffsets={}, pinnedResidues=new Set(), dragMode="residue", flexDrag=true, nodeDrag=null, suppressNodeClick=false;',
+            'let manualOffsets={}, pinnedResidues=new Set(), dragMode="residue", flexDrag=true, nodeDrag=null, suppressNodeClick=false;\n  let wholeRotation=0,selectionRotation=0,selectionScale=1;')
+
+          replace_once('secondary.js',
+            'version:2,sequence:seq,structure:db,layout,arcPairStyle,manualOffsets,zoom,panX,panY,',
+            'version:3,sequence:seq,structure:db,layout,arcPairStyle,manualOffsets,zoom,panX,panY,wholeRotation,selectionRotation,selectionScale,')
+
+          replace_once('secondary.js',
+            'manualOffsets=w.manualOffsets||{};zoom=Number(w.zoom)||1;panX=Number(w.panX)||0;panY=Number(w.panY)||0;',
+            'manualOffsets=w.manualOffsets||{};zoom=Number(w.zoom)||1;panX=Number(w.panX)||0;panY=Number(w.panY)||0;\n      wholeRotation=Number(w.wholeRotation)||0;selectionRotation=Number(w.selectionRotation)||0;selectionScale=Math.max(.35,Math.min(3,Number(w.selectionScale)||1));')
+
+          old='''    return out.map((p,i)=>({x:p.x+(manualOffsets[i]?.x||0),y:p.y+(manualOffsets[i]?.y||0)}));\n  }'''
+          new='''    let transformed=out.map((p,i)=>({x:p.x+(manualOffsets[i]?.x||0),y:p.y+(manualOffsets[i]?.y||0)}));
+    const transformPoint=(p,c,degrees,scale=1)=>{
+      const angle=degrees*Math.PI/180,cos=Math.cos(angle),sin=Math.sin(angle),x=(p.x-c.x)*scale,y=(p.y-c.y)*scale;
+      return {x:c.x+x*cos-y*sin,y:c.y+x*sin+y*cos};
+    };
+    if(transformed.length&&Math.abs(wholeRotation)>1e-8){
+      const c={x:transformed.reduce((sum,p)=>sum+p.x,0)/transformed.length,y:transformed.reduce((sum,p)=>sum+p.y,0)/transformed.length};
+      transformed=transformed.map(p=>transformPoint(p,c,wholeRotation,1));
+    }
+    const chosen=[...selectedResidues].filter(i=>i>=0&&i<transformed.length);
+    if(chosen.length&&(Math.abs(selectionRotation)>1e-8||Math.abs(selectionScale-1)>1e-8)){
+      const c={x:chosen.reduce((sum,i)=>sum+transformed[i].x,0)/chosen.length,y:chosen.reduce((sum,i)=>sum+transformed[i].y,0)/chosen.length};
+      const selectedSet=new Set(chosen);
+      transformed=transformed.map((p,i)=>selectedSet.has(i)?transformPoint(p,c,selectionRotation,selectionScale):p);
+    }
+    return transformed;
+  }'''
+          replace_once('secondary.js',old,new)
+
+          replace_once('secondary.js',
+            'pairChemistry={};manualOffsets={};pinnedResidues=new Set();zoom=1;panX=panY=0;',
+            'pairChemistry={};manualOffsets={};pinnedResidues=new Set();zoom=1;panX=panY=0;wholeRotation=0;selectionRotation=0;selectionScale=1;')
+
+          replace_once('secondary.js',
+            'pairChemistry={};manualOffsets={};pinnedResidues=new Set();zoom=1;$("seMetadataFile")',
+            'pairChemistry={};manualOffsets={};pinnedResidues=new Set();zoom=1;wholeRotation=0;selectionRotation=0;selectionScale=1;$("seMetadataFile")')
+
+          replace_once('secondary.js',
+            'getCurrentPositions(){return coordinates().map(p=>({x:p.x,y:p.y}));},',
+            '''getCurrentPositions(){return coordinates().map(p=>({x:p.x,y:p.y}));},
+    setWholeRotation(degrees=0){wholeRotation=Math.max(-180,Math.min(180,Number(degrees)||0));render();return wholeRotation;},
+    setSelectionTransform({rotation=selectionRotation,scale=selectionScale}={}){
+      selectionRotation=Math.max(-180,Math.min(180,Number(rotation)||0));
+      selectionScale=Math.max(.35,Math.min(3,Number(scale)||1));
+      render();return {rotation:selectionRotation,scale:selectionScale};
+    },
+    getTransformState(){return {wholeRotation,selectionRotation,selectionScale};},''')
+
+          # Homepage fact strip + flashcard copy + cache-busted assets.
+          p=Path('index.html'); s=p.read_text()
+          hero_marker='''      </section>\n\n\n      <section class="home-discovery" id="tutorials"'''
+          fact='''      </section>
+
+      <section class="home-fact-strip" id="rnaFactStrip" aria-labelledby="rnaFactLabel">
+        <span class="home-fact-label" id="rnaFactLabel">Did you know?</span>
+        <p id="rnaFactText">RNA can fold into precise three-dimensional shapes, not just carry genetic information.</p>
+        <button type="button" id="rnaFactNext" aria-label="Show another RNA fact">Another fact ↻</button>
+      </section>
+
+      <section class="home-discovery" id="tutorials"'''
+          if hero_marker not in s: raise SystemExit('home discovery marker not found')
+          s=s.replace(hero_marker,fact,1)
+          s=s.replace('This first deck is intentionally short; more topic-specific decks can be added later.','Choose a level, flip each card, and mark whether you knew it. Each level has 20 cards and becomes progressively more challenging.',1)
+          s=s.replace('<div class="flashcard-progress"><span id="flashcardProgress">1 / 10</span>','<div class="flashcard-progress"><span id="flashcardProgress">Starter · 1 / 20</span>',1)
+          s=s.replace('secondary.css?v=secondary-23','secondary.css?v=secondary-24',1)
+          s=s.replace('learning-tools.css?v=learning-tools-1','learning-tools.css?v=learning-tools-2',1)
+          s=s.replace('secondary.js?v=secondary-22','secondary.js?v=secondary-23',1)
+          s=s.replace('learning-tools.js?v=learning-tools-1','learning-tools.js?v=learning-tools-2',1)
+          app_marker='<script src="app.js?v=modern-ui-2"></script>'
+          if app_marker not in s: raise SystemExit('app script marker not found')
+          s=s.replace(app_marker,app_marker+'\n  <script src="secondary-selection-tools.js?v=secondary-tools-1"></script>',1)
+          p.write_text(s)
+
+          # Keep the new browser regression in normal CI.
+          p=Path('.github/workflows/static-checks.yml'); s=p.read_text()
+          marker='''          node tests/guided-structure-transitions-browser.mjs\n'''
+          if marker not in s: raise SystemExit('static browser marker not found')
+          s=s.replace(marker,marker+'          node tests/secondary-selection-learning-v2-browser.mjs\n',1)
+          p.write_text(s)
+          PY
+
+      - name: Write four-level learning deck and rotating facts
+        run: |
+          cat > learning-tools.js <<'EOF'
+          const RNAExplorerLearningTools=(()=>{
+            const tutorials={
+              drawing:{title:"Draw & edit RNA chemistry",intro:"Use the molecular drawing workspace like a compact chemistry sketchpad.",href:"?page=drawing",steps:[
+                ["Start from something useful","Open a nucleobase, ribose, phosphate, a common base pair, or a blank canvas."],
+                ["Select exactly what you mean","Use box selection for rectangular regions or Lasso select for a true freeform selection. The transform rectangle never adds atoms that were outside the lasso."],
+                ["Edit, make room, and export","Add/delete atoms and bonds, change bond order or charge, use More canvas when the drawing gets crowded, then export your figure."]]},
+              secondary:{title:"Explore a 2D RNA structure",intro:"Use the secondary-structure workspace to connect sequence, pairing, styling, and experimental data.",href:"?page=secondary&start=example",steps:[
+                ["Load the example","Start with the 76-residue tRNA example, or enter your own sequence and dot-bracket structure."],
+                ["Select and transform a region","Use Box select or Lasso to choose only the residues you want. Rotate or enlarge that region without transforming the rest of the RNA."],
+                ["Add data when you want it","Upload reactivity/residue information, base-pair probability data, or both, then export the structure or structure files."]]},
+              tertiary:{title:"Inspect RNA in 3D",intro:"Use the 3D workspace to move from a whole structure to residues, contacts, measurements, and linked 2D context.",href:"?page=tertiary&start=example",steps:[
+                ["Move around naturally","Left-drag to rotate, wheel to zoom, and Ctrl/⌘-drag or middle-drag to pan. Reset or center the view whenever you need."],
+                ["Select before you analyze","Use Select controls for residues and ranges, Display controls for representation and labels, then Analyze controls for measurements, contacts, and comparison."],
+                ["Connect 3D back to RNA structure","Use the 1EHZ example, inspect structural features, and link or derive a 2D view when the structure and mapping are appropriate."] ]}
+            };
+
+            const decks={
+              starter:{label:"Starter",tagline:"Core RNA building blocks and vocabulary",cards:[
+                ["What are the four standard RNA bases?","Adenine, guanine, cytosine, and uracil."],
+                ["What sugar is found in RNA?","Ribose."],
+                ["Which base replaces thymine in RNA?","Uracil."],
+                ["What are the three parts of a nucleotide?","A nitrogenous base, ribose sugar, and phosphate."],
+                ["What is a nucleoside?","A nitrogenous base attached to a sugar."],
+                ["What is a nucleotide?","A nucleoside with one or more phosphate groups."],
+                ["What bond links a base to ribose?","A glycosidic bond."],
+                ["What bond links RNA nucleotides in a chain?","A phosphodiester bond."],
+                ["What are the standard Watson–Crick RNA pairs?","A–U and G–C."],
+                ["What is the common RNA wobble pair?","G–U."],
+                ["What does 5′ to 3′ describe?","The direction of the RNA backbone and sequence."],
+                ["What is RNA primary structure?","The nucleotide sequence of an RNA strand."],
+                ["What is RNA secondary structure?","Local base pairing that forms stems, loops, and related motifs."],
+                ["What is RNA tertiary structure?","The overall three-dimensional fold of the RNA."],
+                ["What is an RNA stem?","A region of paired nucleotides forming a helix."],
+                ["What is a hairpin loop?","An unpaired loop at the end of a stem."],
+                ["What is a bulge?","Unpaired nucleotides on one side of an RNA helix."],
+                ["What is an internal loop?","Unpaired nucleotides on both sides between two stems."],
+                ["Why can RNA form complex structures?","Its bases can pair, stack, and form many interactions."],
+                ["What gives RNA its negative charge?","The phosphate groups in its backbone."]
+              ]},
+              explorer:{label:"Explorer",tagline:"Motifs, ensembles, and experimental probing",cards:[
+                ["What stabilizes an RNA helix besides hydrogen bonds?","Base-stacking interactions are an important stabilizing contribution."],
+                ["What is a base pair?","Two bases interacting through a characteristic hydrogen-bonding geometry."],
+                ["What is a noncanonical base pair?","A base pair that does not use standard Watson–Crick geometry."],
+                ["Can RNA contain pseudoknots?","Yes. A pseudoknot contains base-pair connections that cross in a conventional secondary-structure diagram."],
+                ["What is a multibranch loop?","A junction where three or more helices meet."],
+                ["What is coaxial stacking?","Alignment and stacking of two helices along a similar axis."],
+                ["Why are G–C pairs often more stable than A–U pairs?","G–C pairs have three canonical hydrogen bonds rather than two, while stacking and sequence context also affect stability."],
+                ["What is base-pair probability?","The predicted probability that two residues form a pair in a structural ensemble."],
+                ["What does high base-pair probability suggest?","Greater confidence that the pair is populated in the predicted ensemble."],
+                ["What is an RNA structural ensemble?","A population of alternative RNA conformations rather than one single structure."],
+                ["What does DMS commonly probe in RNA?","The accessibility and local chemical environment of reactive nucleobase positions."],
+                ["What does SHAPE reactivity report indirectly?","Local nucleotide flexibility and conformational constraint."],
+                ["What can high SHAPE reactivity suggest?","A relatively flexible or weakly constrained nucleotide."],
+                ["What can low SHAPE reactivity suggest?","A relatively constrained or structured nucleotide."],
+                ["Why combine probing data with structure prediction?","Experimental constraints can help models agree better with solution-state behavior."],
+                ["What is a conserved RNA motif?","A recurring structural pattern preserved across related RNAs or species."],
+                ["What is a tetraloop?","A hairpin loop containing four nucleotides."],
+                ["What is a junction in RNA?","A region connecting multiple helical segments."],
+                ["What is an RNA structural motif?","A recurring arrangement of nucleotides with characteristic geometry."],
+                ["Why is RNA structure often described as hierarchical?","Primary sequence forms secondary motifs that assemble into higher-order tertiary folds."]
+              ]},
+              investigator:{label:"Investigator",tagline:"Interaction geometry and structural analysis",cards:[
+                ["What is the Leontis–Westhof system used for?","Classifying RNA base pairs by interacting nucleobase edges and glycosidic-bond orientation."],
+                ["What are the three major nucleobase edges in Leontis–Westhof notation?","Watson–Crick, Hoogsteen, and sugar edges."],
+                ["What do cis and trans describe in RNA base-pair classification?","The relative orientation of the two glycosidic bonds."],
+                ["Why can one nucleobase participate in several pairing geometries?","Different nucleobase edges expose different hydrogen-bond donor and acceptor patterns."],
+                ["What is a Hoogsteen-edge interaction?","A base interaction that uses the Hoogsteen edge of a nucleobase."],
+                ["What is an A-minor interaction?","An adenine-mediated tertiary contact with the minor-groove side of an RNA helix."],
+                ["What is a ribose zipper?","A tertiary motif stabilized by a repeating network of ribose-mediated hydrogen bonds."],
+                ["What is a base triple?","Three nucleobases participating in a connected interaction network."],
+                ["What is a stacking interaction?","Favorable contact between neighboring aromatic nucleobase surfaces."],
+                ["Why are metal ions important for RNA folding?","They can screen electrostatic repulsion between phosphates and stabilize compact structures."],
+                ["What role does Mg²⁺ often play in RNA?","It can stabilize RNA folding through electrostatic screening and, in some sites, specific coordination."],
+                ["What is a tertiary contact?","An interaction between residues that can be distant in the secondary-structure diagram."],
+                ["What is a pseudoknot structurally?","A fold containing crossing base-pair connections in the conventional 2D representation."],
+                ["What does an arc diagram show?","Sequence positions connected by arcs representing base pairs."],
+                ["What does an RNA contact map show?","Pairwise residue contacts represented in matrix form."],
+                ["Why compare 2D and 3D RNA views together?","Secondary connectivity and spatial organization provide complementary structural information."],
+                ["What is RMSD used for in structure comparison?","Quantifying geometric differences after a defined structural correspondence and superposition."],
+                ["What does a lower RMSD usually indicate?","Greater geometric similarity for the atoms or residues being compared."],
+                ["Why does residue correspondence matter for RMSD?","Incorrect matching can make similar structures appear dissimilar or distort the fitted superposition."],
+                ["What is structural clustering?","Grouping structures according to a chosen measure of structural similarity or distance."]
+              ]},
+              expert:{label:"RNA Expert",tagline:"Advanced structural reasoning and ensembles",cards:[
+                ["What is an isosteric base-pair substitution?","A sequence substitution that preserves a similar base-pair geometry."],
+                ["Why are isosteric substitutions important in RNA?","They can preserve local structure even when sequence changes."],
+                ["What is conformational heterogeneity?","The presence of multiple structural states in an RNA population."],
+                ["What is an RNA free-energy landscape?","A representation of accessible conformational states and their relative free energies."],
+                ["Why can the lowest-energy predicted structure be insufficient?","Functional RNA can populate multiple relevant conformations rather than one state."],
+                ["What is ensemble diversity?","A measure of structural variation across an ensemble of predicted conformations."],
+                ["What is covariation in RNA alignments?","Coordinated sequence changes that can preserve a structural interaction."],
+                ["Why is covariation evidence useful?","It can support evolutionarily conserved base pairing or structural constraints."],
+                ["What is solvent accessibility?","The degree to which an atom or residue is exposed to solvent."],
+                ["Why does local nucleotide flexibility matter?","It can influence chemical probing, folding dynamics, recognition, and function."],
+                ["What is a long-range RNA interaction?","A spatial contact between residues that are distant in sequence."],
+                ["What is an RNA tertiary interaction network?","A connected set of 3D contacts that helps stabilize or organize an RNA fold."],
+                ["What is structural superposition?","Placing two structures in a common coordinate frame to compare their geometry."],
+                ["Why can alignment choice change RMSD?","Different correspondences or fitted regions change the transformation and the residues included in the calculation."],
+                ["What is a medoid in structural clustering?","The observed cluster member with the smallest overall distance to other members under the chosen distance measure."],
+                ["Why use a medoid instead of an average structure?","A medoid is an actual observed structure and therefore retains physically realized geometry."],
+                ["What does a silhouette score evaluate?","How well each item matches its assigned cluster relative to neighboring clusters."],
+                ["What does a higher silhouette score generally indicate?","More cohesive clusters with better separation from neighboring clusters."],
+                ["Why combine structural geometry with chemical probing data?","Together they connect structural models with experimentally observed solution behavior."],
+                ["Why study rare noncanonical RNA interactions?","They can reveal recurring motifs, alternative states, and structural principles that canonical pairs alone do not capture."]
+              ]}
+            };
+
+            const facts=[
+              "RNA can fold into precise three-dimensional shapes, not just carry genetic information.",
+              "The ribose sugar in A-form RNA helices commonly favors a C3′-endo sugar pucker.",
+              "G–U wobble pairs are non-Watson–Crick interactions that occur frequently in structured RNA.",
+              "Base stacking can contribute strongly to RNA helix stability in addition to hydrogen bonding.",
+              "RNA nucleotides are linked through 3′–5′ phosphodiester bonds in the backbone.",
+              "A single RNA sequence can populate an ensemble of related conformations rather than one rigid structure.",
+              "Magnesium ions often help RNA fold by reducing electrostatic repulsion between negatively charged phosphates.",
+              "RNA base pairs can use Watson–Crick, Hoogsteen, or sugar edges, creating many noncanonical geometries.",
+              "Chemical probing methods such as DMS and SHAPE can report which nucleotides are accessible or conformationally constrained.",
+              "Pseudoknots contain pairing connections that cross when drawn in a conventional secondary-structure diagram.",
+              "Tertiary contacts can bring residues that are far apart in sequence next to each other in three-dimensional space.",
+              "Yeast tRNA-Phe, PDB 1EHZ, is the experimental example used throughout RNA Explorer."
+            ];
+
+            const levelKeys=["starter","explorer","investigator","expert"];
+            let tutorialKey="drawing",tutorialStep=0,levelKey="starter",cardIndex=0,flipped=false;
+            const scores=Object.fromEntries(levelKeys.map(key=>[key,{known:0,review:0}]));
+            let factIndex=0,factTimer=null;
+            const $=id=>document.getElementById(id);
+
+            function renderTutorial(){
+              const t=tutorials[tutorialKey];if(!t)return;const step=t.steps[tutorialStep];
+              $("rnaTutorialTitle").textContent=t.title;$("rnaTutorialIntro").textContent=t.intro;
+              $("rnaTutorialStep").innerHTML="<span>Step "+(tutorialStep+1)+"</span><h3></h3><p></p>";$("rnaTutorialStep").querySelector("h3").textContent=step[0];$("rnaTutorialStep").querySelector("p").textContent=step[1];
+              $("rnaTutorialProgress").textContent=(tutorialStep+1)+" / "+t.steps.length;$("rnaTutorialPrevious").disabled=tutorialStep===0;$("rnaTutorialNext").hidden=tutorialStep===t.steps.length-1;$("rnaTutorialOpen").hidden=tutorialStep!==t.steps.length-1;$("rnaTutorialOpen").href=t.href;
+            }
+            function openTutorial(key){if(!tutorials[key])return;tutorialKey=key;tutorialStep=0;renderTutorial();$("rnaTutorialDialog")?.showModal();}
+
+            function ensureLevelPicker(){
+              const shell=document.querySelector(".flashcard-shell");if(!shell||$("flashcardLevels"))return;
+              const wrap=document.createElement("div");wrap.className="flashcard-level-wrap";
+              const heading=document.createElement("div");heading.className="flashcard-level-heading";heading.innerHTML='<strong>Choose your level</strong><span id="flashcardLevelTagline"></span>';
+              const nav=document.createElement("div");nav.className="flashcard-levels";nav.id="flashcardLevels";nav.setAttribute("role","tablist");nav.setAttribute("aria-label","Flashcard difficulty levels");
+              levelKeys.forEach(key=>{const b=document.createElement("button");b.type="button";b.dataset.flashcardLevel=key;b.textContent=decks[key].label;b.setAttribute("role","tab");b.addEventListener("click",()=>setLevel(key));nav.append(b);});
+              wrap.append(heading,nav);shell.prepend(wrap);
+            }
+            function setLevel(key){if(!decks[key])return;levelKey=key;cardIndex=0;flipped=false;renderCard();}
+            function renderCard(){
+              const deck=decks[levelKey],card=deck.cards[cardIndex];if(!card||!$("rnaFlashcard"))return;
+              $("rnaFlashcard").setAttribute("aria-pressed",String(flipped));$("flashcardSideLabel").textContent=flipped?"Answer":"Question";$("flashcardText").textContent=flipped?card[1]:card[0];
+              $("flashcardProgress").textContent=deck.label+" · "+(cardIndex+1)+" / "+deck.cards.length;
+              const score=scores[levelKey];$("flashcardScore").textContent="Known "+score.known+" · Review "+score.review;
+              if($("flashcardLevelTagline"))$("flashcardLevelTagline").textContent=deck.tagline;
+              document.querySelectorAll("[data-flashcard-level]").forEach(button=>{const active=button.dataset.flashcardLevel===levelKey;button.classList.toggle("active",active);button.setAttribute("aria-selected",String(active));});
+            }
+            function moveCard(delta){const cards=decks[levelKey].cards;cardIndex=(cardIndex+delta+cards.length)%cards.length;flipped=false;renderCard();}
+
+            function renderFact(){if($("rnaFactText"))$("rnaFactText").textContent=facts[factIndex];}
+            function nextFact(){factIndex=(factIndex+1)%facts.length;renderFact();}
+            function startFacts(){
+              if(factTimer||window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)return;
+              factTimer=setInterval(nextFact,9000);
+            }
+            function stopFacts(){if(factTimer){clearInterval(factTimer);factTimer=null;}}
+
+            function setup(){
+              document.addEventListener("click",event=>{const trigger=event.target.closest?.("[data-rna-tutorial]");if(trigger){event.preventDefault();openTutorial(trigger.dataset.rnaTutorial);}});
+              $("rnaTutorialClose")?.addEventListener("click",()=>$("rnaTutorialDialog").close());
+              $("rnaTutorialPrevious")?.addEventListener("click",()=>{tutorialStep=Math.max(0,tutorialStep-1);renderTutorial();});
+              $("rnaTutorialNext")?.addEventListener("click",()=>{tutorialStep=Math.min(tutorials[tutorialKey].steps.length-1,tutorialStep+1);renderTutorial();});
+              ensureLevelPicker();
+              $("rnaFlashcard")?.addEventListener("click",()=>{flipped=!flipped;renderCard();});$("flashcardFlip")?.addEventListener("click",()=>{flipped=!flipped;renderCard();});
+              $("flashcardPrevious")?.addEventListener("click",()=>moveCard(-1));$("flashcardNext")?.addEventListener("click",()=>moveCard(1));
+              $("flashcardKnow")?.addEventListener("click",()=>{scores[levelKey].known++;moveCard(1);});$("flashcardReview")?.addEventListener("click",()=>{scores[levelKey].review++;moveCard(1);});
+              $("rnaFactNext")?.addEventListener("click",()=>{nextFact();stopFacts();startFacts();});
+              const strip=$("rnaFactStrip");strip?.addEventListener("mouseenter",stopFacts);strip?.addEventListener("mouseleave",startFacts);strip?.addEventListener("focusin",stopFacts);strip?.addEventListener("focusout",startFacts);
+              renderCard();renderFact();startFacts();
+            }
+            return {setup,openTutorial,setLevel,getDeckCounts(){return Object.fromEntries(levelKeys.map(k=>[k,decks[k].cards.length]));}};
+          })();
+          RNAExplorerLearningTools.setup();
+          EOF
+
+      - name: Add secondary selection interaction module
+        run: |
+          cat > secondary-selection-tools.js <<'EOF'
+          const SecondarySelectionTools=(()=>{
+            let mode="",gesture=null,overlay=null;
+            const $=id=>document.getElementById(id);
+            const svgNS="http://www.w3.org/2000/svg";
+            function point(event){
+              const root=$("secondarySvg"),ctm=root?.getScreenCTM?.();
+              if(ctm&&typeof DOMPoint!=="undefined"){
+                try{const p=new DOMPoint(event.clientX,event.clientY).matrixTransform(ctm.inverse());if(Number.isFinite(p.x)&&Number.isFinite(p.y))return {x:p.x,y:p.y};}catch(_){ }
+              }
+              const rect=root.getBoundingClientRect(),v=root.getAttribute("viewBox").split(/\s+/).map(Number);
+              return {x:v[0]+(event.clientX-rect.left)/rect.width*v[2],y:v[1]+(event.clientY-rect.top)/rect.height*v[3]};
+            }
+            function pointInPolygon(p,poly){
+              let inside=false;
+              for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+                const a=poly[i],b=poly[j];
+                const crosses=((a.y>p.y)!==(b.y>p.y))&&(p.x<(b.x-a.x)*(p.y-a.y)/((b.y-a.y)||1e-9)+a.x);
+                if(crosses)inside=!inside;
+              }
+              return inside;
+            }
+            function setMode(next){
+              mode=mode===next?"":next;
+              [["seBoxSelectTool","box"],["seLassoSelectTool","lasso"]].forEach(([id,key])=>{const b=$(id);if(!b)return;const active=mode===key;b.classList.toggle("active",active);b.setAttribute("aria-pressed",String(active));});
+              const root=$("secondarySvg");if(root)root.classList.toggle("se-selecting",Boolean(mode));
+              if($("seSelectionStatus"))$("seSelectionStatus").textContent=mode==="box"?"Drag a rectangle around the residues to select.":mode==="lasso"?"Draw a freeform loop around the residues to select.":selectionMessage();
+            }
+            function selectionMessage(){
+              const n=SecondaryExplorer?.getContext?.().selectedResidues?.length||0;
+              return n?`${n} residue${n===1?"":"s"} selected. Use Selected rotate or Selected zoom to transform only that region.`:"No region selected.";
+            }
+            function syncSelectionState(){
+              const n=SecondaryExplorer?.getContext?.().selectedResidues?.length||0;
+              ["seSelectedRotation","seSelectedScale","seResetSelectedTransform"].forEach(id=>{const el=$(id);if(el)el.disabled=n===0;});
+              if(!mode&&$("seSelectionStatus"))$("seSelectionStatus").textContent=selectionMessage();
+            }
+            function removeOverlay(){overlay?.remove();overlay=null;}
+            function drawOverlay(){
+              const root=$("secondarySvg");if(!root||!gesture)return;removeOverlay();
+              if(mode==="box"){
+                const a=gesture.start,b=gesture.points.at(-1)||a,x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),w=Math.abs(a.x-b.x),h=Math.abs(a.y-b.y);
+                overlay=document.createElementNS(svgNS,"rect");overlay.setAttribute("x",x);overlay.setAttribute("y",y);overlay.setAttribute("width",w);overlay.setAttribute("height",h);
+              }else{
+                overlay=document.createElementNS(svgNS,"path");const pts=gesture.points;overlay.setAttribute("d",pts.map((p,i)=>(i?"L":"M")+p.x+" "+p.y).join(" ")+(pts.length>2?" Z":""));overlay.setAttribute("fill","rgba(116,215,182,.10)");
+              }
+              overlay.classList.add("se-selection-overlay");overlay.setAttribute("data-export-remove","");overlay.setAttribute("pointer-events","none");root.append(overlay);
+            }
+            function selectedIndicesFromGesture(){
+              const positions=SecondaryExplorer.getCurrentPositions(),current=SecondaryExplorer.getContext().selectedResidues||[];
+              let hit=[];
+              if(mode==="box"){
+                const a=gesture.start,b=gesture.points.at(-1)||a,minX=Math.min(a.x,b.x),maxX=Math.max(a.x,b.x),minY=Math.min(a.y,b.y),maxY=Math.max(a.y,b.y);
+                hit=positions.map((p,i)=>p.x>=minX&&p.x<=maxX&&p.y>=minY&&p.y<=maxY?i:-1).filter(i=>i>=0);
+              }else if(gesture.points.length>=3){
+                hit=positions.map((p,i)=>pointInPolygon(p,gesture.points)?i:-1).filter(i=>i>=0);
+              }
+              return gesture.additive?[...new Set([...current,...hit])]:hit;
+            }
+            function resetSelectedTransform(){
+              if($("seSelectedRotation"))$("seSelectedRotation").value="0";
+              if($("seSelectedScale"))$("seSelectedScale").value="1";
+              if($("seSelectedRotationValue"))$("seSelectedRotationValue").textContent="0°";
+              if($("seSelectedScaleValue"))$("seSelectedScaleValue").textContent="100%";
+              SecondaryExplorer.setSelectionTransform({rotation:0,scale:1});
+            }
+            function begin(event){
+              if(!mode||event.button!==0)return;
+              const root=$("secondarySvg");if(!root)return;
+              event.preventDefault();event.stopImmediatePropagation();
+              const p=point(event);gesture={pointer:event.pointerId,start:p,points:[p],additive:event.shiftKey};root.setPointerCapture?.(event.pointerId);drawOverlay();
+            }
+            function move(event){
+              if(!gesture||event.pointerId!==gesture.pointer)return;
+              event.preventDefault();event.stopImmediatePropagation();const p=point(event);
+              if(mode==="box")gesture.points=[gesture.start,p];else if(Math.hypot(p.x-gesture.points.at(-1).x,p.y-gesture.points.at(-1).y)>2)gesture.points.push(p);
+              drawOverlay();
+            }
+            function finish(event){
+              if(!gesture||event.pointerId!==gesture.pointer)return;
+              event.preventDefault();event.stopImmediatePropagation();const root=$("secondarySvg");
+              if(mode==="lasso")gesture.points.push(point(event));else gesture.points=[gesture.start,point(event)];
+              const indices=selectedIndicesFromGesture();if(root.hasPointerCapture?.(event.pointerId))root.releasePointerCapture(event.pointerId);
+              gesture=null;removeOverlay();SecondaryExplorer.highlightResidues(indices);resetSelectedTransform();syncSelectionState();
+              if($("seSelectionStatus"))$("seSelectionStatus").textContent=indices.length?`${indices.length} residue${indices.length===1?"":"s"} selected.`:"Nothing was inside the selection.";
+            }
+            function cancel(){gesture=null;removeOverlay();}
+            function buildToolbar(){
+              const stage=document.querySelector("#scene-secondary .secondary-stage"),existing=stage?.querySelector(".se-toolbar");if(!stage||!existing||$("seTransformToolbar"))return;
+              const bar=document.createElement("div");bar.id="seTransformToolbar";bar.className="se-transform-toolbar";
+              bar.innerHTML=`<div class="se-transform-group" role="group" aria-label="Secondary structure selection tools">
+                <strong>Select region</strong>
+                <button id="seBoxSelectTool" type="button" aria-pressed="false">Box select</button>
+                <button id="seLassoSelectTool" type="button" aria-pressed="false">Lasso</button>
+                <button id="seClearRegionSelection" type="button">Clear</button>
+              </div>
+              <label class="se-transform-range">Rotate structure <input id="seWholeRotation" type="range" min="-180" max="180" step="1" value="0"><output id="seWholeRotationValue">0°</output></label>
+              <label class="se-transform-range">Selected rotate <input id="seSelectedRotation" type="range" min="-180" max="180" step="1" value="0" disabled><output id="seSelectedRotationValue">0°</output></label>
+              <label class="se-transform-range">Selected zoom <input id="seSelectedScale" type="range" min="0.5" max="2" step="0.05" value="1" disabled><output id="seSelectedScaleValue">100%</output></label>
+              <button id="seResetSelectedTransform" type="button" disabled>Reset selected</button>
+              <p id="seSelectionStatus" role="status">No region selected.</p>`;
+              existing.before(bar);
+              $("seBoxSelectTool").addEventListener("click",()=>setMode("box"));$("seLassoSelectTool").addEventListener("click",()=>setMode("lasso"));
+              $("seClearRegionSelection").addEventListener("click",()=>{SecondaryExplorer.clearHighlights();resetSelectedTransform();syncSelectionState();});
+              $("seWholeRotation").addEventListener("input",e=>{const value=Number(e.target.value);$("seWholeRotationValue").textContent=value+"°";SecondaryExplorer.setWholeRotation(value);});
+              $("seSelectedRotation").addEventListener("input",e=>{const value=Number(e.target.value),scale=Number($("seSelectedScale").value);$("seSelectedRotationValue").textContent=value+"°";SecondaryExplorer.setSelectionTransform({rotation:value,scale});});
+              $("seSelectedScale").addEventListener("input",e=>{const scale=Number(e.target.value),rotation=Number($("seSelectedRotation").value);$("seSelectedScaleValue").textContent=Math.round(scale*100)+"%";SecondaryExplorer.setSelectionTransform({rotation,scale});});
+              $("seResetSelectedTransform").addEventListener("click",resetSelectedTransform);
+              const root=$("secondarySvg");root.addEventListener("pointerdown",begin,true);root.addEventListener("pointermove",move,true);root.addEventListener("pointerup",finish,true);root.addEventListener("pointercancel",cancel,true);
+              document.addEventListener("keydown",event=>{if(event.key==="Escape"){cancel();setMode("");}});
+              window.addEventListener("rna-secondary-layout",syncSelectionState);window.addEventListener("rna-secondary-select",syncSelectionState);
+              syncSelectionState();
+            }
+            function setup(){if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",buildToolbar,{once:true});else buildToolbar();}
+            return {setup,setMode,syncSelectionState};
+          })();
+          SecondarySelectionTools.setup();
+          EOF
+
+      - name: Add responsive styling for facts, levels, and secondary selection
+        run: |
+          cat >> learning-tools.css <<'EOF'
+
+          /* Learning v2: rotating fact strip + four flashcard levels */
+          body:not([data-page-mode="home"]) .home-fact-strip{display:none!important}
+          .home-fact-strip{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:18px;align-items:center;margin:-34px 0 38px;padding:16px 20px;border:1px solid rgba(116,215,182,.34);border-radius:14px;background:linear-gradient(90deg,rgba(116,215,182,.11),rgba(232,187,105,.07));box-shadow:0 12px 30px rgba(0,0,0,.13)}
+          .home-fact-label{font:800 .82rem "DM Mono",monospace;color:var(--mint);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}.home-fact-strip p{margin:0;color:var(--cream);font-size:1rem;line-height:1.55}.home-fact-strip button{border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.035);color:var(--text);padding:8px 11px;cursor:pointer;white-space:nowrap}.home-fact-strip button:hover{border-color:var(--mint);color:var(--mint)}
+          .flashcard-level-wrap{display:grid;gap:10px;margin:0 0 18px}.flashcard-level-heading{display:flex;justify-content:space-between;gap:16px;align-items:baseline}.flashcard-level-heading strong{font-size:1rem}.flashcard-level-heading span{color:var(--muted);font-size:.85rem;text-align:right}.flashcard-levels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.flashcard-levels button{border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.025);color:var(--text);padding:11px 8px;cursor:pointer;font-weight:750}.flashcard-levels button.active,.flashcard-levels button:hover{border-color:var(--mint);background:rgba(116,215,182,.1);color:var(--mint)}
+          @media(max-width:700px){.home-fact-strip{grid-template-columns:1fr;gap:8px;margin-top:-24px}.home-fact-strip button{justify-self:start}.flashcard-levels{grid-template-columns:repeat(2,minmax(0,1fr))}.flashcard-level-heading{display:grid;gap:4px}.flashcard-level-heading span{text-align:left}.rna-flashcard{min-height:230px;padding:24px 18px}.rna-flashcard strong{font-size:clamp(1.2rem,6vw,1.65rem)}}
+          EOF
+
+          cat >> secondary.css <<'EOF'
+
+          /* Secondary selection + regional transform controls */
+          .se-transform-toolbar{display:flex;flex-wrap:wrap;gap:9px;align-items:center;padding:11px;border:1px solid rgba(116,215,182,.24);border-radius:10px;background:rgba(116,215,182,.035)}
+          .se-transform-toolbar button{border:1px solid var(--line);background:var(--ink-soft);color:var(--text);border-radius:7px;padding:8px 10px;cursor:pointer}.se-transform-toolbar button.active,.se-transform-toolbar button[aria-pressed="true"]{border-color:var(--mint);background:rgba(116,215,182,.12);color:var(--mint)}.se-transform-toolbar button:disabled{opacity:.42;cursor:default}
+          .se-transform-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.se-transform-group strong{font-size:.78rem;color:var(--cream);margin-right:2px}.se-transform-range{display:flex;align-items:center;gap:7px;font-size:.78rem;color:var(--muted);white-space:nowrap}.se-transform-range input[type="range"]{width:118px}.se-transform-range output{min-width:42px;color:var(--cream);font:12px "DM Mono",monospace;text-align:right}.se-transform-toolbar #seSelectionStatus{flex:1 1 100%;margin:0;color:var(--muted);font-size:.78rem;line-height:1.45}
+          #secondarySvg.se-selecting{cursor:crosshair;touch-action:none}.se-selection-overlay{stroke:#74d7b6;stroke-width:2;stroke-dasharray:7 5;fill:rgba(116,215,182,.10);vector-effect:non-scaling-stroke;filter:drop-shadow(0 0 3px rgba(116,215,182,.35))}
+          @media(max-width:720px){.se-transform-toolbar{align-items:stretch}.se-transform-group{flex:1 1 100%}.se-transform-range{display:grid;grid-template-columns:1fr auto;flex:1 1 100%}.se-transform-range input[type="range"]{grid-column:1/2;width:100%}.se-transform-range output{grid-column:2/3;grid-row:1/3;align-self:center}}
+          EOF
+
+      - name: Add browser regression test
+        run: |
+          cat > tests/secondary-selection-learning-v2-browser.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1280,height:900}});
+          const errors=[];page.on('pageerror',e=>errors.push(String(e)));
+          try{
+            await page.goto('http://127.0.0.1:4173/',{waitUntil:'networkidle'});
+            if(await page.locator('#rnaFactStrip').count()!==1)throw new Error('Did-you-know fact strip is missing');
+            if(await page.locator('[data-flashcard-level]').count()!==4)throw new Error('Expected four flashcard levels');
+            const counts=await page.evaluate(()=>RNAExplorerLearningTools.getDeckCounts());
+            for(const [key,count] of Object.entries(counts))if(count!==20)throw new Error(`${key} has ${count} cards instead of 20`);
+            for(const key of ['starter','explorer','investigator','expert']){
+              await page.click(`[data-flashcard-level="${key}"]`);
+              const progress=(await page.locator('#flashcardProgress').textContent())||'';
+              if(!progress.includes('1 / 20'))throw new Error(`Bad ${key} progress: ${progress}`);
+            }
+            await page.setViewportSize({width:390,height:844});await page.waitForTimeout(100);
+            const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
+            if(overflow>2)throw new Error(`Mobile homepage overflows horizontally by ${overflow}px`);
+
+            await page.setViewportSize({width:1280,height:900});
+            await page.goto('http://127.0.0.1:4173/?page=secondary&start=example',{waitUntil:'networkidle'});
+            await page.waitForSelector('#seTransformToolbar');
+            await page.locator('#seWholeRotation').evaluate(el=>{el.value='45';el.dispatchEvent(new Event('input',{bubbles:true}));});
+            const rotation=await page.evaluate(()=>SecondaryExplorer.getTransformState().wholeRotation);
+            if(rotation!==45)throw new Error(`Whole rotation did not update: ${rotation}`);
+
+            // Exercise the lasso through real pointer interaction around one visible nucleotide.
+            await page.click('#seLassoSelectTool');
+            const node=page.locator('#secondarySvg .se-node').nth(0),box=await node.boundingBox();
+            if(!box)throw new Error('Could not locate a secondary-structure nucleotide');
+            const cx=box.x+box.width/2,cy=box.y+box.height/2,r=Math.max(18,Math.max(box.width,box.height)*.8);
+            const pts=[[cx-r,cy-r],[cx+r,cy-r],[cx+r,cy+r],[cx-r,cy+r],[cx-r,cy-r]];
+            await page.mouse.move(...pts[0]);await page.mouse.down();for(const [x,y] of pts.slice(1))await page.mouse.move(x,y,{steps:4});await page.mouse.up();await page.waitForTimeout(150);
+            const lassoSelected=await page.evaluate(()=>SecondaryExplorer.getContext().selectedResidues.length);
+            if(lassoSelected<1)throw new Error('Lasso selected no residues');
+
+            // Regional transform must move selected residues without moving an unselected residue.
+            await page.evaluate(()=>{SecondaryExplorer.highlightResidues([0,1,2]);SecondaryExplorer.setWholeRotation(0);SecondaryExplorer.setSelectionTransform({rotation:0,scale:1});});
+            const before=await page.evaluate(()=>SecondaryExplorer.getCurrentPositions());
+            await page.locator('#seSelectedRotation').evaluate(el=>{el.value='30';el.dispatchEvent(new Event('input',{bubbles:true}));});
+            await page.locator('#seSelectedScale').evaluate(el=>{el.value='1.35';el.dispatchEvent(new Event('input',{bubbles:true}));});
+            const after=await page.evaluate(()=>SecondaryExplorer.getCurrentPositions());
+            const moved=Math.hypot(after[0].x-before[0].x,after[0].y-before[0].y);
+            const untouched=Math.hypot(after[10].x-before[10].x,after[10].y-before[10].y);
+            if(moved<1)throw new Error('Selected regional transform did not move selected residues');
+            if(untouched>1e-6)throw new Error(`Unselected residue moved during regional transform: ${untouched}`);
+
+            // Box selection is a separate working selection mode.
+            await page.click('#seBoxSelectTool');
+            const boxNode=page.locator('#secondarySvg .se-node').nth(5),b=await boxNode.boundingBox();if(!b)throw new Error('Could not locate node for box selection');
+            await page.mouse.move(b.x-4,b.y-4);await page.mouse.down();await page.mouse.move(b.x+b.width+4,b.y+b.height+4,{steps:6});await page.mouse.up();await page.waitForTimeout(120);
+            const boxSelected=await page.evaluate(()=>SecondaryExplorer.getContext().selectedResidues.length);
+            if(boxSelected<1)throw new Error('Box select selected no residues');
+
+            const serious=errors.filter(x=>!/favicon|ResizeObserver loop/i.test(x));if(serious.length)throw new Error('Browser errors:\n'+serious.join('\n'));
+            console.log(JSON.stringify({result:'PASS',flashcardCounts:counts,lassoSelected,boxSelected,rotation}));
+          } finally {await browser.close();}
+          EOF
+
+      - name: Validate syntax and browser behavior
+        run: |
+          node --check secondary.js
+          node --check learning-tools.js
+          node --check secondary-selection-tools.js
+          node --check tests/secondary-selection-learning-v2-browser.mjs
+          npm install --no-save playwright linkedom
+          npx playwright install --with-deps chromium
+          rm -rf dist && mkdir dist
+          cp index.html *.js *.css dist/
+          cp -r data assets dist/
+          python3 -m http.server 4173 --directory dist > /tmp/rna-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID' EXIT
+          node tests/secondary-selection-learning-v2-browser.mjs
+          node tests/homepage-browser.mjs
+          node tests/secondary-browser.mjs
+
+      - name: Commit verified update
+        run: |
+          rm -f .github/workflows/add-secondary-selection-and-learning-v2.yml
+          rm -rf node_modules dist
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add secondary.js secondary-selection-tools.js secondary.css learning-tools.js learning-tools.css index.html tests/secondary-selection-learning-v2-browser.mjs .github/workflows/static-checks.yml .github/workflows/add-secondary-selection-and-learning-v2.yml
+          git commit -m 'Add secondary selection transforms and leveled RNA learning'
+          git push
