@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="guided-transitions.css?v=guided-6" />
   <link rel="stylesheet" href="chemistry-editor.css?v=chem-editor-7" />
   <link rel="stylesheet" href="learning-tools.css?v=learning-tools-1" />
+  <link rel="stylesheet" href="secondary-selection-tools.css?v=1">
   <link rel="stylesheet" href="readability.css?v=readability-1" />
 </head>
 <body>
@@ -124,6 +125,11 @@
         </figure>
       </section>
 
+      <section class="home-fact-strip" id="rnaFactStrip" aria-labelledby="rnaFactLabel">
+        <span class="home-fact-label" id="rnaFactLabel">Did you know?</span>
+        <p id="rnaFactText">RNA can fold into precise three-dimensional shapes, not just carry genetic information.</p>
+        <button type="button" id="rnaFactNext" aria-label="Show another RNA fact">Another fact ↻</button>
+      </section>
 
       <section class="home-discovery" id="tutorials" aria-labelledby="homeDiscoveryTitle">
         <div class="home-section-heading">
@@ -143,10 +149,10 @@
         <div class="home-section-heading">
 <p class="eyebrow">Learn · Practice</p>
 <h2 id="rnaPracticeTitle">RNA structure flashcards</h2>
-<p>Flip a card, mark whether you knew it, and move through the deck. This first deck is intentionally short; more topic-specific decks can be added later.</p>
+<p>Flip a card, mark whether you knew it, and move through the deck. Choose a level, flip each card, and mark whether you knew it. Each level has 20 cards and becomes progressively more challenging.</p>
         </div>
         <div class="flashcard-shell" aria-live="polite">
-<div class="flashcard-progress"><span id="flashcardProgress">1 / 10</span><span id="flashcardScore">Known 0 · Review 0</span></div>
+<div class="flashcard-progress"><span id="flashcardProgress">Starter · 1 / 20</span><span id="flashcardScore">Known 0 · Review 0</span></div>
 <button class="rna-flashcard" id="rnaFlashcard" type="button" aria-pressed="false" aria-label="Flip flashcard">
   <span class="flashcard-side-label" id="flashcardSideLabel">Question</span>
   <strong id="flashcardText">What are the four standard RNA bases?</strong>
@@ -432,11 +438,12 @@
   <script src="journey.js?v=guided-2"></script>
   <script src="primary-animation.js?v=primary-5"></script>
   <script src="guided-transitions.js?v=guided-8"></script>
-  <script src="secondary.js?v=secondary-22"></script>
+  <script src="secondary.js?v=secondary-23"></script>
   <script src="tertiary.js?v=tertiary-16"></script>
   <script src="project-session.js?v=project-1"></script>
-  <script src="learning-tools.js?v=learning-tools-1"></script>
+  <script src="learning-tools.js?v=learning-tools-2"></script>
   <script src="app.js?v=modern-ui-2"></script>
+  <script src="secondary-selection-tools.js?v=1"></script>
   <script src="ui-fixes.js?v=ui-fixes-4"></script>
 </body>
 </html>

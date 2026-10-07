@@ -18,6 +18,7 @@ const SecondaryExplorer = (() => {
   let pairProbabilities={}, pairProbEnabled=false, pairProbTheme="viridis", pairProbTicket=0, pairChemistry={};
   let arcPairStyle="arc", exportScale=2;
   let manualOffsets={}, pinnedResidues=new Set(), dragMode="residue", flexDrag=true, nodeDrag=null, suppressNodeClick=false;
+  let wholeRotation=0,selectionRotation=0,selectionScale=1;
   let layoutHistory=[],layoutFuture=[],restoringWorkspace=false;
   const WORKSPACE_KEY="rna-explorer-secondary-workspace-v1";
   const legendSettings={
@@ -184,7 +185,7 @@ const SecondaryExplorer = (() => {
   }
   function workspaceSnapshot(){
     return {
-      version:2,sequence:seq,structure:db,layout,arcPairStyle,manualOffsets,zoom,panX,panY,
+      version:3,sequence:seq,structure:db,layout,arcPairStyle,manualOffsets,zoom,panX,panY,wholeRotation,selectionRotation,selectionScale,
       settings:{...settings},indexSettings:{...indexSettings},overrides,annotations,pairChemistry,
       metadata,heatEnabled,heatTheme,heatRange,pairProbabilities,pairProbEnabled,pairProbTheme,
       legendSettings,residueOverrides,backboneOverrides,indexMode,indexSelection:[...indexSelection],indexOverrides,pinnedResidues:[...pinnedResidues],
@@ -220,6 +221,7 @@ const SecondaryExplorer = (() => {
       annotations=w.annotations&&typeof w.annotations==="object"?w.annotations:{};
       pairChemistry=w.pairChemistry&&typeof w.pairChemistry==="object"?w.pairChemistry:{};
       manualOffsets=w.manualOffsets||{};zoom=Number(w.zoom)||1;panX=Number(w.panX)||0;panY=Number(w.panY)||0;
+      wholeRotation=Number(w.wholeRotation)||0;selectionRotation=Number(w.selectionRotation)||0;selectionScale=Math.max(.35,Math.min(3,Number(w.selectionScale)||1));
       metadata=w.metadata||{};heatEnabled=!!w.heatEnabled;heatTheme=w.heatTheme||"viridis";heatRange=Array.isArray(w.heatRange)?w.heatRange:[0,1];
       pairProbabilities=w.pairProbabilities||{};pairProbEnabled=!!w.pairProbEnabled;pairProbTheme=w.pairProbTheme||"viridis";
       residueOverrides=w.residueOverrides||{};backboneOverrides=w.backboneOverrides||{};indexMode=w.indexMode||"default";indexSelection=new Set(w.indexSelection||[]);indexOverrides=w.indexOverrides||{};pinnedResidues=new Set(w.pinnedResidues||[]);
@@ -361,7 +363,22 @@ const SecondaryExplorer = (() => {
         return {x:r*Math.cos(angle),y:r*Math.sin(angle)};
       }));
     }
-    return out.map((p,i)=>({x:p.x+(manualOffsets[i]?.x||0),y:p.y+(manualOffsets[i]?.y||0)}));
+    let transformed=out.map((p,i)=>({x:p.x+(manualOffsets[i]?.x||0),y:p.y+(manualOffsets[i]?.y||0)}));
+    const transformPoint=(p,c,degrees,scale=1)=>{
+      const angle=degrees*Math.PI/180,cos=Math.cos(angle),sin=Math.sin(angle),x=(p.x-c.x)*scale,y=(p.y-c.y)*scale;
+      return {x:c.x+x*cos-y*sin,y:c.y+x*sin+y*cos};
+    };
+    if(transformed.length&&Math.abs(wholeRotation)>1e-8){
+      const c={x:transformed.reduce((sum,p)=>sum+p.x,0)/transformed.length,y:transformed.reduce((sum,p)=>sum+p.y,0)/transformed.length};
+      transformed=transformed.map(p=>transformPoint(p,c,wholeRotation,1));
+    }
+    const chosen=[...selectedResidues].filter(i=>i>=0&&i<transformed.length);
+    if(chosen.length&&(Math.abs(selectionRotation)>1e-8||Math.abs(selectionScale-1)>1e-8)){
+      const c={x:chosen.reduce((sum,i)=>sum+transformed[i].x,0)/chosen.length,y:chosen.reduce((sum,i)=>sum+transformed[i].y,0)/chosen.length};
+      const selectedSet=new Set(chosen);
+      transformed=transformed.map((p,i)=>selectedSet.has(i)?transformPoint(p,c,selectionRotation,selectionScale):p);
+    }
+    return transformed;
   }
   function dragGroupFor(index){
     if(dragMode==="whole")return Array.from({length:seq.length},(_,i)=>i);
@@ -614,7 +631,7 @@ const SecondaryExplorer = (() => {
     const parsed=parse(sequence,structure);
     const changed=sequence!==seq||structure!==db;
     seq=sequence;db=structure;pairs=parsed.pairs;partner=parsed.partner;selected=0;
-    if(changed){selectedResidues=new Set();selectedPairKeys=new Set();selectedPairKey=null;overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;pairProbabilities={};pairProbEnabled=false;pairProbTicket++;pairChemistry={};manualOffsets={};pinnedResidues=new Set();zoom=1;panX=panY=0;
+    if(changed){selectedResidues=new Set();selectedPairKeys=new Set();selectedPairKey=null;overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;pairProbabilities={};pairProbEnabled=false;pairProbTicket++;pairChemistry={};manualOffsets={};pinnedResidues=new Set();zoom=1;panX=panY=0;wholeRotation=0;selectionRotation=0;selectionScale=1;
       indexMode="default";indexOverrides={};indexSelection=new Set([...sequence].map((_,i)=>i).filter(i=>i===0||(i+1)%5===0||i===sequence.length-1));
       if($("seMetadataFile"))$("seMetadataFile").value="";
       if($("seMetadataStatus"))$("seMetadataStatus").textContent="Upload metadata for the current sequence.";
@@ -1167,7 +1184,7 @@ const SecondaryExplorer = (() => {
     $("restoreTrnaButton").addEventListener("click",()=>{
       $("secondarySequence").value=defaultSeq;$("secondaryDotBracket").value=defaultDb;
       setSourceNote("");selectedResidues=new Set();selectedPairKeys=new Set();
-      overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;pairProbabilities={};pairProbEnabled=false;pairProbTicket++;pairChemistry={};manualOffsets={};pinnedResidues=new Set();zoom=1;$("seMetadataFile").value="";$("seMetadataStatus").textContent="Upload metadata for the current sequence.";if($("sePairProbFile"))$("sePairProbFile").value="";load(defaultSeq,defaultDb);status("Default tRNA restored; pair overrides, probability data, chemistry drawings, and annotations cleared.");
+      overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;pairProbabilities={};pairProbEnabled=false;pairProbTicket++;pairChemistry={};manualOffsets={};pinnedResidues=new Set();zoom=1;wholeRotation=0;selectionRotation=0;selectionScale=1;$("seMetadataFile").value="";$("seMetadataStatus").textContent="Upload metadata for the current sequence.";if($("sePairProbFile"))$("sePairProbFile").value="";load(defaultSeq,defaultDb);status("Default tRNA restored; pair overrides, probability data, chemistry drawings, and annotations cleared.");
     });
     document.querySelectorAll("[data-secondary-layout]").forEach(button=>button.addEventListener("click",()=>{
       layout=button.dataset.secondaryLayout;
@@ -1208,6 +1225,13 @@ const SecondaryExplorer = (() => {
   }
   return {setup,render,parse,parseMetadata,parsePairProbabilities,radial,orientEndsBottom,parseDbnText,parseCtText,serializeDbn,serializeCt,
     getCurrentPositions(){return coordinates().map(p=>({x:p.x,y:p.y}));},
+    setWholeRotation(degrees=0){wholeRotation=Math.max(-180,Math.min(180,Number(degrees)||0));render();return wholeRotation;},
+    setSelectionTransform({rotation=selectionRotation,scale=selectionScale}={}){
+      selectionRotation=Math.max(-180,Math.min(180,Number(rotation)||0));
+      selectionScale=Math.max(.35,Math.min(3,Number(scale)||1));
+      render();return {rotation:selectionRotation,scale:selectionScale};
+    },
+    getTransformState(){return {wholeRotation,selectionRotation,selectionScale};},
     getWorkspaceSnapshot(){return workspaceSnapshot();},
     restoreWorkspaceSnapshot,
     loadDerived(sequence,structure,meta={}){
