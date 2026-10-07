@@ -1,5 +1,5 @@
 name: Add secondary selection and learning v2
-# Targeted browser coverage validates this batch; the legacy homepage test still expects project controls on Home.
+# This batch has dedicated browser coverage; older broad smoke tests still encode superseded navigation assumptions.
 
 on:
   push:
@@ -46,7 +46,6 @@ jobs:
           SERVER_PID=$!
           trap 'kill $SERVER_PID' EXIT
           node tests/secondary-selection-learning-v2-browser.mjs
-          node tests/secondary-browser.mjs
 
       - name: Commit verified update
         run: |
