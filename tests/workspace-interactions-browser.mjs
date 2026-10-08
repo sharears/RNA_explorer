@@ -11,6 +11,13 @@ page.on("console",msg=>{if(msg.type()==="error"&&!/Failed to load resource/i.tes
 const moved=(a,b)=>Math.hypot((b?.x||0)-(a?.x||0),(b?.y||0)-(a?.y||0));
 const offset=(snapshot,index)=>snapshot.manualOffsets?.[index]||{x:0,y:0};
 
+async function nucleotideCenter(node){
+  const circle=node.locator('circle:not(.se-index-hit)').first();
+  const box=await circle.boundingBox();
+  if(!box)throw new Error("Could not measure nucleotide circle for drag interaction.");
+  return {x:box.x+box.width/2,y:box.y+box.height/2};
+}
+
 try{
   await page.goto(base,{waitUntil:"domcontentloaded",timeout:30000});
   await page.waitForSelector('body[data-page-mode="secondary"] #scene-secondary:not([hidden])',{timeout:10000});
@@ -30,11 +37,10 @@ try{
   });
   const wholeBefore=await page.evaluate(()=>SecondaryExplorer.getWorkspaceSnapshot());
   const firstNode=page.locator("#secondarySvg .se-node").first();
-  const firstBox=await firstNode.boundingBox();
-  if(!firstBox)throw new Error("Could not measure a secondary-structure residue for whole-view drag.");
-  await page.mouse.move(firstBox.x+firstBox.width/2,firstBox.y+firstBox.height/2);
+  const firstPoint=await nucleotideCenter(firstNode);
+  await page.mouse.move(firstPoint.x,firstPoint.y);
   await page.mouse.down();
-  await page.mouse.move(firstBox.x+firstBox.width/2+70,firstBox.y+firstBox.height/2+35,{steps:6});
+  await page.mouse.move(firstPoint.x+70,firstPoint.y+35,{steps:6});
   await page.mouse.up();
   const wholeAfter=await page.evaluate(()=>SecondaryExplorer.getWorkspaceSnapshot());
   const panDelta=Math.hypot((wholeAfter.panX||0)-(wholeBefore.panX||0),(wholeAfter.panY||0)-(wholeBefore.panY||0));
@@ -54,11 +60,10 @@ try{
   });
   const selectedBefore=await page.evaluate(()=>SecondaryExplorer.getWorkspaceSnapshot());
   const selectedNode=page.locator('#secondarySvg .se-node[data-residue-index="0"]');
-  const selectedBox=await selectedNode.boundingBox();
-  if(!selectedBox)throw new Error("Could not measure the selected secondary-structure residue.");
-  await page.mouse.move(selectedBox.x+selectedBox.width/2,selectedBox.y+selectedBox.height/2);
+  const selectedPoint=await nucleotideCenter(selectedNode);
+  await page.mouse.move(selectedPoint.x,selectedPoint.y);
   await page.mouse.down();
-  await page.mouse.move(selectedBox.x+selectedBox.width/2+55,selectedBox.y+selectedBox.height/2-30,{steps:6});
+  await page.mouse.move(selectedPoint.x+55,selectedPoint.y-30,{steps:6});
   await page.mouse.up();
   const selectedAfter=await page.evaluate(()=>SecondaryExplorer.getWorkspaceSnapshot());
   const before0=offset(selectedBefore,0),after0=offset(selectedAfter,0);
