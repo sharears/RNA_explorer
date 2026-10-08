@@ -38,3 +38,4 @@ jobs:
           git add secondary.js index.html tests/secondary-transform-persist-browser.mjs .github/workflows/persist-secondary-transform.yml .github/workflows/persist-secondary-transform-v2.yml .github/workflows/persist-secondary-transform-final.yml tools/patch_secondary_transform_persist.py
           git commit -m 'Persist secondary selection transforms after deselection'
           git push
+# retry after cache-version adjustment
