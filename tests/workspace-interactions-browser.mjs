@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import fs from "node:fs";
 
 const base=process.env.RNA_EXPLORER_URL||"http://127.0.0.1:4173/?page=secondary";
 const browser=await chromium.launch({headless:true});
@@ -55,10 +56,10 @@ try{
   const selectedAfter=await page.evaluate(()=>SecondaryExplorer.getWorkspaceSnapshot());
   const before0=selectedBefore.manualOffsets?.[0]||{x:0,y:0},after0=selectedAfter.manualOffsets?.[0]||{x:0,y:0};
   const before1=selectedBefore.manualOffsets?.[1]||{x:0,y:0},after1=selectedAfter.manualOffsets?.[1]||{x:0,y:0};
-  if(moved(before0,after0)<5||moved(before1,after1)<5)throw new Error("Selected residues did not move together as a group.");
+  if(moved(before0,after0)<5||moved(before1,after1)<5)throw new Error("Selected residues did not move together as a group. before="+JSON.stringify({before0,before1})+" after="+JSON.stringify({after0,after1}));
   if(Math.hypot((selectedAfter.panX||0)-(selectedBefore.panX||0),(selectedAfter.panY||0)-(selectedBefore.panY||0))>1)
     throw new Error("Dragging a selected region incorrectly panned the whole secondary structure.");
-  if(JSON.stringify(selectedAfter.selectedResidues)!==JSON.stringify([0,1]))throw new Error("Selected-region drag did not preserve the selection.");
+  if(JSON.stringify(selectedAfter.selectedResidues)!==JSON.stringify([0,1]))throw new Error("Selected-region drag did not preserve the selection: "+JSON.stringify(selectedAfter.selectedResidues));
 
   // Existing selected-region zoom/rotation must remain available after repositioning.
   const selectionControls=await page.evaluate(()=>({
@@ -81,14 +82,18 @@ try{
   });
   const viewport=page.viewportSize();
   if(!viewport||Math.abs(drawing.left)>2||Math.abs(drawing.top)>2||Math.abs(drawing.width-viewport.width)>3||Math.abs(drawing.height-viewport.height)>3)
-    throw new Error("Molecular Drawing is not filling the workspace viewport: "+JSON.stringify(drawing));
+    throw new Error("Molecular Drawing is not filling the workspace viewport: "+JSON.stringify({drawing,viewport}));
   if(drawing.borderRadius!=="0px")throw new Error("Molecular Drawing still looks like a floating modal: "+JSON.stringify(drawing));
-  if(!/Molecular Drawing workspace/i.test(drawing.label||""))throw new Error("Molecular Drawing dedicated-workspace label is missing.");
+  if(!/Molecular Drawing workspace/i.test(drawing.label||""))throw new Error("Molecular Drawing dedicated-workspace label is missing: "+JSON.stringify(drawing));
   await page.click("#chemEditorClose");
 
   const serious=errors.filter(x=>!/favicon|ResizeObserver loop/i.test(x));
   if(serious.length)throw new Error("Workspace interaction browser errors:\n"+serious.join("\n"));
   console.log("PASS: whole 2D drag, selected-region drag, index-label targets, workspace consistency, and full Molecular Drawing workspace");
+} catch(error) {
+  fs.mkdirSync("test-output",{recursive:true});
+  fs.writeFileSync("test-output/workspace-interactions-error.txt",String(error?.stack||error)+"\n\nCaptured browser errors:\n"+errors.join("\n"));
+  throw error;
 } finally {
   await browser.close();
 }
