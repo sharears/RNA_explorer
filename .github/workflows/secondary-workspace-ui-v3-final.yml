@@ -1,0 +1,52 @@
+name: Final secondary workspace interaction update
+
+on:
+  push:
+    paths:
+      - '.github/workflows/secondary-workspace-ui-v3-final.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply and validate requested updates
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess, yaml
+
+          workflow=yaml.safe_load(Path('.github/workflows/secondary-workspace-ui-v3-retry.yml').read_text())
+          steps=workflow['jobs']['apply-test-commit']['steps']
+          wanted=[
+              'Apply corrected update',
+              'Validate JavaScript and source expectations',
+              'Install browser test dependencies',
+              'Browser-test requested interactions'
+          ]
+          scripts={step.get('name'):step.get('run') for step in steps if step.get('name') in wanted}
+          missing=[name for name in wanted if not scripts.get(name)]
+          if missing: raise SystemExit('Missing workflow scripts: '+', '.join(missing))
+          scripts['Validate JavaScript and source expectations']=scripts['Validate JavaScript and source expectations'].replace("grep -q 'data.indexLabel' secondary.js","grep -q 'dataset.indexLabel' secondary.js")
+          for name in wanted:
+              print(f'--- {name} ---', flush=True)
+              subprocess.run(['bash','-lc',scripts[name]],check=True)
+          PY
+
+      - name: Commit verified update and clean temporary workflows
+        run: |
+          rm -f .github/workflows/secondary-workspace-ui-v3.yml .github/workflows/secondary-workspace-ui-v3-retry.yml .github/workflows/secondary-workspace-ui-v3-final.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Refine secondary workspace selection and history'
+          git push
