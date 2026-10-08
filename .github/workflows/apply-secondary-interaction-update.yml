@@ -57,3 +57,5 @@ jobs:
           git add -A
           git commit -m 'Align secondary selection controls with molecular drawing'
           git push
+
+# Retry after isolating the residue-index drag test from selection handles.
