@@ -175,7 +175,7 @@ const MoleculeEditor = (() => {
   }
 
   let dialog=null,svg=null,status=null,title=null,mode="base",base="A",leftBase="G",rightBase="C";
-  let graph={atoms:[],bonds:[],hbonds:[]},tool="select",element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,lasso=null,transformDrag=null,pendingFuseBond=null,onSave=null;
+  let graph={atoms:[],bonds:[],hbonds:[]},tool="select",element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,lasso=null,transformDrag=null,selectionZoom=1,pendingFuseBond=null,onSave=null;
   let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false,showAtomLabels=true,showAtomNumbers=false;
   let textDefaults={...DEFAULT_TEXT_STYLE};
   let undoStack=[],redoStack=[];
@@ -243,7 +243,7 @@ const MoleculeEditor = (() => {
   function restoreHistorySnapshot(snapshot,message){
     const state=JSON.parse(snapshot);
     graph=state.graph;atomSerial=state.atomSerial;bondSerial=state.bondSerial;hbondSerial=state.hbondSerial;textDefaults=state.textDefaults||{...DEFAULT_TEXT_STYLE};
-    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionBox=null;lasso=null;
+    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionZoom=1;selectionBox=null;lasso=null;
     syncTextControls(textDefaults);render();validate();syncUndoButton();status.textContent=message;return true;
   }
   function undo(){
@@ -422,7 +422,7 @@ const MoleculeEditor = (() => {
         if(!e.metaKey&&key==="y"){e.preventDefault();redo();return;}
       }
       if(e.key==="Escape"&&lasso){lasso=null;render();return;}
-      if(e.key==="Escape"&&selectedAtoms.size){selectedAtoms.clear();selectedAtom=null;render();return;}
+      if(e.key==="Escape"&&selectedAtoms.size){selectedAtoms.clear();selectedAtom=null;selectionZoom=1;render();return;}
       if((e.key==="Delete"||e.key==="Backspace")&&(selectedAtoms.size||selectedAtom)){
         e.preventDefault();pushUndo();deleteAtoms(selectedAtoms.size?[...selectedAtoms]:[selectedAtom]);selectedAtom=null;render();validate();
       }
@@ -431,10 +431,10 @@ const MoleculeEditor = (() => {
 
   function renumber(){
     atomSerial=graph.atoms.length+1;bondSerial=graph.bonds.length+1;hbondSerial=graph.hbonds.length+1;
-    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionBox=null;lasso=null;
+    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionZoom=1;selectionBox=null;lasso=null;
   }
   function selectAtoms(ids,activeId=null){
-    selectedAtoms=new Set(ids.filter(id=>atomById(id)));
+    selectionZoom=1;selectedAtoms=new Set(ids.filter(id=>atomById(id)));
     selectedAtom=activeId&&selectedAtoms.has(activeId)?activeId:(selectedAtoms.values().next().value||null);
     if(selectedAtom){
       const a=atomById(selectedAtom);element=a?.element||element;
@@ -443,7 +443,7 @@ const MoleculeEditor = (() => {
     }
   }
   function toggleAtom(id){
-    if(selectedAtoms.has(id))selectedAtoms.delete(id);else selectedAtoms.add(id);
+    selectionZoom=1;if(selectedAtoms.has(id))selectedAtoms.delete(id);else selectedAtoms.add(id);
     selectedAtom=selectedAtoms.has(id)?id:(selectedAtoms.values().next().value||null);
   }
   function covalentComponent(startId){
@@ -572,13 +572,14 @@ const MoleculeEditor = (() => {
     [["nw",x,y],["ne",x+w,y],["se",x+w,y+h],["sw",x,y+h]].forEach(([name,hx,hy])=>{const c=document.createElementNS(NS,"circle");c.dataset.transformHandle=name;c.setAttribute("cx",hx);c.setAttribute("cy",hy);c.setAttribute("r","7");c.style.fill="#07111c";c.style.stroke="#f2c66d";c.style.strokeWidth="2";c.style.cursor=name+"-resize";layer.append(c);});
     const rotate=document.createElementNS(NS,"circle");rotate.dataset.transformHandle="rotate";rotate.setAttribute("cx",cx);rotate.setAttribute("cy",y-30);rotate.setAttribute("r","8");rotate.style.fill="#f2c66d";rotate.style.stroke="#07111c";rotate.style.strokeWidth="2";rotate.style.cursor="grab";layer.append(rotate);
     if(transformDrag?.kind==="rotate"){const angle=document.createElementNS(NS,"text");angle.setAttribute("x",cx+14);angle.setAttribute("y",y-34);angle.setAttribute("class","chem-rotation-angle");angle.setAttribute("pointer-events","none");angle.textContent=Math.round(transformDrag.deltaDegrees||0)+"°";layer.append(angle);}
+    const zoom=document.createElementNS(NS,"text");zoom.setAttribute("x",x+w-8);zoom.setAttribute("y",y+h-9);zoom.setAttribute("text-anchor","end");zoom.setAttribute("class","chem-transform-zoom");zoom.setAttribute("pointer-events","none");zoom.textContent=Math.round(selectionZoom*100)+"%";layer.append(zoom);
     svg.append(layer);
   }
   function beginSelectionTransform(handle,pointerId,start){
     const bounds=selectedBounds();if(!bounds)return false;
     const center={x:(bounds.minX+bounds.maxX)/2,y:(bounds.minY+bounds.maxY)/2},original=[...selectedAtoms].map(id=>{const a=atomById(id);return a?{id,x:a.x,y:a.y}:null;}).filter(Boolean);
     const dx=start.x-center.x,dy=start.y-center.y;
-    transformDrag={pointer:pointerId,kind:handle==="rotate"?"rotate":"scale",center,original,startAngle:Math.atan2(dy,dx),startRadius:Math.max(8,Math.hypot(dx,dy)),deltaDegrees:0};return true;
+    transformDrag={pointer:pointerId,kind:handle==="rotate"?"rotate":"scale",center,original,startAngle:Math.atan2(dy,dx),startRadius:Math.max(8,Math.hypot(dx,dy)),deltaDegrees:0,baseZoom:selectionZoom,liveScale:1};return true;
   }
   function moveSelectionTransform(current){
     if(!transformDrag)return;
@@ -587,7 +588,7 @@ const MoleculeEditor = (() => {
       const delta=Math.atan2(dy,dx)-t.startAngle,c=Math.cos(delta),s=Math.sin(delta);t.deltaDegrees=delta*180/Math.PI;
       t.original.forEach(o=>{const a=atomById(o.id);if(!a)return;const ox=o.x-t.center.x,oy=o.y-t.center.y;a.x=t.center.x+ox*c-oy*s;a.y=t.center.y+ox*s+oy*c;});
     }else{
-      const scale=clamp(Math.hypot(dx,dy)/t.startRadius,.18,5);
+      const scale=clamp(Math.hypot(dx,dy)/t.startRadius,.18,5);t.liveScale=scale;selectionZoom=t.baseZoom*scale;
       t.original.forEach(o=>{const a=atomById(o.id);if(a){a.x=t.center.x+(o.x-t.center.x)*scale;a.y=t.center.y+(o.y-t.center.y)*scale;}});
     }
   }
@@ -747,7 +748,7 @@ const MoleculeEditor = (() => {
       if(!last||Math.hypot(end.x-last.x,end.y-last.y)>1)current.points.push(end);
       const poly=current.points;if(!current.additive)selectedAtoms.clear();
       if(poly.length>=3)graph.atoms.filter(a=>lassoContainsAtom(a,poly)).forEach(a=>selectedAtoms.add(a.id));
-      selectedAtom=[...selectedAtoms].at(-1)||null;
+      selectionZoom=1;selectedAtom=[...selectedAtoms].at(-1)||null;
       if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);
       const count=selectedAtoms.size;if(selectedAtom){const a=atomById(selectedAtom);if(a)syncTextControls(a.textStyle||textDefaults);}
       setActiveChemTool("select");render();validate();
@@ -758,7 +759,7 @@ const MoleculeEditor = (() => {
     if(selectionBox&&e.pointerId===selectionBox.pointer){
       const {start,current,additive}=selectionBox,loX=Math.min(start.x,current.x),hiX=Math.max(start.x,current.x),loY=Math.min(start.y,current.y),hiY=Math.max(start.y,current.y);
       const ids=graph.atoms.filter(a=>a.x>=loX&&a.x<=hiX&&a.y>=loY&&a.y<=hiY).map(a=>a.id);
-      if(!additive)selectedAtoms.clear();ids.forEach(id=>selectedAtoms.add(id));selectedAtom=ids.at(-1)||selectedAtoms.values().next().value||null;
+      if(!additive)selectedAtoms.clear();ids.forEach(id=>selectedAtoms.add(id));selectionZoom=1;selectedAtom=ids.at(-1)||selectedAtoms.values().next().value||null;
       selectionBox=null;if(svg.hasPointerCapture?.(e.pointerId))svg.releasePointerCapture(e.pointerId);render();validate();
     }
   }
