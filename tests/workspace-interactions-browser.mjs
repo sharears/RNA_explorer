@@ -17,6 +17,13 @@ async function nucleotideCenter(node){
   if(!box)throw new Error("Could not measure nucleotide circle for drag interaction.");
   return {x:box.x+box.width/2,y:box.y+box.height/2};
 }
+async function pointInfo(point){
+  return page.evaluate(({x,y})=>{
+    const el=document.elementFromPoint(x,y);
+    const node=el?.closest?.('.se-node');
+    return {tag:el?.tagName||null,className:el?.getAttribute?.('class')||null,nodeIndex:node?.dataset?.residueIndex??null,dragMode:document.querySelector('#seDragMode')?.value||null,status:document.querySelector('#seDragStatus')?.textContent||null};
+  },point);
+}
 
 try{
   await page.goto(base,{waitUntil:"domcontentloaded",timeout:30000});
@@ -27,9 +34,6 @@ try{
   const badge=((await page.locator("#scene-secondary .rna-workspace-mode-badge").textContent())||"").replace(/\s+/g," ").trim();
   if(!/Explore workspace/i.test(badge)||!/Secondary structure/i.test(badge))throw new Error("Secondary workspace consistency label is missing: "+badge);
 
-  // 1. Whole 2D structure should be directly draggable by default. It may be
-  // implemented as viewport pan or as a translation of every residue; both
-  // preserve the user-facing grab-and-reposition behavior.
   await page.evaluate(()=>{
     const snap=SecondaryExplorer.getWorkspaceSnapshot();
     snap.selectedResidues=[];
@@ -38,19 +42,20 @@ try{
   const wholeBefore=await page.evaluate(()=>SecondaryExplorer.getWorkspaceSnapshot());
   const firstNode=page.locator("#secondarySvg .se-node").first();
   const firstPoint=await nucleotideCenter(firstNode);
+  const targetBefore=await pointInfo(firstPoint);
   await page.mouse.move(firstPoint.x,firstPoint.y);
   await page.mouse.down();
   await page.mouse.move(firstPoint.x+70,firstPoint.y+35,{steps:6});
   await page.mouse.up();
+  const targetAfter=await pointInfo(firstPoint);
   const wholeAfter=await page.evaluate(()=>SecondaryExplorer.getWorkspaceSnapshot());
   const panDelta=Math.hypot((wholeAfter.panX||0)-(wholeBefore.panX||0),(wholeAfter.panY||0)-(wholeBefore.panY||0));
   const firstDelta=moved(offset(wholeBefore,0),offset(wholeAfter,0));
   const lastIndex=(wholeAfter.sequence?.length||1)-1;
   const lastDelta=moved(offset(wholeBefore,lastIndex),offset(wholeAfter,lastIndex));
   if(panDelta<10&&(firstDelta<5||lastDelta<5))
-    throw new Error("Direct whole-secondary drag did not reposition the structure. "+JSON.stringify({panDelta,firstDelta,lastDelta}));
+    throw new Error("Direct whole-secondary drag did not reposition the structure. "+JSON.stringify({panDelta,firstDelta,lastDelta,targetBefore,targetAfter,beforeDragMode:wholeBefore.dragMode,afterDragMode:wholeAfter.dragMode}));
 
-  // 2. A selected group should drag together, without moving an unselected residue.
   await page.evaluate(()=>{
     const snap=SecondaryExplorer.getWorkspaceSnapshot();
     snap.selectedResidues=[0,1];
@@ -75,27 +80,15 @@ try{
     throw new Error("Dragging a selected region incorrectly panned the whole secondary structure.");
   if(JSON.stringify(selectedAfter.selectedResidues)!==JSON.stringify([0,1]))throw new Error("Selected-region drag did not preserve the selection: "+JSON.stringify(selectedAfter.selectedResidues));
 
-  // Existing selected-region zoom/rotation state must remain part of the workspace contract.
-  const selectionControls=await page.evaluate(()=>({
-    scale:!!document.querySelector('#seSelectionScale, [data-selection-scale]'),
-    rotation:!!document.querySelector('#seSelectionRotation, [data-selection-rotation]')
-  }));
-  if(typeof selectedAfter.selectionScale!=="number"||typeof selectedAfter.selectionRotation!=="number")
-    throw new Error("Selected-region zoom/rotation state disappeared after group dragging: "+JSON.stringify(selectionControls));
-
-  // Residue-number labels must keep their independent drag target instead of moving with the whole RNA.
+  const selectionControls=await page.evaluate(()=>({scale:!!document.querySelector('#seSelectionScale, [data-selection-scale]'),rotation:!!document.querySelector('#seSelectionRotation, [data-selection-rotation]')}));
+  if(typeof selectedAfter.selectionScale!=="number"||typeof selectedAfter.selectionRotation!=="number")throw new Error("Selected-region zoom/rotation state disappeared after group dragging: "+JSON.stringify(selectionControls));
   if(await page.locator("#secondarySvg [data-index-label]").count()<1)throw new Error("Residue-index drag targets disappeared after adding whole/selection dragging.");
 
-  // 3. Molecular Drawing should open as a full, opaque dedicated workspace.
   await page.evaluate(()=>MoleculeEditor.openBlank());
   await page.waitForSelector("#chemEditorDialog[open]",{state:"visible",timeout:10000});
-  const drawing=await page.locator("#chemEditorDialog").evaluate(el=>{
-    const r=el.getBoundingClientRect(),s=getComputedStyle(el);
-    return {left:r.left,top:r.top,width:r.width,height:r.height,borderRadius:s.borderRadius,background:s.backgroundColor,label:el.getAttribute("aria-label")};
-  });
+  const drawing=await page.locator("#chemEditorDialog").evaluate(el=>{const r=el.getBoundingClientRect(),s=getComputedStyle(el);return {left:r.left,top:r.top,width:r.width,height:r.height,borderRadius:s.borderRadius,background:s.backgroundColor,label:el.getAttribute("aria-label")};});
   const viewport=page.viewportSize();
-  if(!viewport||Math.abs(drawing.left)>2||Math.abs(drawing.top)>2||Math.abs(drawing.width-viewport.width)>3||Math.abs(drawing.height-viewport.height)>3)
-    throw new Error("Molecular Drawing is not filling the workspace viewport: "+JSON.stringify({drawing,viewport}));
+  if(!viewport||Math.abs(drawing.left)>2||Math.abs(drawing.top)>2||Math.abs(drawing.width-viewport.width)>3||Math.abs(drawing.height-viewport.height)>3)throw new Error("Molecular Drawing is not filling the workspace viewport: "+JSON.stringify({drawing,viewport}));
   if(drawing.borderRadius!=="0px")throw new Error("Molecular Drawing still looks like a floating modal: "+JSON.stringify(drawing));
   if(!/Molecular Drawing workspace/i.test(drawing.label||""))throw new Error("Molecular Drawing dedicated-workspace label is missing: "+JSON.stringify(drawing));
   await page.click("#chemEditorClose");
