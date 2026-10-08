@@ -380,6 +380,25 @@ const SecondaryExplorer = (() => {
     }
     return transformed;
   }
+  function commitSelectionTransform(){
+    const chosen=[...selectedResidues].filter(i=>i>=0&&i<seq.length);
+    if(!chosen.length||(Math.abs(selectionRotation)<=1e-8&&Math.abs(selectionScale-1)<=1e-8))return false;
+    const final=coordinates();
+    const center={x:chosen.reduce((sum,i)=>sum+final[i].x,0)/chosen.length,y:chosen.reduce((sum,i)=>sum+final[i].y,0)/chosen.length};
+    const inverseSelected=(p)=>{
+      const angle=-selectionRotation*Math.PI/180,cos=Math.cos(angle),sin=Math.sin(angle),scale=1/selectionScale;
+      const x=(p.x-center.x)*scale,y=(p.y-center.y)*scale;
+      return {x:center.x+x*cos-y*sin,y:center.y+x*sin+y*cos};
+    };
+    const wholeAngle=-wholeRotation*Math.PI/180,wholeCos=Math.cos(wholeAngle),wholeSin=Math.sin(wholeAngle);
+    chosen.forEach(i=>{
+      const before=inverseSelected(final[i]),dx=final[i].x-before.x,dy=final[i].y-before.y;
+      const localDx=dx*wholeCos-dy*wholeSin,localDy=dx*wholeSin+dy*wholeCos,base=manualOffsets[i]||{x:0,y:0};
+      manualOffsets[i]={x:(Number(base.x)||0)+localDx,y:(Number(base.y)||0)+localDy};
+    });
+    selectionRotation=0;selectionScale=1;
+    return true;
+  }
   function dragGroupFor(index){
     if(dragMode==="whole")return Array.from({length:seq.length},(_,i)=>i);
     if(dragMode==="branch"){
@@ -531,6 +550,7 @@ const SecondaryExplorer = (() => {
     }
   }
   function select(index,notify=true,forceSelected) {
+    commitSelectionTransform();
     selected=Math.max(0,Math.min(seq.length-1,index));
     const next=forceSelected===undefined?!selectedResidues.has(selected):Boolean(forceSelected);
     if(next)selectedResidues.add(selected);else selectedResidues.delete(selected);
@@ -1252,6 +1272,7 @@ const SecondaryExplorer = (() => {
       render();return {rotation:selectionRotation,scale:selectionScale};
     },
     getTransformState(){return {wholeRotation,selectionRotation,selectionScale};},
+    commitSelectionTransform(){const changed=commitSelectionTransform();if(changed)render();return changed;},
     getWorkspaceSnapshot(){return workspaceSnapshot();},
     restoreWorkspaceSnapshot,
     loadDerived(sequence,structure,meta={}){
@@ -1266,15 +1287,16 @@ const SecondaryExplorer = (() => {
       saveWorkspaceLocal();return {sequence:seq,structure:db,isDefault:false,selected,selectedPairKey,selectedResidues:[...selectedResidues],selectedPairKeys:[...selectedPairKeys],sourceNote};
     },
     followDefault(index){if(index>=0&&index<seq.length){selected=index;panel();render();}},
-    followExternal(index,selectedState){if(index>=0&&index<seq.length){selected=index;if(selectedState===true)selectedResidues.add(index);else if(selectedState===false)selectedResidues.delete(index);panel();render();}},
+    followExternal(index,selectedState){if(index>=0&&index<seq.length){commitSelectionTransform();selected=index;if(selectedState===true)selectedResidues.add(index);else if(selectedState===false)selectedResidues.delete(index);panel();render();}},
     followPairExternal(a,b,selectedState){const key=keyOf(a,b);if(selectedState===true){selectedPairKeys.add(key);selectedPairKey=key;}else if(selectedState===false){selectedPairKeys.delete(key);if(selectedPairKey===key)selectedPairKey=[...selectedPairKeys].at(-1)||null;}selected=a;panel();render();},
     highlightResidues(indices=[]){
+      commitSelectionTransform();
       const clean=[...new Set((Array.isArray(indices)?indices:[]).filter(i=>Number.isInteger(i)&&i>=0&&i<seq.length))];
       selectedResidues=new Set(clean);selectedPairKeys.clear();selectedPairKey=null;
       if(clean.length)selected=clean[0];
       panel();render();return clean;
     },
-    clearHighlights(){selectedResidues.clear();selectedPairKeys.clear();selectedPairKey=null;panel();render();},
+    clearHighlights(){commitSelectionTransform();selectedResidues.clear();selectedPairKeys.clear();selectedPairKey=null;panel();render();},
     getContext(){return getContextSnapshot();}
   };
 })();
