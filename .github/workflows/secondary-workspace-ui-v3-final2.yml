@@ -50,3 +50,5 @@ jobs:
           git add -A
           git commit -m 'Refine secondary workspace selection and history'
           git push
+
+# retrigger after correcting the runtime viewport selector
