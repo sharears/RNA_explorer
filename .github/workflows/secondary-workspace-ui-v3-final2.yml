@@ -33,6 +33,10 @@ jobs:
           subprocess.run(['bash','-lc',apply],check=True)
           p=Path('secondary-selection-tools.js')
           s=p.read_text().replace('.secondary-viewport','.se-viewport')
+          old='''    if(transformDrag?.kind==="rotate"){\n      const angle=document.createElementNS(svgNS,"text");angle.setAttribute("x",cx+14);angle.setAttribute("y",y-35);angle.setAttribute("class","se-selected-angle");angle.textContent=Math.round(SecondaryExplorer.getTransformState().selectionRotation)+"°";layer.append(angle);\n    }'''
+          new='''    if(geom.chosen.length>=2){\n      const angle=document.createElementNS(svgNS,"text");angle.setAttribute("x",cx+14);angle.setAttribute("y",y-35);angle.setAttribute("class","se-selected-angle");angle.textContent=Math.round(SecondaryExplorer.getTransformState().selectionRotation)+"°";layer.append(angle);\n    }'''
+          if old not in s: raise SystemExit('selected-angle block missing')
+          s=s.replace(old,new,1)
           old='''  }\n  function resetSelectedTransform'''
           new='''    drawSelectionTransformOverlay();\n  }\n  function resetSelectedTransform'''
           if old not in s: raise SystemExit('selected-transform redraw anchor missing')
@@ -55,4 +59,4 @@ jobs:
           git commit -m 'Refine secondary workspace selection and history'
           git push
 
-# retrigger with the generated-source indentation corrected
+# retrigger with current selected angle always shown on the transform box
