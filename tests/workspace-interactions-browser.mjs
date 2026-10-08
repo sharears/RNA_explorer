@@ -11,18 +11,24 @@ page.on("console",msg=>{if(msg.type()==="error"&&!/Failed to load resource/i.tes
 const moved=(a,b)=>Math.hypot((b?.x||0)-(a?.x||0),(b?.y||0)-(a?.y||0));
 const offset=(snapshot,index)=>snapshot.manualOffsets?.[index]||{x:0,y:0};
 
-async function nucleotideCenter(node){
-  const circle=node.locator('circle:not(.se-index-hit)').first();
-  const box=await circle.boundingBox();
-  if(!box)throw new Error("Could not measure nucleotide circle for drag interaction.");
-  return {x:box.x+box.width/2,y:box.y+box.height/2};
-}
-async function pointInfo(point){
-  return page.evaluate(({x,y})=>{
-    const el=document.elementFromPoint(x,y);
-    const node=el?.closest?.('.se-node');
-    return {tag:el?.tagName||null,className:el?.getAttribute?.('class')||null,nodeIndex:node?.dataset?.residueIndex??null,dragMode:document.querySelector('#seDragMode')?.value||null,status:document.querySelector('#seDragStatus')?.textContent||null};
-  },point);
+async function visibleNucleotide(){
+  const nodes=page.locator('#secondarySvg .se-node');
+  const count=await nodes.count();
+  const viewport=page.viewportSize();
+  for(let i=0;i<count;i++){
+    const node=nodes.nth(i);
+    const circle=node.locator('circle:not(.se-index-hit)').first();
+    const box=await circle.boundingBox();
+    if(!box||!viewport)continue;
+    const point={x:box.x+box.width/2,y:box.y+box.height/2};
+    if(point.x<1||point.y<1||point.x>=viewport.width-1||point.y>=viewport.height-1)continue;
+    const info=await page.evaluate(({x,y})=>{
+      const el=document.elementFromPoint(x,y),node=el?.closest?.('.se-node');
+      return {index:node?.dataset?.residueIndex??null,tag:el?.tagName||null};
+    },point);
+    if(info.index!==null)return {point,index:Number(info.index),tag:info.tag};
+  }
+  throw new Error('Could not find a visible nucleotide interaction target in the secondary workspace.');
 }
 
 try{
@@ -40,48 +46,52 @@ try{
     SecondaryExplorer.restoreWorkspaceSnapshot(snap);
   });
   const wholeBefore=await page.evaluate(()=>SecondaryExplorer.getWorkspaceSnapshot());
-  const firstNode=page.locator("#secondarySvg .se-node").first();
-  const firstPoint=await nucleotideCenter(firstNode);
-  const targetBefore=await pointInfo(firstPoint);
-  await page.mouse.move(firstPoint.x,firstPoint.y);
+  const wholeTarget=await visibleNucleotide();
+  await page.mouse.move(wholeTarget.point.x,wholeTarget.point.y);
   await page.mouse.down();
-  await page.mouse.move(firstPoint.x+70,firstPoint.y+35,{steps:6});
+  await page.mouse.move(wholeTarget.point.x+70,wholeTarget.point.y+35,{steps:6});
   await page.mouse.up();
-  const targetAfter=await pointInfo(firstPoint);
   const wholeAfter=await page.evaluate(()=>SecondaryExplorer.getWorkspaceSnapshot());
   const panDelta=Math.hypot((wholeAfter.panX||0)-(wholeBefore.panX||0),(wholeAfter.panY||0)-(wholeBefore.panY||0));
   const firstDelta=moved(offset(wholeBefore,0),offset(wholeAfter,0));
   const lastIndex=(wholeAfter.sequence?.length||1)-1;
   const lastDelta=moved(offset(wholeBefore,lastIndex),offset(wholeAfter,lastIndex));
   if(panDelta<10&&(firstDelta<5||lastDelta<5))
-    throw new Error("Direct whole-secondary drag did not reposition the structure. "+JSON.stringify({panDelta,firstDelta,lastDelta,targetBefore,targetAfter,beforeDragMode:wholeBefore.dragMode,afterDragMode:wholeAfter.dragMode}));
+    throw new Error("Direct whole-secondary drag did not reposition the structure. "+JSON.stringify({panDelta,firstDelta,lastDelta,wholeTarget,beforeDragMode:wholeBefore.dragMode,afterDragMode:wholeAfter.dragMode}));
 
-  await page.evaluate(()=>{
+  const selectionTarget=await visibleNucleotide();
+  const n=wholeAfter.sequence?.length||3;
+  const dragIndex=selectionTarget.index;
+  const second=(dragIndex+1)%n;
+  const unselected=(dragIndex+2)%n;
+  await page.evaluate(({dragIndex,second})=>{
     const snap=SecondaryExplorer.getWorkspaceSnapshot();
-    snap.selectedResidues=[0,1];
+    snap.selectedResidues=[dragIndex,second];
     snap.selectionScale=1;
     snap.selectionRotation=0;
     SecondaryExplorer.restoreWorkspaceSnapshot(snap);
-  });
+  },{dragIndex,second});
   const selectedBefore=await page.evaluate(()=>SecondaryExplorer.getWorkspaceSnapshot());
-  const selectedNode=page.locator('#secondarySvg .se-node[data-residue-index="0"]');
-  const selectedPoint=await nucleotideCenter(selectedNode);
+  const selectedNode=page.locator(`#secondarySvg .se-node[data-residue-index="${dragIndex}"]`);
+  const circle=selectedNode.locator('circle:not(.se-index-hit)').first();
+  const selectedBox=await circle.boundingBox();
+  if(!selectedBox)throw new Error('Could not measure the visible selected nucleotide.');
+  const selectedPoint={x:selectedBox.x+selectedBox.width/2,y:selectedBox.y+selectedBox.height/2};
   await page.mouse.move(selectedPoint.x,selectedPoint.y);
   await page.mouse.down();
   await page.mouse.move(selectedPoint.x+55,selectedPoint.y-30,{steps:6});
   await page.mouse.up();
   const selectedAfter=await page.evaluate(()=>SecondaryExplorer.getWorkspaceSnapshot());
-  const before0=offset(selectedBefore,0),after0=offset(selectedAfter,0);
-  const before1=offset(selectedBefore,1),after1=offset(selectedAfter,1);
-  const before2=offset(selectedBefore,2),after2=offset(selectedAfter,2);
-  if(moved(before0,after0)<5||moved(before1,after1)<5)throw new Error("Selected residues did not move together as a group. before="+JSON.stringify({before0,before1})+" after="+JSON.stringify({after0,after1}));
-  if(moved(before2,after2)>1)throw new Error("Selected-region drag also moved an unselected residue. "+JSON.stringify({before2,after2}));
-  if(Math.hypot((selectedAfter.panX||0)-(selectedBefore.panX||0),(selectedAfter.panY||0)-(selectedBefore.panY||0))>1)
-    throw new Error("Dragging a selected region incorrectly panned the whole secondary structure.");
-  if(JSON.stringify(selectedAfter.selectedResidues)!==JSON.stringify([0,1]))throw new Error("Selected-region drag did not preserve the selection: "+JSON.stringify(selectedAfter.selectedResidues));
+  const beforeA=offset(selectedBefore,dragIndex),afterA=offset(selectedAfter,dragIndex);
+  const beforeB=offset(selectedBefore,second),afterB=offset(selectedAfter,second);
+  const beforeU=offset(selectedBefore,unselected),afterU=offset(selectedAfter,unselected);
+  if(moved(beforeA,afterA)<5||moved(beforeB,afterB)<5)throw new Error("Selected residues did not move together as a group. "+JSON.stringify({dragIndex,second,beforeA,afterA,beforeB,afterB}));
+  if(moved(beforeU,afterU)>1)throw new Error("Selected-region drag also moved an unselected residue. "+JSON.stringify({unselected,beforeU,afterU}));
+  if(Math.hypot((selectedAfter.panX||0)-(selectedBefore.panX||0),(selectedAfter.panY||0)-(selectedBefore.panY||0))>1)throw new Error("Dragging a selected region incorrectly panned the whole secondary structure.");
+  const actualSelected=[...(selectedAfter.selectedResidues||[])].sort((a,b)=>a-b),expectedSelected=[dragIndex,second].sort((a,b)=>a-b);
+  if(JSON.stringify(actualSelected)!==JSON.stringify(expectedSelected))throw new Error("Selected-region drag did not preserve the selection: "+JSON.stringify(actualSelected));
 
-  const selectionControls=await page.evaluate(()=>({scale:!!document.querySelector('#seSelectionScale, [data-selection-scale]'),rotation:!!document.querySelector('#seSelectionRotation, [data-selection-rotation]')}));
-  if(typeof selectedAfter.selectionScale!=="number"||typeof selectedAfter.selectionRotation!=="number")throw new Error("Selected-region zoom/rotation state disappeared after group dragging: "+JSON.stringify(selectionControls));
+  if(typeof selectedAfter.selectionScale!=="number"||typeof selectedAfter.selectionRotation!=="number")throw new Error("Selected-region zoom/rotation state disappeared after group dragging.");
   if(await page.locator("#secondarySvg [data-index-label]").count()<1)throw new Error("Residue-index drag targets disappeared after adding whole/selection dragging.");
 
   await page.evaluate(()=>MoleculeEditor.openBlank());
