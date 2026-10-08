@@ -1,0 +1,120 @@
+name: Retry secondary workspace interaction update
+
+on:
+  push:
+    paths:
+      - '.github/workflows/secondary-workspace-ui-v3-retry.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply corrected update
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+          y=Path('.github/workflows/secondary-workspace-ui-v3.yml').read_text()
+          def block(start,end):
+              chunk=y.split(start,1)[1].split(end,1)[0]
+              return textwrap.dedent(chunk)
+          selection=block("          cat > secondary-selection-tools.js <<'EOF'\n","          EOF\n")
+          Path('secondary-selection-tools.js').write_text(selection)
+          patch=block("          cat > /tmp/patch.py <<'PY'\n","          PY\n          python3 /tmp/patch.py")
+          patch=patch.replace("old='''      if(changed)","old='''    if(changed)").replace("new='''      if(changed)","new='''    if(changed)")
+          exec(compile(patch,'secondary-ui-patch','exec'),{})
+          PY
+
+      - name: Validate JavaScript and source expectations
+        run: |
+          node --check chemistry-editor.js
+          node --check secondary.js
+          node --check secondary-selection-tools.js
+          grep -q 'summary>History' secondary-selection-tools.js
+          grep -q 'Select · Residues & regions' secondary-selection-tools.js
+          ! grep -q 'id="seUndoLayout"' secondary.js
+          ! grep -q 'id="seRedoLayout"' secondary.js
+          grep -q 'indexOffsets' secondary.js
+          grep -q 'data.indexLabel' secondary.js
+          grep -q 'chem-rotation-angle' chemistry-editor.js
+
+      - name: Install browser test dependencies
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Browser-test requested interactions
+        run: |
+          rm -rf dist && mkdir dist
+          cp index.html *.js *.css dist/
+          cp -r data assets dist/
+          python3 -m http.server 4173 --directory dist >/tmp/rna-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID' EXIT
+          node --input-type=module <<'JS'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1000}});
+          const errors=[];page.on('pageerror',e=>errors.push(String(e)));
+          try{
+            await page.goto('http://127.0.0.1:4173/?page=secondary&start=example',{waitUntil:'networkidle'});
+            await page.waitForSelector('#seTransformToolbar',{state:'visible'});
+            const summaries=await page.locator('#seTransformToolbar summary').allTextContents();
+            if(!summaries.includes('History')||!summaries.includes('Select · Residues & regions'))throw new Error('Secondary grouping does not match molecular drawing pattern');
+            if(await page.locator('#seUndoLayout,#seRedoLayout').count())throw new Error('Old Undo move / Redo move controls remain');
+            const wholeBelow=await page.evaluate(()=>{const v=document.querySelector('.secondary-viewport'),w=document.querySelector('#seWholeRotationBar');return Boolean(v&&w&&(v.compareDocumentPosition(w)&Node.DOCUMENT_POSITION_FOLLOWING));});
+            if(!wholeBelow)throw new Error('Whole RNA rotation is not below the structure');
+            await page.locator('#seWholeRotation').evaluate(el=>{el.value='35';el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));});
+            if((await page.locator('#seWholeRotationValue').textContent())!=='35°')throw new Error('Whole rotation angle is not displayed');
+
+            await page.evaluate(()=>{SecondaryExplorer.setWholeRotation(0);SecondaryExplorer.highlightResidues([0,1,2,3]);SecondaryExplorer.setSelectionTransform({rotation:0,scale:1});});
+            await page.waitForSelector('[data-se-transform-handle="rotate"]',{state:'visible'});
+            const rotate=await page.locator('[data-se-transform-handle="rotate"]').boundingBox();
+            await page.mouse.move(rotate.x+rotate.width/2,rotate.y+rotate.height/2);await page.mouse.down();await page.mouse.move(rotate.x+rotate.width/2+44,rotate.y+rotate.height/2+24,{steps:8});
+            const selectedAngle=(await page.locator('.se-selected-angle').textContent())||'';if(!selectedAngle.includes('°'))throw new Error('Secondary live rotation angle missing');
+            if(Math.abs(await page.evaluate(()=>SecondaryExplorer.getTransformState().selectionRotation))<1)throw new Error('Selected region failed to rotate');
+            await page.mouse.up();await page.click('#seUndo');
+            if(Math.abs(await page.evaluate(()=>SecondaryExplorer.getTransformState().selectionRotation))>1e-6)throw new Error('History Undo failed for selected rotation');
+            await page.click('#seRedo');if(Math.abs(await page.evaluate(()=>SecondaryExplorer.getTransformState().selectionRotation))<1)throw new Error('History Redo failed for selected rotation');
+
+            await page.evaluate(()=>{SecondaryExplorer.setSelectionTransform({rotation:0,scale:1});SecondaryExplorer.clearHighlights();});
+            const beforePos=await page.evaluate(()=>SecondaryExplorer.getCurrentPositions());
+            const index=page.locator('#secondarySvg .se-index').first();await index.waitFor({state:'visible'});const b0=await index.boundingBox();
+            await page.mouse.move(b0.x+b0.width/2,b0.y+b0.height/2);await page.mouse.down();await page.mouse.move(b0.x+b0.width/2+42,b0.y+b0.height/2+24,{steps:8});await page.mouse.up();await page.waitForTimeout(120);
+            const afterPos=await page.evaluate(()=>SecondaryExplorer.getCurrentPositions());const maxShift=Math.max(...afterPos.map((p,i)=>Math.hypot(p.x-beforePos[i].x,p.y-beforePos[i].y)));
+            if(maxShift>1e-6)throw new Error('Index dragging altered RNA coordinates: '+maxShift);
+            const b1=await page.locator('#secondarySvg .se-index').first().boundingBox();if(Math.hypot(b1.x-b0.x,b1.y-b0.y)<10)throw new Error('Residue index was not draggable');
+            await page.click('#seUndo');await page.waitForTimeout(120);const b2=await page.locator('#secondarySvg .se-index').first().boundingBox();if(Math.hypot(b2.x-b0.x,b2.y-b0.y)>4)throw new Error('History did not undo index drag');
+
+            const node=page.locator('#secondarySvg .se-node').nth(5),nb=await node.boundingBox();const rp0=await page.evaluate(()=>SecondaryExplorer.getCurrentPositions()[5]);
+            await page.mouse.move(nb.x+nb.width/2,nb.y+nb.height/2);await page.mouse.down();await page.mouse.move(nb.x+nb.width/2+34,nb.y+nb.height/2+20,{steps:8});await page.mouse.up();await page.waitForTimeout(120);
+            const rp1=await page.evaluate(()=>SecondaryExplorer.getCurrentPositions()[5]);if(Math.hypot(rp1.x-rp0.x,rp1.y-rp0.y)<4)throw new Error('Residue drag failed');
+            await page.click('#seUndo');await page.waitForTimeout(120);const rp2=await page.evaluate(()=>SecondaryExplorer.getCurrentPositions()[5]);if(Math.hypot(rp2.x-rp0.x,rp2.y-rp0.y)>2)throw new Error('History did not replace Undo move behavior');
+
+            await page.evaluate(()=>MoleculeEditor.openBase('A'));await page.waitForSelector('#chemEditorDialog[open]');const atoms=page.locator('#chemEditorSvg [data-atom-id]');
+            await atoms.nth(0).click();await atoms.nth(1).click({modifiers:['Shift']});await page.waitForSelector('#chemEditorSvg [data-transform-handle="rotate"]',{state:'visible'});
+            const cr=await page.locator('#chemEditorSvg [data-transform-handle="rotate"]').boundingBox();await page.mouse.move(cr.x+cr.width/2,cr.y+cr.height/2);await page.mouse.down();await page.mouse.move(cr.x+cr.width/2+38,cr.y+cr.height/2+24,{steps:8});
+            const chemAngle=(await page.locator('#chemEditorSvg .chem-rotation-angle').textContent())||'';if(!chemAngle.includes('°'))throw new Error('Molecular drawing live rotation angle missing');await page.mouse.up();
+
+            const serious=errors.filter(x=>!/favicon|ResizeObserver loop/i.test(x));if(serious.length)throw new Error(serious.join('\n'));
+            console.log(JSON.stringify({result:'PASS',selectedAngle,chemAngle,maxShift}));
+          } finally {await browser.close();}
+          JS
+
+      - name: Commit verified update and remove temporary workflows
+        run: |
+          rm -f .github/workflows/secondary-workspace-ui-v3.yml .github/workflows/secondary-workspace-ui-v3-retry.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Refine secondary workspace selection and history'
+          git push
