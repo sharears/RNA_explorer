@@ -9,6 +9,7 @@ page.on("pageerror",err=>errors.push(String(err)));
 page.on("console",msg=>{if(msg.type()==="error"&&!/Failed to load resource/i.test(msg.text()))errors.push("console: "+msg.text());});
 
 const moved=(a,b)=>Math.hypot((b?.x||0)-(a?.x||0),(b?.y||0)-(a?.y||0));
+const offset=(snapshot,index)=>snapshot.manualOffsets?.[index]||{x:0,y:0};
 
 try{
   await page.goto(base,{waitUntil:"domcontentloaded",timeout:30000});
@@ -19,7 +20,9 @@ try{
   const badge=((await page.locator("#scene-secondary .rna-workspace-mode-badge").textContent())||"").replace(/\s+/g," ").trim();
   if(!/Explore workspace/i.test(badge)||!/Secondary structure/i.test(badge))throw new Error("Secondary workspace consistency label is missing: "+badge);
 
-  // 1. Whole 2D structure should be directly draggable by default.
+  // 1. Whole 2D structure should be directly draggable by default. It may be
+  // implemented as viewport pan or as a translation of every residue; both
+  // preserve the user-facing grab-and-reposition behavior.
   await page.evaluate(()=>{
     const snap=SecondaryExplorer.getWorkspaceSnapshot();
     snap.selectedResidues=[];
@@ -34,10 +37,14 @@ try{
   await page.mouse.move(firstBox.x+firstBox.width/2+70,firstBox.y+firstBox.height/2+35,{steps:6});
   await page.mouse.up();
   const wholeAfter=await page.evaluate(()=>SecondaryExplorer.getWorkspaceSnapshot());
-  if(Math.hypot((wholeAfter.panX||0)-(wholeBefore.panX||0),(wholeAfter.panY||0)-(wholeBefore.panY||0))<10)
-    throw new Error("Direct whole-secondary drag did not change the saved pan position.");
+  const panDelta=Math.hypot((wholeAfter.panX||0)-(wholeBefore.panX||0),(wholeAfter.panY||0)-(wholeBefore.panY||0));
+  const firstDelta=moved(offset(wholeBefore,0),offset(wholeAfter,0));
+  const lastIndex=(wholeAfter.sequence?.length||1)-1;
+  const lastDelta=moved(offset(wholeBefore,lastIndex),offset(wholeAfter,lastIndex));
+  if(panDelta<10&&(firstDelta<5||lastDelta<5))
+    throw new Error("Direct whole-secondary drag did not reposition the structure. "+JSON.stringify({panDelta,firstDelta,lastDelta}));
 
-  // 2. A selected group should drag together, without turning into a whole-view pan.
+  // 2. A selected group should drag together, without moving an unselected residue.
   await page.evaluate(()=>{
     const snap=SecondaryExplorer.getWorkspaceSnapshot();
     snap.selectedResidues=[0,1];
@@ -54,19 +61,20 @@ try{
   await page.mouse.move(selectedBox.x+selectedBox.width/2+55,selectedBox.y+selectedBox.height/2-30,{steps:6});
   await page.mouse.up();
   const selectedAfter=await page.evaluate(()=>SecondaryExplorer.getWorkspaceSnapshot());
-  const before0=selectedBefore.manualOffsets?.[0]||{x:0,y:0},after0=selectedAfter.manualOffsets?.[0]||{x:0,y:0};
-  const before1=selectedBefore.manualOffsets?.[1]||{x:0,y:0},after1=selectedAfter.manualOffsets?.[1]||{x:0,y:0};
+  const before0=offset(selectedBefore,0),after0=offset(selectedAfter,0);
+  const before1=offset(selectedBefore,1),after1=offset(selectedAfter,1);
+  const before2=offset(selectedBefore,2),after2=offset(selectedAfter,2);
   if(moved(before0,after0)<5||moved(before1,after1)<5)throw new Error("Selected residues did not move together as a group. before="+JSON.stringify({before0,before1})+" after="+JSON.stringify({after0,after1}));
+  if(moved(before2,after2)>1)throw new Error("Selected-region drag also moved an unselected residue. "+JSON.stringify({before2,after2}));
   if(Math.hypot((selectedAfter.panX||0)-(selectedBefore.panX||0),(selectedAfter.panY||0)-(selectedBefore.panY||0))>1)
     throw new Error("Dragging a selected region incorrectly panned the whole secondary structure.");
   if(JSON.stringify(selectedAfter.selectedResidues)!==JSON.stringify([0,1]))throw new Error("Selected-region drag did not preserve the selection: "+JSON.stringify(selectedAfter.selectedResidues));
 
-  // Existing selected-region zoom/rotation must remain available after repositioning.
+  // Existing selected-region zoom/rotation state must remain part of the workspace contract.
   const selectionControls=await page.evaluate(()=>({
     scale:!!document.querySelector('#seSelectionScale, [data-selection-scale]'),
     rotation:!!document.querySelector('#seSelectionRotation, [data-selection-rotation]')
   }));
-  // The public workspace state is the contract even if the visible controls use different IDs.
   if(typeof selectedAfter.selectionScale!=="number"||typeof selectedAfter.selectionRotation!=="number")
     throw new Error("Selected-region zoom/rotation state disappeared after group dragging: "+JSON.stringify(selectionControls));
 
