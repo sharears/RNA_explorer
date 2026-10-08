@@ -10,6 +10,12 @@ p = Path('secondary.js')
 s = p.read_text()
 s = rep(
     s,
+    '        number.setAttribute("class","se-index");number.setAttribute("data-index-label",String(i));number.setAttribute("role","button");number.setAttribute("aria-label","Residue index "+(i+1)+". Drag to reposition the label without moving the residue.");',
+    '        number.setAttribute("class","se-index");number.setAttribute("data-index-label",String(i));number.setAttribute("role","button");number.setAttribute("aria-label","Residue index "+(i+1)+". Drag to reposition the label without moving the residue.");\n        const indexHit=svg("circle",{cx:number.getAttribute("x"),cy:number.getAttribute("y"),r:Math.max(13,(Number(style.size)||12)*.95),fill:"transparent"});indexHit.setAttribute("class","se-index-hit");indexHit.setAttribute("data-index-label",String(i));indexHit.setAttribute("role","button");indexHit.setAttribute("aria-label","Drag residue index "+(i+1)+" without moving the RNA structure.");g.append(indexHit);',
+    'index hit target',
+)
+s = rep(
+    s,
     '    getCurrentPositions(){return coordinates().map(p=>({x:p.x,y:p.y}));},\n    setWholeRotation(degrees=0){',
     '    getCurrentPositions(){return coordinates().map(p=>({x:p.x,y:p.y}));},\n    getIndexLabelOffset(index){const o=indexLabelOffsets[index]||{x:0,y:0};return {x:Number(o.x)||0,y:Number(o.y)||0};},\n    setIndexLabelOffset(index,{x=0,y=0}={}){if(!Number.isInteger(index)||index<0||index>=seq.length)return null;indexLabelOffsets[index]={x:Number(x)||0,y:Number(y)||0};render();return {...indexLabelOffsets[index]};},\n    setWholeRotation(degrees=0){',
     'secondary index API',
@@ -48,5 +54,10 @@ s = rep(
     '  function cancel(){gesture=null;transformGesture=null;indexGesture=null;removeOverlay();drawSelectedTransformOverlay();}',
     'index gesture cancel',
 )
+p.write_text(s)
+
+p = Path('secondary-selection-tools.css')
+s = p.read_text()
+s = s.replace('.se-index[data-index-label]{cursor:move;pointer-events:all;user-select:none}.se-index[data-index-label]:hover{fill:#f5e9c8!important;filter:drop-shadow(0 0 3px rgba(245,233,200,.55))}', '.se-index[data-index-label]{cursor:move;pointer-events:all;user-select:none}.se-index-hit{cursor:move;pointer-events:all}.se-index[data-index-label]:hover{fill:#f5e9c8!important;filter:drop-shadow(0 0 3px rgba(245,233,200,.55))}', 1)
 p.write_text(s)
 print('INDEX_DRAG_FIX_OK')
