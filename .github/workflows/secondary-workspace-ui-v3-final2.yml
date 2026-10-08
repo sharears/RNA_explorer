@@ -33,8 +33,8 @@ jobs:
           subprocess.run(['bash','-lc',apply],check=True)
           p=Path('secondary-selection-tools.js')
           s=p.read_text().replace('.secondary-viewport','.se-viewport')
-          old='''              }\n            }\n            function resetSelectedTransform'''
-          new='''              }\n              drawSelectionTransformOverlay();\n            }\n            function resetSelectedTransform'''
+          old='''  }\n  function resetSelectedTransform'''
+          new='''    drawSelectionTransformOverlay();\n  }\n  function resetSelectedTransform'''
           if old not in s: raise SystemExit('selected-transform redraw anchor missing')
           s=s.replace(old,new,1)
           p.write_text(s)
@@ -55,4 +55,4 @@ jobs:
           git commit -m 'Refine secondary workspace selection and history'
           git push
 
-# retrigger after keeping the selected-region angle overlay visible during rotation
+# retrigger with the generated-source indentation corrected
