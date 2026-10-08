@@ -44,8 +44,8 @@ p.write_text(s.replace(old, new, 1))
 
 p = Path("index.html")
 s = p.read_text()
-old = "secondary.js?v=secondary-24"
-new = "secondary.js?v=secondary-25"
+old = "secondary.js?v=secondary-25"
+new = "secondary.js?v=secondary-26"
 if old not in s:
     raise SystemExit("secondary cache anchor missing")
 p.write_text(s.replace(old, new, 1))
