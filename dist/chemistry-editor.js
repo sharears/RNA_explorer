@@ -570,19 +570,21 @@ const MoleculeEditor = (() => {
     const rect=document.createElementNS(NS,"rect");rect.setAttribute("x",x);rect.setAttribute("y",y);rect.setAttribute("width",w);rect.setAttribute("height",h);rect.setAttribute("rx","4");rect.style.fill="none";rect.style.stroke="#f2c66d";rect.style.strokeWidth="1.5";rect.style.strokeDasharray="6 4";rect.style.pointerEvents="none";layer.append(rect);
     const stem=document.createElementNS(NS,"line");stem.setAttribute("x1",cx);stem.setAttribute("y1",y);stem.setAttribute("x2",cx);stem.setAttribute("y2",y-30);stem.style.stroke="#f2c66d";stem.style.strokeWidth="1.5";stem.style.pointerEvents="none";layer.append(stem);
     [["nw",x,y],["ne",x+w,y],["se",x+w,y+h],["sw",x,y+h]].forEach(([name,hx,hy])=>{const c=document.createElementNS(NS,"circle");c.dataset.transformHandle=name;c.setAttribute("cx",hx);c.setAttribute("cy",hy);c.setAttribute("r","7");c.style.fill="#07111c";c.style.stroke="#f2c66d";c.style.strokeWidth="2";c.style.cursor=name+"-resize";layer.append(c);});
-    const rotate=document.createElementNS(NS,"circle");rotate.dataset.transformHandle="rotate";rotate.setAttribute("cx",cx);rotate.setAttribute("cy",y-30);rotate.setAttribute("r","8");rotate.style.fill="#f2c66d";rotate.style.stroke="#07111c";rotate.style.strokeWidth="2";rotate.style.cursor="grab";layer.append(rotate);svg.append(layer);
+    const rotate=document.createElementNS(NS,"circle");rotate.dataset.transformHandle="rotate";rotate.setAttribute("cx",cx);rotate.setAttribute("cy",y-30);rotate.setAttribute("r","8");rotate.style.fill="#f2c66d";rotate.style.stroke="#07111c";rotate.style.strokeWidth="2";rotate.style.cursor="grab";layer.append(rotate);
+    if(transformDrag?.kind==="rotate"){const angle=document.createElementNS(NS,"text");angle.setAttribute("x",cx+14);angle.setAttribute("y",y-34);angle.setAttribute("class","chem-rotation-angle");angle.setAttribute("pointer-events","none");angle.textContent=Math.round(transformDrag.deltaDegrees||0)+"°";layer.append(angle);}
+    svg.append(layer);
   }
   function beginSelectionTransform(handle,pointerId,start){
     const bounds=selectedBounds();if(!bounds)return false;
     const center={x:(bounds.minX+bounds.maxX)/2,y:(bounds.minY+bounds.maxY)/2},original=[...selectedAtoms].map(id=>{const a=atomById(id);return a?{id,x:a.x,y:a.y}:null;}).filter(Boolean);
     const dx=start.x-center.x,dy=start.y-center.y;
-    transformDrag={pointer:pointerId,kind:handle==="rotate"?"rotate":"scale",center,original,startAngle:Math.atan2(dy,dx),startRadius:Math.max(8,Math.hypot(dx,dy))};return true;
+    transformDrag={pointer:pointerId,kind:handle==="rotate"?"rotate":"scale",center,original,startAngle:Math.atan2(dy,dx),startRadius:Math.max(8,Math.hypot(dx,dy)),deltaDegrees:0};return true;
   }
   function moveSelectionTransform(current){
     if(!transformDrag)return;
     const t=transformDrag,dx=current.x-t.center.x,dy=current.y-t.center.y;
     if(t.kind==="rotate"){
-      const delta=Math.atan2(dy,dx)-t.startAngle,c=Math.cos(delta),s=Math.sin(delta);
+      const delta=Math.atan2(dy,dx)-t.startAngle,c=Math.cos(delta),s=Math.sin(delta);t.deltaDegrees=delta*180/Math.PI;
       t.original.forEach(o=>{const a=atomById(o.id);if(!a)return;const ox=o.x-t.center.x,oy=o.y-t.center.y;a.x=t.center.x+ox*c-oy*s;a.y=t.center.y+ox*s+oy*c;});
     }else{
       const scale=clamp(Math.hypot(dx,dy)/t.startRadius,.18,5);

@@ -1,144 +1,39 @@
 const SecondarySelectionTools=(()=>{
-  let mode="",gesture=null,overlay=null;
+  let mode="",gesture=null,overlay=null,transformGesture=null,indexGesture=null;
   let undoStack=[],redoStack=[],continuousEdit=false,restoringHistory=false;
-  const $=id=>document.getElementById(id);
+  const $=id=>document.getElementById(id),svgNS="http://www.w3.org/2000/svg";
   function snapshot(){try{return JSON.stringify(SecondaryExplorer?.getWorkspaceSnapshot?.()||null);}catch(_){return null;}}
   function syncHistoryButtons(){const u=$("seUndo"),r=$("seRedo");if(u)u.disabled=undoStack.length===0;if(r)r.disabled=redoStack.length===0;}
   function remember(){if(restoringHistory)return;const snap=snapshot();if(!snap)return;if(undoStack.at(-1)!==snap)undoStack.push(snap);if(undoStack.length>80)undoStack.shift();redoStack=[];syncHistoryButtons();}
-  function restoreHistory(raw){if(!raw)return;restoringHistory=true;try{SecondaryExplorer.restoreWorkspaceSnapshot(JSON.parse(raw));syncTransformControls();syncSelectionState();}finally{restoringHistory=false;}syncHistoryButtons();}
-  function undo(){if(!undoStack.length)return;const current=snapshot();const previous=undoStack.pop();if(current)redoStack.push(current);restoreHistory(previous);}
-  function redo(){if(!redoStack.length)return;const current=snapshot();const next=redoStack.pop();if(current)undoStack.push(current);restoreHistory(next);}
+  function restoreHistory(raw){if(!raw)return;restoringHistory=true;try{SecondaryExplorer.restoreWorkspaceSnapshot(JSON.parse(raw));syncTransformControls();syncSelectionState();}finally{restoringHistory=false;}syncHistoryButtons();drawSelectedTransformOverlay();}
+  function undo(){if(!undoStack.length)return;const current=snapshot(),previous=undoStack.pop();if(current)redoStack.push(current);restoreHistory(previous);}
+  function redo(){if(!redoStack.length)return;const current=snapshot(),next=redoStack.pop();if(current)undoStack.push(current);restoreHistory(next);}
   function beginContinuousEdit(){if(!continuousEdit){remember();continuousEdit=true;}}
   function endContinuousEdit(){continuousEdit=false;}
-  const svgNS="http://www.w3.org/2000/svg";
-  function point(event){
-    const root=$("secondarySvg"),ctm=root?.getScreenCTM?.();
-    if(ctm&&typeof DOMPoint!=="undefined"){
-      try{const p=new DOMPoint(event.clientX,event.clientY).matrixTransform(ctm.inverse());if(Number.isFinite(p.x)&&Number.isFinite(p.y))return {x:p.x,y:p.y};}catch(_){ }
-    }
-    const rect=root.getBoundingClientRect(),v=root.getAttribute("viewBox").split(/\s+/).map(Number);
-    return {x:v[0]+(event.clientX-rect.left)/rect.width*v[2],y:v[1]+(event.clientY-rect.top)/rect.height*v[3]};
-  }
-  function pointInPolygon(p,poly){
-    let inside=false;
-    for(let i=0,j=poly.length-1;i<poly.length;j=i++){
-      const a=poly[i],b=poly[j];
-      const crosses=((a.y>p.y)!==(b.y>p.y))&&(p.x<(b.x-a.x)*(p.y-a.y)/((b.y-a.y)||1e-9)+a.x);
-      if(crosses)inside=!inside;
-    }
-    return inside;
-  }
-  function setMode(next){
-    mode=mode===next?"":next;
-    [["seBoxSelectTool","box"],["seLassoSelectTool","lasso"]].forEach(([id,key])=>{const b=$(id);if(!b)return;const active=mode===key;b.classList.toggle("active",active);b.setAttribute("aria-pressed",String(active));});
-    const root=$("secondarySvg");if(root)root.classList.toggle("se-selecting",Boolean(mode));
-    if($("seSelectionStatus"))$("seSelectionStatus").textContent=mode==="box"?"Drag a rectangle around the residues to select.":mode==="lasso"?"Draw a freeform loop around the residues to select.":selectionMessage();
-  }
-  function selectionMessage(){
-    const n=SecondaryExplorer?.getContext?.().selectedResidues?.length||0;
-    return n?`${n} residue${n===1?"":"s"} selected. Use Selected rotate or Selected zoom to transform only that region.`:"No region selected.";
-  }
-  function syncSelectionState(){
-    const n=SecondaryExplorer?.getContext?.().selectedResidues?.length||0;
-    ["seSelectedRotation","seSelectedScale","seResetSelectedTransform"].forEach(id=>{const el=$(id);if(el)el.disabled=n===0;});
-    if(!mode&&$("seSelectionStatus"))$("seSelectionStatus").textContent=selectionMessage();
-  }
-  function syncTransformControls(){
-    const state=SecondaryExplorer?.getTransformState?.();if(!state)return;
-    const whole=$("seWholeRotation"),selectedRotate=$("seSelectedRotation"),selectedScale=$("seSelectedScale");
-    if(whole){whole.value=String(state.wholeRotation);$("seWholeRotationValue").textContent=Math.round(state.wholeRotation)+"°";}
-    if(selectedRotate){selectedRotate.value=String(state.selectionRotation);$("seSelectedRotationValue").textContent=Math.round(state.selectionRotation)+"°";}
-    if(selectedScale){selectedScale.value=String(state.selectionScale);$("seSelectedScaleValue").textContent=Math.round(state.selectionScale*100)+"%";}
-  }
+  function point(event){const root=$("secondarySvg"),ctm=root?.getScreenCTM?.();if(ctm&&typeof DOMPoint!=="undefined"){try{const p=new DOMPoint(event.clientX,event.clientY).matrixTransform(ctm.inverse());if(Number.isFinite(p.x)&&Number.isFinite(p.y))return{x:p.x,y:p.y};}catch(_){}}const rect=root.getBoundingClientRect(),v=root.getAttribute("viewBox").split(/\s+/).map(Number);return{x:v[0]+(event.clientX-rect.left)/rect.width*v[2],y:v[1]+(event.clientY-rect.top)/rect.height*v[3]};}
+  function pointInPolygon(p,poly){let inside=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j],cross=((a.y>p.y)!==(b.y>p.y))&&(p.x<(b.x-a.x)*(p.y-a.y)/((b.y-a.y)||1e-9)+a.x);if(cross)inside=!inside;}return inside;}
+  function setMode(next){mode=mode===next?"":next;[["seBoxSelectTool","box"],["seLassoSelectTool","lasso"]].forEach(([id,key])=>{const b=$(id);if(!b)return;const active=mode===key;b.classList.toggle("active",active);b.setAttribute("aria-pressed",String(active));});const root=$("secondarySvg");if(root)root.classList.toggle("se-selecting",Boolean(mode));if($("seSelectionStatus"))$("seSelectionStatus").textContent=mode==="box"?"Drag a rectangle around the residues to select.":mode==="lasso"?"Draw a freeform loop around the residues to select.":selectionMessage();drawSelectedTransformOverlay();}
+  function selectionMessage(){const n=SecondaryExplorer?.getContext?.().selectedResidues?.length||0;return n?`${n} residue${n===1?"":"s"} selected. Use the handles on the selection box to rotate or zoom that region.`:"No region selected.";}
+  function syncSelectionState(){const n=SecondaryExplorer?.getContext?.().selectedResidues?.length||0;const reset=$("seResetSelectedTransform");if(reset)reset.disabled=n===0;if(!mode&&$("seSelectionStatus"))$("seSelectionStatus").textContent=selectionMessage();drawSelectedTransformOverlay();}
+  function syncTransformControls(){const state=SecondaryExplorer?.getTransformState?.();if(!state)return;const whole=$("seWholeRotation");if(whole){whole.value=String(state.wholeRotation);$("seWholeRotationValue").textContent=Math.round(state.wholeRotation)+"°";}}
   function removeOverlay(){overlay?.remove();overlay=null;}
-  function drawOverlay(){
-    const root=$("secondarySvg");if(!root||!gesture)return;removeOverlay();
-    if(mode==="box"){
-      const a=gesture.start,b=gesture.points.at(-1)||a,x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),w=Math.abs(a.x-b.x),h=Math.abs(a.y-b.y);
-      overlay=document.createElementNS(svgNS,"rect");overlay.setAttribute("x",x);overlay.setAttribute("y",y);overlay.setAttribute("width",w);overlay.setAttribute("height",h);
-    }else{
-      overlay=document.createElementNS(svgNS,"path");const pts=gesture.points;overlay.setAttribute("d",pts.map((p,i)=>(i?"L":"M")+p.x+" "+p.y).join(" ")+(pts.length>2?" Z":""));overlay.setAttribute("fill","rgba(116,215,182,.10)");
-    }
-    overlay.classList.add("se-selection-overlay");overlay.setAttribute("data-export-remove","");overlay.setAttribute("pointer-events","none");root.append(overlay);
-  }
-  function selectedIndicesFromGesture(){
-    const positions=SecondaryExplorer.getCurrentPositions(),current=SecondaryExplorer.getContext().selectedResidues||[];
-    let hit=[];
-    if(mode==="box"){
-      const a=gesture.start,b=gesture.points.at(-1)||a,minX=Math.min(a.x,b.x),maxX=Math.max(a.x,b.x),minY=Math.min(a.y,b.y),maxY=Math.max(a.y,b.y);
-      hit=positions.map((p,i)=>p.x>=minX&&p.x<=maxX&&p.y>=minY&&p.y<=maxY?i:-1).filter(i=>i>=0);
-    }else if(gesture.points.length>=3){
-      hit=positions.map((p,i)=>pointInPolygon(p,gesture.points)?i:-1).filter(i=>i>=0);
-    }
-    return gesture.additive?[...new Set([...current,...hit])]:hit;
-  }
-  function resetSelectedTransform(){
-    if($("seSelectedRotation"))$("seSelectedRotation").value="0";
-    if($("seSelectedScale"))$("seSelectedScale").value="1";
-    if($("seSelectedRotationValue"))$("seSelectedRotationValue").textContent="0°";
-    if($("seSelectedScaleValue"))$("seSelectedScaleValue").textContent="100%";
-    SecondaryExplorer.setSelectionTransform({rotation:0,scale:1});
-  }
-  function begin(event){
-    if(!mode||event.button!==0)return;
-    const root=$("secondarySvg");if(!root)return;
-    event.preventDefault();event.stopImmediatePropagation();
-    const p=point(event);gesture={pointer:event.pointerId,start:p,points:[p],additive:event.shiftKey};root.setPointerCapture?.(event.pointerId);drawOverlay();
-  }
-  function move(event){
-    if(!gesture||event.pointerId!==gesture.pointer)return;
-    event.preventDefault();event.stopImmediatePropagation();const p=point(event);
-    if(mode==="box")gesture.points=[gesture.start,p];else if(Math.hypot(p.x-gesture.points.at(-1).x,p.y-gesture.points.at(-1).y)>2)gesture.points.push(p);
-    drawOverlay();
-  }
-  function finish(event){
-    if(!gesture||event.pointerId!==gesture.pointer)return;
-    event.preventDefault();event.stopImmediatePropagation();const root=$("secondarySvg");
-    if(mode==="lasso")gesture.points.push(point(event));else gesture.points=[gesture.start,point(event)];
-    const indices=selectedIndicesFromGesture();if(root.hasPointerCapture?.(event.pointerId))root.releasePointerCapture(event.pointerId);
-    gesture=null;removeOverlay();remember();SecondaryExplorer.highlightResidues(indices);resetSelectedTransform();syncSelectionState();
-    if($("seSelectionStatus"))$("seSelectionStatus").textContent=indices.length?`${indices.length} residue${indices.length===1?"":"s"} selected.`:"Nothing was inside the selection.";
-  }
-  function cancel(){gesture=null;removeOverlay();}
-  function buildToolbar(){
-    const stage=document.querySelector("#scene-secondary .secondary-stage"),existing=stage?.querySelector(".se-toolbar");if(!stage||!existing||$("seTransformToolbar"))return;
-    const bar=document.createElement("div");bar.id="seTransformToolbar";bar.className="se-transform-toolbar";
-    bar.innerHTML=`<div class="se-history-group" role="group" aria-label="Undo and redo secondary structure changes">
-      <button id="seUndo" type="button" disabled title="Undo (Ctrl+Z / ⌘Z)">Undo</button>
-      <button id="seRedo" type="button" disabled title="Redo (Ctrl+Y / Ctrl+Shift+Z / ⌘Shift+Z)">Redo</button>
-    </div>
-    <div class="se-transform-group" role="group" aria-label="Secondary structure selection tools">
-      <strong>Select region</strong>
-      <button id="seBoxSelectTool" type="button" aria-pressed="false">Box select</button>
-      <button id="seLassoSelectTool" type="button" aria-pressed="false">Lasso</button>
-      <button id="seClearRegionSelection" type="button">Clear</button>
-    </div>
-    <label class="se-transform-range">Rotate structure <input id="seWholeRotation" type="range" min="-180" max="180" step="1" value="0"><output id="seWholeRotationValue">0°</output></label>
-    <label class="se-transform-range">Selected rotate <input id="seSelectedRotation" type="range" min="-180" max="180" step="1" value="0" disabled><output id="seSelectedRotationValue">0°</output></label>
-    <label class="se-transform-range">Selected zoom <input id="seSelectedScale" type="range" min="0.5" max="2" step="0.05" value="1" disabled><output id="seSelectedScaleValue">100%</output></label>
-    <button id="seResetSelectedTransform" type="button" disabled>Reset selected</button>
-    <p id="seSelectionStatus" role="status">No region selected.</p>`;
-    existing.before(bar);
-    $("seUndo").addEventListener("click",undo);$("seRedo").addEventListener("click",redo);
-    $("seBoxSelectTool").addEventListener("click",()=>setMode("box"));$("seLassoSelectTool").addEventListener("click",()=>setMode("lasso"));
-    $("seClearRegionSelection").addEventListener("click",()=>{remember();SecondaryExplorer.clearHighlights();resetSelectedTransform();syncSelectionState();});
-    ["seWholeRotation","seSelectedRotation","seSelectedScale"].forEach(id=>{const el=$(id);el.addEventListener("pointerdown",beginContinuousEdit);el.addEventListener("keydown",event=>{if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End","PageUp","PageDown"].includes(event.key))beginContinuousEdit();});el.addEventListener("pointerup",endContinuousEdit);el.addEventListener("change",endContinuousEdit);el.addEventListener("blur",endContinuousEdit);});
-    $("seWholeRotation").addEventListener("input",e=>{beginContinuousEdit();const value=Number(e.target.value);$("seWholeRotationValue").textContent=value+"°";SecondaryExplorer.setWholeRotation(value);});
-    $("seSelectedRotation").addEventListener("input",e=>{beginContinuousEdit();const value=Number(e.target.value),scale=Number($("seSelectedScale").value);$("seSelectedRotationValue").textContent=value+"°";SecondaryExplorer.setSelectionTransform({rotation:value,scale});});
-    $("seSelectedScale").addEventListener("input",e=>{beginContinuousEdit();const scale=Number(e.target.value),rotation=Number($("seSelectedRotation").value);$("seSelectedScaleValue").textContent=Math.round(scale*100)+"%";SecondaryExplorer.setSelectionTransform({rotation,scale});});
-    $("seResetSelectedTransform").addEventListener("click",()=>{remember();resetSelectedTransform();});
-    const root=$("secondarySvg");root.addEventListener("pointerdown",begin,true);root.addEventListener("pointermove",move,true);root.addEventListener("pointerup",finish,true);root.addEventListener("pointercancel",cancel,true);
-    document.addEventListener("keydown",event=>{
-      if(event.key==="Escape"){cancel();setMode("");return;}
-      const target=event.target,typing=target?.matches?.("input:not([type=range]),textarea,[contenteditable=true]");if(typing)return;
-      const mod=event.ctrlKey||event.metaKey;if(!mod)return;
-      if(event.key.toLowerCase()==="z"){event.preventDefault();event.shiftKey?redo():undo();}
-      else if(event.ctrlKey&&event.key.toLowerCase()==="y"){event.preventDefault();redo();}
-    });
-    window.addEventListener("rna-secondary-layout",syncSelectionState);window.addEventListener("rna-secondary-select",syncSelectionState);
-    syncTransformControls();syncSelectionState();
-  }
+  function drawGestureOverlay(){const root=$("secondarySvg");if(!root||!gesture)return;removeOverlay();if(mode==="box"){const a=gesture.start,b=gesture.points.at(-1)||a,x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),w=Math.abs(a.x-b.x),h=Math.abs(a.y-b.y);overlay=document.createElementNS(svgNS,"rect");Object.entries({x,y,width:w,height:h}).forEach(([k,v])=>overlay.setAttribute(k,v));}else{overlay=document.createElementNS(svgNS,"path");const pts=gesture.points;overlay.setAttribute("d",pts.map((p,i)=>(i?"L":"M")+p.x+" "+p.y).join(" ")+(pts.length>2?" Z":""));}overlay.classList.add("se-selection-overlay");overlay.setAttribute("data-export-remove","");overlay.setAttribute("pointer-events","none");root.append(overlay);}
+  function selectedBounds(){const positions=SecondaryExplorer?.getCurrentPositions?.()||[],indices=SecondaryExplorer?.getContext?.().selectedResidues||[],pts=indices.map(i=>positions[i]).filter(Boolean);if(pts.length<2)return null;return{minX:Math.min(...pts.map(p=>p.x)),maxX:Math.max(...pts.map(p=>p.x)),minY:Math.min(...pts.map(p=>p.y)),maxY:Math.max(...pts.map(p=>p.y))};}
+  function drawSelectedTransformOverlay(){const root=$("secondarySvg");if(!root)return;root.querySelectorAll(".se-selected-transform-overlay").forEach(el=>el.remove());if(mode||gesture)return;const b=selectedBounds();if(!b)return;const pad=28,x=b.minX-pad,y=b.minY-pad,w=Math.max(52,b.maxX-b.minX+pad*2),h=Math.max(52,b.maxY-b.minY+pad*2),cx=x+w/2;const layer=document.createElementNS(svgNS,"g");layer.setAttribute("class","se-selected-transform-overlay");layer.setAttribute("data-export-remove","");const rect=document.createElementNS(svgNS,"rect");Object.entries({x,y,width:w,height:h,rx:5}).forEach(([k,v])=>rect.setAttribute(k,v));rect.setAttribute("class","se-selected-transform-box");layer.append(rect);const stem=document.createElementNS(svgNS,"line");Object.entries({x1:cx,y1:y,x2:cx,y2:y-32}).forEach(([k,v])=>stem.setAttribute(k,v));stem.setAttribute("class","se-transform-stem");layer.append(stem);[[x,y],[x+w,y],[x+w,y+h],[x,y+h]].forEach(([hx,hy])=>{const c=document.createElementNS(svgNS,"circle");c.dataset.seTransformHandle="scale";c.setAttribute("cx",hx);c.setAttribute("cy",hy);c.setAttribute("r",7);c.setAttribute("class","se-transform-handle se-scale-handle");layer.append(c);});const rotate=document.createElementNS(svgNS,"circle");rotate.dataset.seTransformHandle="rotate";rotate.setAttribute("cx",cx);rotate.setAttribute("cy",y-32);rotate.setAttribute("r",8);rotate.setAttribute("class","se-transform-handle se-rotate-handle");layer.append(rotate);if(transformGesture?.kind==="rotate"){const label=document.createElementNS(svgNS,"text");label.setAttribute("x",cx+14);label.setAttribute("y",y-36);label.setAttribute("class","se-rotation-angle");label.textContent=Math.round(transformGesture.liveRotation)+"°";layer.append(label);}root.append(layer);}
+  function selectedIndicesFromGesture(){const positions=SecondaryExplorer.getCurrentPositions(),current=SecondaryExplorer.getContext().selectedResidues||[];let hit=[];if(mode==="box"){const a=gesture.start,b=gesture.points.at(-1)||a,minX=Math.min(a.x,b.x),maxX=Math.max(a.x,b.x),minY=Math.min(a.y,b.y),maxY=Math.max(a.y,b.y);hit=positions.map((p,i)=>p.x>=minX&&p.x<=maxX&&p.y>=minY&&p.y<=maxY?i:-1).filter(i=>i>=0);}else if(gesture.points.length>=3)hit=positions.map((p,i)=>pointInPolygon(p,gesture.points)?i:-1).filter(i=>i>=0);return gesture.additive?[...new Set([...current,...hit])]:hit;}
+  function resetSelectedTransform(){SecondaryExplorer.setSelectionTransform({rotation:0,scale:1});syncSelectionState();}
+  function beginTransform(event,handle){const b=selectedBounds();if(!b)return;event.preventDefault();event.stopImmediatePropagation();remember();const p=point(event),state=SecondaryExplorer.getTransformState(),center={x:(b.minX+b.maxX)/2,y:(b.minY+b.maxY)/2},dx=p.x-center.x,dy=p.y-center.y;transformGesture={pointer:event.pointerId,kind:handle,center,startAngle:Math.atan2(dy,dx),startRadius:Math.max(8,Math.hypot(dx,dy)),baseRotation:state.selectionRotation,baseScale:state.selectionScale,liveRotation:state.selectionRotation};$("secondarySvg").setPointerCapture?.(event.pointerId);}
+  function moveTransform(event){if(!transformGesture||event.pointerId!==transformGesture.pointer)return false;event.preventDefault();event.stopImmediatePropagation();const p=point(event),t=transformGesture,dx=p.x-t.center.x,dy=p.y-t.center.y;if(t.kind==="rotate"){let rotation=t.baseRotation+(Math.atan2(dy,dx)-t.startAngle)*180/Math.PI;while(rotation>180)rotation-=360;while(rotation<-180)rotation+=360;t.liveRotation=rotation;SecondaryExplorer.setSelectionTransform({rotation,scale:t.baseScale});}else{const scale=Math.max(.35,Math.min(3,t.baseScale*Math.hypot(dx,dy)/t.startRadius));SecondaryExplorer.setSelectionTransform({rotation:t.baseRotation,scale});}drawSelectedTransformOverlay();return true;}
+  function finishTransform(event){if(!transformGesture||event.pointerId!==transformGesture.pointer)return false;event.preventDefault();event.stopImmediatePropagation();const root=$("secondarySvg");if(root.hasPointerCapture?.(event.pointerId))root.releasePointerCapture(event.pointerId);transformGesture=null;drawSelectedTransformOverlay();return true;}
+  function begin(event){const root=$("secondarySvg");if(!root)return;const indexLabel=event.target.closest?.("[data-index-label]");if(indexLabel&&event.button===0){const index=Number(indexLabel.dataset.indexLabel);if(Number.isInteger(index)){event.preventDefault();event.stopImmediatePropagation();remember();const start=point(event),base=SecondaryExplorer.getIndexLabelOffset(index);indexGesture={pointer:event.pointerId,index,start,base};root.setPointerCapture?.(event.pointerId);return;}}const handle=event.target.closest?.("[data-se-transform-handle]");if(handle){beginTransform(event,handle.dataset.seTransformHandle);return;}if(!mode||event.button!==0)return;event.preventDefault();event.stopImmediatePropagation();const p=point(event);gesture={pointer:event.pointerId,start:p,points:[p],additive:event.shiftKey};root.setPointerCapture?.(event.pointerId);drawGestureOverlay();}
+  function move(event){if(indexGesture&&event.pointerId===indexGesture.pointer){event.preventDefault();event.stopImmediatePropagation();const p=point(event),dx=p.x-indexGesture.start.x,dy=p.y-indexGesture.start.y;SecondaryExplorer.setIndexLabelOffset(indexGesture.index,{x:indexGesture.base.x+dx,y:indexGesture.base.y+dy});return;}if(moveTransform(event))return;if(!gesture||event.pointerId!==gesture.pointer)return;event.preventDefault();event.stopImmediatePropagation();const p=point(event);if(mode==="box")gesture.points=[gesture.start,p];else if(Math.hypot(p.x-gesture.points.at(-1).x,p.y-gesture.points.at(-1).y)>2)gesture.points.push(p);drawGestureOverlay();}
+  function finish(event){const root=$("secondarySvg");if(indexGesture&&event.pointerId===indexGesture.pointer){event.preventDefault();event.stopImmediatePropagation();const index=indexGesture.index;indexGesture=null;if(root.hasPointerCapture?.(event.pointerId))root.releasePointerCapture(event.pointerId);const status=$("seSelectionStatus");if(status)status.textContent=`Residue index ${index+1} repositioned; RNA coordinates were unchanged.`;return;}if(finishTransform(event))return;if(!gesture||event.pointerId!==gesture.pointer)return;event.preventDefault();event.stopImmediatePropagation();if(mode==="lasso")gesture.points.push(point(event));else gesture.points=[gesture.start,point(event)];const indices=selectedIndicesFromGesture();if(root.hasPointerCapture?.(event.pointerId))root.releasePointerCapture(event.pointerId);gesture=null;removeOverlay();remember();SecondaryExplorer.highlightResidues(indices);SecondaryExplorer.setSelectionTransform({rotation:0,scale:1});syncSelectionState();if($("seSelectionStatus"))$("seSelectionStatus").textContent=indices.length?`${indices.length} residue${indices.length===1?"":"s"} selected.`:"Nothing was inside the selection.";}
+  function cancel(){gesture=null;transformGesture=null;indexGesture=null;removeOverlay();drawSelectedTransformOverlay();}
+  function buildToolbar(){const stage=document.querySelector("#scene-secondary .secondary-stage"),existing=stage?.querySelector(".se-toolbar");if(!stage||!existing||$("seTransformToolbar"))return;const bar=document.createElement("div");bar.id="seTransformToolbar";bar.className="se-transform-toolbar";bar.innerHTML=`<details class="se-tool-group" open><summary>History</summary><div class="se-tool-group-body"><button id="seUndo" type="button" disabled title="Undo (Ctrl+Z / ⌘Z)">Undo</button><button id="seRedo" type="button" disabled title="Redo (Ctrl+Y / Ctrl+Shift+Z / ⌘Shift+Z)">Redo</button></div></details><details class="se-tool-group" open><summary>Select · Residues & regions</summary><div class="se-tool-group-body"><button id="seBoxSelectTool" type="button" aria-pressed="false">Select / move</button><button id="seLassoSelectTool" type="button" aria-pressed="false">Lasso select</button><button id="seClearRegionSelection" type="button">Clear selection</button><button id="seResetSelectedTransform" type="button" disabled>Reset selected transform</button></div><p id="seSelectionStatus" role="status">No region selected.</p></details>`;existing.before(bar);const viewport=stage.querySelector(".se-viewport");const dock=document.createElement("div");dock.className="se-whole-rotation-dock";dock.innerHTML=`<label>Rotate whole structure <input id="seWholeRotation" type="range" min="-180" max="180" step="1" value="0"><output id="seWholeRotationValue">0°</output></label>`;(viewport||$("secondarySvg")).insertAdjacentElement("afterend",dock);
+    $("seUndo").addEventListener("click",undo);$("seRedo").addEventListener("click",redo);$("seBoxSelectTool").addEventListener("click",()=>setMode("box"));$("seLassoSelectTool").addEventListener("click",()=>setMode("lasso"));$("seClearRegionSelection").addEventListener("click",()=>{remember();SecondaryExplorer.clearHighlights();SecondaryExplorer.setSelectionTransform({rotation:0,scale:1});syncSelectionState();});$("seResetSelectedTransform").addEventListener("click",()=>{remember();resetSelectedTransform();});
+    const whole=$("seWholeRotation");whole.addEventListener("pointerdown",beginContinuousEdit);whole.addEventListener("pointerup",endContinuousEdit);whole.addEventListener("change",endContinuousEdit);whole.addEventListener("blur",endContinuousEdit);whole.addEventListener("keydown",event=>{if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End","PageUp","PageDown"].includes(event.key))beginContinuousEdit();});whole.addEventListener("input",e=>{beginContinuousEdit();const value=Number(e.target.value);$("seWholeRotationValue").textContent=value+"°";SecondaryExplorer.setWholeRotation(value);});
+    const root=$("secondarySvg");root.addEventListener("pointerdown",begin,true);root.addEventListener("pointermove",move,true);root.addEventListener("pointerup",finish,true);root.addEventListener("pointercancel",finish,true);document.addEventListener("keydown",event=>{if(event.key==="Escape"){cancel();setMode("");return;}const target=event.target,typing=target?.matches?.("input:not([type=range]),textarea,[contenteditable=true]");if(typing)return;const mod=event.ctrlKey||event.metaKey;if(!mod)return;if(event.key.toLowerCase()==="z"){event.preventDefault();event.shiftKey?redo():undo();}else if(event.ctrlKey&&event.key.toLowerCase()==="y"){event.preventDefault();redo();}});window.addEventListener("rna-secondary-history-checkpoint",remember);window.addEventListener("rna-secondary-layout",()=>{syncSelectionState();syncTransformControls();});window.addEventListener("rna-secondary-select",syncSelectionState);syncTransformControls();syncSelectionState();}
   function setup(){if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",buildToolbar,{once:true});else buildToolbar();}
-  return {setup,setMode,syncSelectionState};
+  return{setup,setMode,syncSelectionState,remember};
 })();
 SecondarySelectionTools.setup();

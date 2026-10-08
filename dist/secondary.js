@@ -12,7 +12,7 @@ const SecondaryExplorer = (() => {
   let selectedResidues=new Set(), selectedPairKeys=new Set(), sourceNote="";
   let layout="radial", overrides={}, annotations={}, onDefaultSelect=()=>{};
   let residueOverrides={}, backboneOverrides={}, selectedBackbone=0, zoom=1;
-  let panX=0,panY=0,indexMode="default",indexSelection=new Set(),indexOverrides={};
+  let panX=0,panY=0,indexMode="default",indexSelection=new Set(),indexOverrides={},indexLabelOffsets={};
   const indexSettings={color:"#bacbd7",size:12,font:"monospace",fontStyle:"normal"};
   let metadata={}, heatEnabled=false, heatTheme="viridis", heatRange=[0,1], metadataTicket=0;
   let pairProbabilities={}, pairProbEnabled=false, pairProbTheme="viridis", pairProbTicket=0, pairChemistry={};
@@ -188,7 +188,7 @@ const SecondaryExplorer = (() => {
       version:3,sequence:seq,structure:db,layout,arcPairStyle,manualOffsets,zoom,panX,panY,wholeRotation,selectionRotation,selectionScale,
       settings:{...settings},indexSettings:{...indexSettings},overrides,annotations,pairChemistry,
       metadata,heatEnabled,heatTheme,heatRange,pairProbabilities,pairProbEnabled,pairProbTheme,
-      legendSettings,residueOverrides,backboneOverrides,indexMode,indexSelection:[...indexSelection],indexOverrides,pinnedResidues:[...pinnedResidues],
+      legendSettings,residueOverrides,backboneOverrides,indexMode,indexSelection:[...indexSelection],indexOverrides,indexLabelOffsets,pinnedResidues:[...pinnedResidues],
       selected:selected,selectedPairKey,selectedResidues:[...selectedResidues],selectedPairKeys:[...selectedPairKeys],
       exportScale,dragMode,flexDrag,sourceNote
     };
@@ -224,7 +224,7 @@ const SecondaryExplorer = (() => {
       wholeRotation=Number(w.wholeRotation)||0;selectionRotation=Number(w.selectionRotation)||0;selectionScale=Math.max(.35,Math.min(3,Number(w.selectionScale)||1));
       metadata=w.metadata||{};heatEnabled=!!w.heatEnabled;heatTheme=w.heatTheme||"viridis";heatRange=Array.isArray(w.heatRange)?w.heatRange:[0,1];
       pairProbabilities=w.pairProbabilities||{};pairProbEnabled=!!w.pairProbEnabled;pairProbTheme=w.pairProbTheme||"viridis";
-      residueOverrides=w.residueOverrides||{};backboneOverrides=w.backboneOverrides||{};indexMode=w.indexMode||"default";indexSelection=new Set(w.indexSelection||[]);indexOverrides=w.indexOverrides||{};pinnedResidues=new Set(w.pinnedResidues||[]);
+      residueOverrides=w.residueOverrides||{};backboneOverrides=w.backboneOverrides||{};indexMode=w.indexMode||"default";indexSelection=new Set(w.indexSelection||[]);indexOverrides=w.indexOverrides||{};indexLabelOffsets=w.indexLabelOffsets&&typeof w.indexLabelOffsets==="object"?w.indexLabelOffsets:{};pinnedResidues=new Set(w.pinnedResidues||[]);
       selected=Number.isInteger(w.selected)?Math.max(0,Math.min(seq.length-1,w.selected)):0;
       selectedPairKey=typeof w.selectedPairKey==="string"?w.selectedPairKey:null;
       selectedResidues=new Set((w.selectedResidues||[]).filter(i=>Number.isInteger(i)&&i>=0&&i<seq.length));
@@ -416,20 +416,33 @@ const SecondaryExplorer = (() => {
     return {x:v[0]+(event.clientX-rect.left)/rect.width*v[2],y:v[1]+(event.clientY-rect.top)/rect.height*v[3]};
   }
   function installNodeDragging(root){
+    let indexDrag=null;
+    const historyCheckpoint=()=>{if(typeof window!=="undefined"&&typeof Event!=="undefined")window.dispatchEvent(new Event("rna-secondary-history-checkpoint"));};
     root.addEventListener("pointerdown",event=>{
       if(event.button!==0)return;
+      const indexLabel=event.target.closest?.("[data-index-label]");
+      if(indexLabel){
+        const index=Number(indexLabel.dataset.indexLabel);if(!Number.isInteger(index))return;
+        historyCheckpoint();const start=pointerInSecondary(event),base=indexLabelOffsets[index]||{x:0,y:0};
+        indexDrag={pointer:event.pointerId,index,start,base:{x:Number(base.x)||0,y:Number(base.y)||0},moved:false};
+        root.setPointerCapture?.(event.pointerId);event.preventDefault();event.stopPropagation();return;
+      }
       const node=event.target.closest?.(".se-node");if(!node)return;
       const index=Number(node.dataset.residueIndex);if(!Number.isInteger(index))return;
       select(index);
       const weights=dragWeightsFor(index);
       if(!weights.size){$("seDragStatus").textContent="That selection is pinned. Unpin it before moving.";return;}
-      pushLayoutHistory();
+      historyCheckpoint();pushLayoutHistory();
       const start=pointerInSecondary(event),base={};
       weights.forEach((w,i)=>base[i]={x:manualOffsets[i]?.x||0,y:manualOffsets[i]?.y||0,w});
       nodeDrag={pointer:event.pointerId,start,base,moved:false};
       root.setPointerCapture?.(event.pointerId);event.preventDefault();
     });
     root.addEventListener("pointermove",event=>{
+      if(indexDrag&&event.pointerId===indexDrag.pointer){
+        const p=pointerInSecondary(event),dx=p.x-indexDrag.start.x,dy=p.y-indexDrag.start.y;if(Math.hypot(dx,dy)>1)indexDrag.moved=true;
+        indexLabelOffsets[indexDrag.index]={x:indexDrag.base.x+dx,y:indexDrag.base.y+dy};suppressNodeClick=indexDrag.moved;render();return;
+      }
       if(!nodeDrag||event.pointerId!==nodeDrag.pointer)return;
       const p=pointerInSecondary(event),dx=p.x-nodeDrag.start.x,dy=p.y-nodeDrag.start.y;
       if(Math.hypot(dx,dy)>1)nodeDrag.moved=true;
@@ -439,6 +452,11 @@ const SecondaryExplorer = (() => {
       suppressNodeClick=nodeDrag.moved;render();
     });
     const finish=event=>{
+      if(indexDrag&&event.pointerId===indexDrag.pointer){
+        const moved=indexDrag.moved,index=indexDrag.index;indexDrag=null;if(root.hasPointerCapture?.(event.pointerId))root.releasePointerCapture(event.pointerId);
+        if($("seDragStatus"))$("seDragStatus").textContent=moved?"Residue index "+(index+1)+" moved. The RNA structure itself was not changed.":"Drag a residue index to reposition only its label.";
+        setTimeout(()=>suppressNodeClick=false,60);return;
+      }
       if(!nodeDrag||event.pointerId!==nodeDrag.pointer)return;
       const moved=nodeDrag.moved;nodeDrag=null;
       if(root.hasPointerCapture?.(event.pointerId))root.releasePointerCapture(event.pointerId);
@@ -604,9 +622,10 @@ const SecondaryExplorer = (() => {
         :{x:-(next.y-prev.y),y:next.x-prev.x};
       const norm=Math.hypot(away.x,away.y)||1;
       if(indexMode==="all" || indexMode==="selected"&&indexSelection.has(i) || indexMode==="default"&&(i===0||(i+1)%5===0||i===seq.length-1)){
-        const style={...indexSettings,...indexOverrides[i]};
-        const number=text(g,String(i+1),{x:layout==="arc"?0:away.x/norm*30,y:layout==="arc"?36:away.y/norm*30+4,fill:style.color,"font-size":style.size,"font-family":style.font,"font-style":style.fontStyle==="italic"?"italic":"normal","font-weight":style.fontStyle==="bold"?700:400,"text-anchor":"middle"});
-        number.setAttribute("class","se-index");
+        const style={...indexSettings,...indexOverrides[i]},indexOffset=indexLabelOffsets[i]||{x:0,y:0};
+        const number=text(g,String(i+1),{x:(layout==="arc"?0:away.x/norm*30)+(Number(indexOffset.x)||0),y:(layout==="arc"?36:away.y/norm*30+4)+(Number(indexOffset.y)||0),fill:style.color,"font-size":style.size,"font-family":style.font,"font-style":style.fontStyle==="italic"?"italic":"normal","font-weight":style.fontStyle==="bold"?700:400,"text-anchor":"middle"});
+        number.setAttribute("class","se-index");number.setAttribute("data-index-label",String(i));number.setAttribute("role","button");number.setAttribute("aria-label","Residue index "+(i+1)+". Drag to reposition the label without moving the residue.");
+        const indexHit=svg("circle",{cx:number.getAttribute("x"),cy:number.getAttribute("y"),r:Math.max(13,(Number(style.size)||12)*.95),fill:"transparent"});indexHit.setAttribute("class","se-index-hit");indexHit.setAttribute("data-index-label",String(i));indexHit.setAttribute("role","button");indexHit.setAttribute("aria-label","Drag residue index "+(i+1)+" without moving the RNA structure.");g.append(indexHit);
       }
       const title=svg("title");title.textContent=`${seq[i]}${i+1}`+(metadata[i]?` · ${metadata[i].id} · ${metadata[i].value??"No value"}`:"");g.append(title);
       g.addEventListener("click",()=>{if(!suppressNodeClick)select(i);});
@@ -632,7 +651,7 @@ const SecondaryExplorer = (() => {
     const changed=sequence!==seq||structure!==db;
     seq=sequence;db=structure;pairs=parsed.pairs;partner=parsed.partner;selected=0;
     if(changed){selectedResidues=new Set();selectedPairKeys=new Set();selectedPairKey=null;overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;pairProbabilities={};pairProbEnabled=false;pairProbTicket++;pairChemistry={};manualOffsets={};pinnedResidues=new Set();zoom=1;panX=panY=0;wholeRotation=0;selectionRotation=0;selectionScale=1;
-      indexMode="default";indexOverrides={};indexSelection=new Set([...sequence].map((_,i)=>i).filter(i=>i===0||(i+1)%5===0||i===sequence.length-1));
+      indexMode="default";indexOverrides={};indexLabelOffsets={};indexSelection=new Set([...sequence].map((_,i)=>i).filter(i=>i===0||(i+1)%5===0||i===sequence.length-1));
       if($("seMetadataFile"))$("seMetadataFile").value="";
       if($("seMetadataStatus"))$("seMetadataStatus").textContent="Upload metadata for the current sequence.";
       if($("sePairProbFile"))$("sePairProbFile").value="";
@@ -1035,7 +1054,7 @@ const SecondaryExplorer = (() => {
   }
   function setupToolbar(viewport,stage){
     const toolbar=document.createElement("div");toolbar.className="se-toolbar";
-    toolbar.innerHTML='<button id="seZoomOut" type="button" aria-label="Zoom out">−</button><output id="seZoomValue" aria-live="polite">100%</output><button id="seZoomIn" type="button" aria-label="Zoom in">+</button><button id="seZoomReset" type="button">Fit structure</button><button id="seUndoLayout" type="button">Undo move</button><button id="seRedoLayout" type="button">Redo move</button><label>Move<select id="seDragMode"><option value="residue">Nucleotide</option><option value="branch">Stem / branch</option><option value="whole">Whole structure</option></select></label><label class="se-inline-check"><input id="seFlexDrag" type="checkbox" checked> Flexible neighbors</label><button id="sePinSelected" type="button">Pin selected</button><button id="seResetManualLayout" type="button">Reset layout edits</button><label>Go to residue<input id="seGoToResidue" type="number" min="1" value="1"></label><button id="seGoToButton" type="button">Go</button><button id="seExportDialogButton" type="button">Export…</button>';
+    toolbar.innerHTML='<button id="seZoomOut" type="button" aria-label="Zoom out">−</button><output id="seZoomValue" aria-live="polite">100%</output><button id="seZoomIn" type="button" aria-label="Zoom in">+</button><button id="seZoomReset" type="button">Fit structure</button><label>Move<select id="seDragMode"><option value="residue">Nucleotide</option><option value="branch">Stem / branch</option><option value="whole">Whole structure</option></select></label><label class="se-inline-check"><input id="seFlexDrag" type="checkbox" checked> Flexible neighbors</label><button id="sePinSelected" type="button">Pin selected</button><button id="seResetManualLayout" type="button">Reset layout edits</button><label>Go to residue<input id="seGoToResidue" type="number" min="1" value="1"></label><button id="seGoToButton" type="button">Go</button><button id="seExportDialogButton" type="button">Export…</button>';
     viewport.before(toolbar);
     const message=document.createElement("p");message.id="seExportStatus";message.setAttribute("role","status");message.className="se-export-status";viewport.after(message);
     const legend=document.createElement("div");legend.id="seHeatLegend";legend.hidden=true;stage.append(legend);
@@ -1050,7 +1069,6 @@ const SecondaryExplorer = (() => {
     $("seZoomIn").addEventListener("click",()=>changeZoom(1.25));
     $("seZoomOut").addEventListener("click",()=>changeZoom(.8));
     $("seZoomReset").addEventListener("click",fitStructure);
-    $("seUndoLayout").addEventListener("click",undoLayout);$("seRedoLayout").addEventListener("click",redoLayout);
     viewport.addEventListener("wheel",e=>{e.preventDefault();const delta=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?560:1);changeZoom(Math.exp(-Math.max(-200,Math.min(200,delta))*.003),e.clientX,e.clientY);},{passive:false});
     let drag=null,suppressMenu=false;
     viewport.addEventListener("pointerdown",e=>{if(e.button!==2)return;e.preventDefault();drag={id:e.pointerId,x:e.clientX,y:e.clientY};viewport.setPointerCapture(e.pointerId);viewport.classList.add("se-panning");});
@@ -1072,7 +1090,7 @@ const SecondaryExplorer = (() => {
       else {pinnedResidues.add(selected);$("seDragStatus").textContent="Residue "+(selected+1)+" pinned. Neighbor relaxation will leave it fixed.";}
       render();
     });
-    $("seResetManualLayout").addEventListener("click",()=>{pushLayoutHistory();manualOffsets={};pinnedResidues.clear();$("seDragStatus").textContent="Manual layout edits cleared.";render();});
+    $("seResetManualLayout").addEventListener("click",()=>{if(typeof window!=="undefined"&&typeof Event!=="undefined")window.dispatchEvent(new Event("rna-secondary-history-checkpoint"));pushLayoutHistory();manualOffsets={};pinnedResidues.clear();$("seDragStatus").textContent="Manual layout edits cleared.";render();});
     $("seGoToButton").addEventListener("click",()=>{const i=Number($("seGoToResidue").value)-1;if(i>=0&&i<seq.length){select(i);$("seDragStatus").textContent="Selected residue "+(i+1)+"."; }else $("seDragStatus").textContent="Residue number must be between 1 and "+seq.length+".";});
     $("seExportDialogButton").addEventListener("click",()=>$("seExportDialog")?.showModal());
     if(typeof ResizeObserver!=="undefined")new ResizeObserver(()=>{if(seq)applyZoom();}).observe(viewport);
@@ -1225,6 +1243,8 @@ const SecondaryExplorer = (() => {
   }
   return {setup,render,parse,parseMetadata,parsePairProbabilities,radial,orientEndsBottom,parseDbnText,parseCtText,serializeDbn,serializeCt,
     getCurrentPositions(){return coordinates().map(p=>({x:p.x,y:p.y}));},
+    getIndexLabelOffset(index){const o=indexLabelOffsets[index]||{x:0,y:0};return {x:Number(o.x)||0,y:Number(o.y)||0};},
+    setIndexLabelOffset(index,{x=0,y=0}={}){if(!Number.isInteger(index)||index<0||index>=seq.length)return null;indexLabelOffsets[index]={x:Number(x)||0,y:Number(y)||0};render();return {...indexLabelOffsets[index]};},
     setWholeRotation(degrees=0){wholeRotation=Math.max(-180,Math.min(180,Number(degrees)||0));render();return wholeRotation;},
     setSelectionTransform({rotation=selectionRotation,scale=selectionScale}={}){
       selectionRotation=Math.max(-180,Math.min(180,Number(rotation)||0));
