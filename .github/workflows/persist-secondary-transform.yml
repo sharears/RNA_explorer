@@ -1,0 +1,134 @@
+name: Persist secondary transform
+
+on:
+  push:
+    paths:
+      - '.github/workflows/persist-secondary-transform.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply persistence fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('secondary.js')
+          s=p.read_text()
+          old='''  function commitSelectionTransform(){
+    const chosen=[...selectedResidues].filter(i=>i>=0&&i<seq.length);
+    if(!chosen.length||(Math.abs(selectionRotation)<=1e-8&&Math.abs(selectionScale-1)<=1e-8))return false;
+    const final=coordinates();
+    const center={x:chosen.reduce((sum,i)=>sum+final[i].x,0)/chosen.length,y:chosen.reduce((sum,i)=>sum+final[i].y,0)/chosen.length};
+    const inverseSelected=(p)=>{
+      const angle=-selectionRotation*Math.PI/180,cos=Math.cos(angle),sin=Math.sin(angle),scale=1/selectionScale;
+      const x=(p.x-center.x)*scale,y=(p.y-center.y)*scale;
+      return {x:center.x+x*cos-y*sin,y:center.y+x*sin+y*cos};
+    };
+    const wholeAngle=-wholeRotation*Math.PI/180,wholeCos=Math.cos(wholeAngle),wholeSin=Math.sin(wholeAngle);
+    chosen.forEach(i=>{
+      const before=inverseSelected(final[i]),dx=final[i].x-before.x,dy=final[i].y-before.y;
+      const localDx=dx*wholeCos-dy*wholeSin,localDy=dx*wholeSin+dy*wholeCos,base=manualOffsets[i]||{x:0,y:0};
+      manualOffsets[i]={x:(Number(base.x)||0)+localDx,y:(Number(base.y)||0)+localDy};
+    });
+    selectionRotation=0;selectionScale=1;
+    return true;
+  }'''
+          new='''  function commitSelectionTransform(){
+    const chosen=[...selectedResidues].filter(i=>i>=0&&i<seq.length);
+    if(!chosen.length||(Math.abs(selectionRotation)<=1e-8&&Math.abs(selectionScale-1)<=1e-8))return false;
+    // Capture exactly what the user sees, then remove the temporary selection
+    // transform and bake the visual displacement into per-residue manual offsets.
+    // This makes rotate/scale an actual layout edit instead of a selection-only view.
+    const final=coordinates();
+    selectionRotation=0;selectionScale=1;
+    const before=coordinates();
+    const wholeAngle=-wholeRotation*Math.PI/180,wholeCos=Math.cos(wholeAngle),wholeSin=Math.sin(wholeAngle);
+    chosen.forEach(i=>{
+      const dx=final[i].x-before[i].x,dy=final[i].y-before[i].y;
+      // manualOffsets live before whole-structure rotation, so rotate the visual
+      // displacement back into that coordinate system before storing it.
+      const localDx=dx*wholeCos-dy*wholeSin,localDy=dx*wholeSin+dy*wholeCos,base=manualOffsets[i]||{x:0,y:0};
+      manualOffsets[i]={x:(Number(base.x)||0)+localDx,y:(Number(base.y)||0)+localDy};
+    });
+    return true;
+  }'''
+          if old not in s: raise SystemExit('commitSelectionTransform anchor missing')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+
+          p=Path('index.html')
+          s=p.read_text()
+          old='secondary.js?v=secondary-24'
+          new='secondary.js?v=secondary-25'
+          if old not in s: raise SystemExit('secondary cache anchor missing')
+          p.write_text(s.replace(old,new,1))
+          PY
+
+      - name: Validate syntax
+        run: |
+          node --check secondary.js
+          grep -q 'secondary.js?v=secondary-25' index.html
+
+      - name: Install browser test dependencies
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Browser test persistence
+        run: |
+          rm -rf dist && mkdir dist
+          cp index.html *.js *.css dist/
+          cp -r data assets dist/
+          python3 -m http.server 4173 --directory dist >/tmp/rna-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID' EXIT
+          node --input-type=module <<'JS'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1000}});
+          const errors=[];page.on('pageerror',e=>errors.push(String(e)));
+          try{
+            await page.goto('http://127.0.0.1:4173/?page=secondary&start=example',{waitUntil:'networkidle'});
+            await page.waitForSelector('#seTransformToolbar',{state:'visible'});
+            const result=await page.evaluate(()=>{
+              const ids=[0,1,2,3,4];
+              SecondaryExplorer.highlightResidues(ids);
+              SecondaryExplorer.setSelectionTransform({rotation:37,scale:1.42});
+              const transformed=SecondaryExplorer.getCurrentPositions().map(p=>({...p}));
+              const beforeState=SecondaryExplorer.getTransformState();
+              SecondaryExplorer.clearHighlights();
+              const cleared=SecondaryExplorer.getCurrentPositions().map(p=>({...p}));
+              const afterState=SecondaryExplorer.getTransformState();
+              const maxSelectedDelta=Math.max(...ids.map(i=>Math.hypot(transformed[i].x-cleared[i].x,transformed[i].y-cleared[i].y)));
+              SecondaryExplorer.highlightResidues(ids);
+              const reselected=SecondaryExplorer.getCurrentPositions().map(p=>({...p}));
+              const maxReselectedDelta=Math.max(...ids.map(i=>Math.hypot(transformed[i].x-reselected[i].x,transformed[i].y-reselected[i].y)));
+              return {beforeState,afterState,maxSelectedDelta,maxReselectedDelta};
+            });
+            if(result.maxSelectedDelta>0.02)throw new Error('Transformed residues moved after deselection: '+result.maxSelectedDelta);
+            if(result.maxReselectedDelta>0.02)throw new Error('Transformed residues moved after reselection: '+result.maxReselectedDelta);
+            if(Math.abs(result.afterState.selectionRotation)>1e-8||Math.abs(result.afterState.selectionScale-1)>1e-8)throw new Error('Temporary selection transform was not reset after commit');
+            const serious=errors.filter(x=>!/favicon|ResizeObserver loop/i.test(x));if(serious.length)throw new Error('Browser errors: '+serious.join('\n'));
+            console.log(JSON.stringify({result:'PASS',...result}));
+          } finally {await browser.close();}
+          JS
+
+      - name: Commit verified fix and remove temporary workflow
+        if: success()
+        run: |
+          rm .github/workflows/persist-secondary-transform.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add secondary.js index.html .github/workflows/persist-secondary-transform.yml
+          git commit -m 'Persist secondary selection transforms after deselection'
+          git push
