@@ -22,6 +22,9 @@ try {
   const angle = await page.locator('#seWholeRotationValue').textContent();
   if (!String(angle).includes('°')) throw new Error('Whole rotation angle is not shown');
 
+  // Test index dragging without a selection-transform handle overlapping the label.
+  await page.evaluate(() => SecondaryExplorer.clearHighlights());
+  await page.waitForTimeout(100);
   const label = page.locator('[data-index-label]').first();
   await label.waitFor({ state: 'visible' });
   const beforeStructure = await page.evaluate(() => SecondaryExplorer.getCurrentPositions());
