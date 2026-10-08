@@ -1,0 +1,40 @@
+name: Persist secondary transform after deselection
+on:
+  push:
+    paths:
+      - .github/workflows/persist-secondary-transform-final.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply patch
+        run: python3 tools/patch_secondary_transform_persist.py
+      - name: Validate JavaScript
+        run: node --check secondary.js && node --check tests/secondary-transform-persist-browser.mjs
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Browser test
+        run: |
+          python3 -m http.server 4173 > /tmp/rna-explorer-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID' EXIT
+          node tests/secondary-transform-persist-browser.mjs
+      - name: Commit tested update
+        run: |
+          rm .github/workflows/persist-secondary-transform.yml
+          rm .github/workflows/persist-secondary-transform-v2.yml
+          rm .github/workflows/persist-secondary-transform-final.yml
+          rm tools/patch_secondary_transform_persist.py
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add secondary.js index.html tests/secondary-transform-persist-browser.mjs .github/workflows/persist-secondary-transform.yml .github/workflows/persist-secondary-transform-v2.yml .github/workflows/persist-secondary-transform-final.yml tools/patch_secondary_transform_persist.py
+          git commit -m 'Persist secondary selection transforms after deselection'
+          git push
