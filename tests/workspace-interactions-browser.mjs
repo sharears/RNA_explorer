@@ -1,7 +1,7 @@
 import { chromium } from "playwright";
 import fs from "node:fs";
 
-const base=process.env.RNA_EXPLORER_URL||"http://127.0.0.1:4173/?page=secondary";
+const base=process.env.RNA_EXPLORER_URL||"http://127.0.0.1:4173/?page=secondary&start=example";
 const browser=await chromium.launch({headless:true});
 const page=await browser.newPage({viewport:{width:1440,height:1000}});
 const errors=[];
