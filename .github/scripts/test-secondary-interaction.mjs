@@ -22,25 +22,34 @@ try {
   const angle = await page.locator('#seWholeRotationValue').textContent();
   if (!String(angle).includes('°')) throw new Error('Whole rotation angle is not shown');
 
-  // Test index dragging without a selection-transform handle overlapping the label.
+  // Test index dragging through the enlarged invisible hit target. Choose one well inside the viewport.
   await page.evaluate(() => SecondaryExplorer.clearHighlights());
   await page.waitForTimeout(100);
-  const label = page.locator('[data-index-label]').first();
-  await label.waitFor({ state: 'visible' });
+  const target = await page.evaluate(() => {
+    const svg = document.getElementById('secondarySvg'), sr = svg.getBoundingClientRect();
+    return [...svg.querySelectorAll('.se-index-hit')].map(el => {
+      const r = el.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+      return {index:Number(el.getAttribute('data-index-label')),cx,cy,margin:Math.min(cx-sr.left,sr.right-cx,cy-sr.top,sr.bottom-cy)};
+    }).filter(x=>Number.isInteger(x.index)&&x.margin>20).sort((a,b)=>b.margin-a.margin)[0] || null;
+  });
+  if (!target) throw new Error('Could not find a draggable residue-index hit target inside the viewport');
   const beforeStructure = await page.evaluate(() => SecondaryExplorer.getCurrentPositions());
-  const box = await label.boundingBox();
-  if (!box) throw new Error('Index label has no box');
-  const beforeLabel = await label.evaluate(el => ({ x: Number(el.getAttribute('x')), y: Number(el.getAttribute('y')) }));
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const beforeOffset = await page.evaluate(index => SecondaryExplorer.getIndexLabelOffset(index), target.index);
+  const hitAtStart = await page.evaluate(({cx,cy}) => {
+    const el=document.elementFromPoint(cx,cy);return {tag:el?.tagName||'',cls:el?.getAttribute?.('class')||'',index:el?.getAttribute?.('data-index-label')};
+  }, target);
+  if (String(hitAtStart.index)!==String(target.index)) throw new Error('Residue-index drag target is not receiving pointer hits: '+JSON.stringify(hitAtStart));
+  await page.mouse.move(target.cx,target.cy);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2 + 35, box.y + box.height / 2 + 22, { steps: 5 });
+  await page.mouse.move(target.cx+42,target.cy+28,{steps:7});
   await page.mouse.up();
   await page.waitForTimeout(150);
   const afterStructure = await page.evaluate(() => SecondaryExplorer.getCurrentPositions());
   const movedStructure = Math.max(...beforeStructure.map((p,i) => Math.hypot(p.x-afterStructure[i].x,p.y-afterStructure[i].y)));
   if (movedStructure > 1e-6) throw new Error('Dragging index changed RNA coordinates: ' + movedStructure);
-  const afterLabel = await page.locator('[data-index-label]').first().evaluate(el => ({ x: Number(el.getAttribute('x')), y: Number(el.getAttribute('y')) }));
-  if (Math.hypot(afterLabel.x-beforeLabel.x, afterLabel.y-beforeLabel.y) < 5) throw new Error('Index label did not move');
+  const afterOffset = await page.evaluate(index => SecondaryExplorer.getIndexLabelOffset(index), target.index);
+  const indexDelta=Math.hypot(afterOffset.x-beforeOffset.x,afterOffset.y-beforeOffset.y);
+  if (indexDelta < 1) throw new Error('Index label did not move; offsets '+JSON.stringify({beforeOffset,afterOffset,hitAtStart}));
 
   // Exercise selection rotation handle and require a visible live degree label.
   await page.evaluate(() => SecondaryExplorer.highlightResidues([0,1,2,3,4,5]));
@@ -58,7 +67,7 @@ try {
 
   const serious = errors.filter(x => !/favicon|ResizeObserver loop/i.test(x));
   if (serious.length) throw new Error('Browser errors:\n' + serious.join('\n'));
-  console.log(JSON.stringify({ result:'PASS', indexMoved:true, structureStayedFixed:true, liveAngle }));
+  console.log(JSON.stringify({ result:'PASS', indexMoved:true, indexDelta, structureStayedFixed:true, liveAngle }));
 } finally {
   await browser.close();
 }
