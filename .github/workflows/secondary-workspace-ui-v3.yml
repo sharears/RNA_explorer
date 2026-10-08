@@ -1,0 +1,382 @@
+name: Secondary workspace interaction update
+
+on:
+  push:
+    paths:
+      - '.github/workflows/secondary-workspace-ui-v3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply workspace updates
+        run: |
+          cat > secondary-selection-tools.js <<'EOF'
+          const SecondarySelectionTools=(()=>{
+            let mode="box",gesture=null,gestureOverlay=null,transformDrag=null;
+            let undoStack=[],redoStack=[],continuousEdit=false,restoringHistory=false;
+            const $=id=>document.getElementById(id),svgNS="http://www.w3.org/2000/svg";
+
+            function snapshot(){try{return JSON.stringify(SecondaryExplorer?.getWorkspaceSnapshot?.()||null);}catch(_){return null;}}
+            function syncHistoryButtons(){const u=$("seUndo"),r=$("seRedo");if(u)u.disabled=undoStack.length===0;if(r)r.disabled=redoStack.length===0;}
+            function remember(){if(restoringHistory)return;const snap=snapshot();if(!snap)return;if(undoStack.at(-1)!==snap)undoStack.push(snap);if(undoStack.length>80)undoStack.shift();redoStack=[];syncHistoryButtons();}
+            function restoreHistory(raw){if(!raw)return;restoringHistory=true;try{SecondaryExplorer.restoreWorkspaceSnapshot(JSON.parse(raw));syncWholeRotation();syncSelectionState();}finally{restoringHistory=false;}syncHistoryButtons();}
+            function undo(){if(!undoStack.length)return;const current=snapshot(),previous=undoStack.pop();if(current)redoStack.push(current);restoreHistory(previous);}
+            function redo(){if(!redoStack.length)return;const current=snapshot(),next=redoStack.pop();if(current)undoStack.push(current);restoreHistory(next);}
+            function beginContinuousEdit(){if(!continuousEdit){remember();continuousEdit=true;}}
+            function endContinuousEdit(){continuousEdit=false;}
+
+            function point(event){
+              const root=$("secondarySvg"),ctm=root?.getScreenCTM?.();
+              if(ctm&&typeof DOMPoint!=="undefined"){
+                try{const p=new DOMPoint(event.clientX,event.clientY).matrixTransform(ctm.inverse());if(Number.isFinite(p.x)&&Number.isFinite(p.y))return {x:p.x,y:p.y};}catch(_){ }
+              }
+              const rect=root.getBoundingClientRect(),v=root.getAttribute("viewBox").split(/\s+/).map(Number);
+              return {x:v[0]+(event.clientX-rect.left)/Math.max(1,rect.width)*v[2],y:v[1]+(event.clientY-rect.top)/Math.max(1,rect.height)*v[3]};
+            }
+            function pointInPolygon(p,poly){
+              let inside=false;
+              for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+                const a=poly[i],b=poly[j];
+                const crosses=((a.y>p.y)!==(b.y>p.y))&&(p.x<(b.x-a.x)*(p.y-a.y)/((b.y-a.y)||1e-9)+a.x);
+                if(crosses)inside=!inside;
+              }
+              return inside;
+            }
+            function normalizeAngle(value){let n=Number(value)||0;while(n>180)n-=360;while(n<-180)n+=360;return n;}
+            function setMode(next){
+              mode=next||"box";
+              [["seBoxSelectTool","box"],["seLassoSelectTool","lasso"]].forEach(([id,key])=>{const b=$(id);if(!b)return;const active=mode===key;b.classList.toggle("active",active);b.setAttribute("aria-pressed",String(active));});
+              const root=$("secondarySvg");if(root)root.classList.toggle("se-selecting",mode==="lasso");
+              if($("seSelectionStatus"))$("seSelectionStatus").textContent=mode==="lasso"?"Draw a freeform loop around the residues to select.":selectionMessage();
+            }
+            function selectionMessage(){
+              const n=SecondaryExplorer?.getContext?.().selectedResidues?.length||0;
+              return n?`${n} residue${n===1?"":"s"} selected. Use the handles around the selection to rotate or resize it.`:"Select / move: drag empty space for a box selection, or choose Lasso select for a freeform selection.";
+            }
+            function syncWholeRotation(){
+              const state=SecondaryExplorer?.getTransformState?.();if(!state)return;const input=$("seWholeRotation"),out=$("seWholeRotationValue");
+              if(input)input.value=String(state.wholeRotation);if(out)out.textContent=Math.round(state.wholeRotation)+"°";
+            }
+            function syncSelectionState(){
+              if(!mode&&$("seSelectionStatus"))$("seSelectionStatus").textContent=selectionMessage();
+              else if(mode==="box"&&$("seSelectionStatus"))$("seSelectionStatus").textContent=selectionMessage();
+              drawSelectionTransformOverlay();
+            }
+            function removeGestureOverlay(){gestureOverlay?.remove();gestureOverlay=null;}
+            function drawGestureOverlay(){
+              const root=$("secondarySvg");if(!root||!gesture)return;removeGestureOverlay();
+              if(mode==="box"){
+                const a=gesture.start,b=gesture.points.at(-1)||a,x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),w=Math.abs(a.x-b.x),h=Math.abs(a.y-b.y);
+                gestureOverlay=document.createElementNS(svgNS,"rect");gestureOverlay.setAttribute("x",x);gestureOverlay.setAttribute("y",y);gestureOverlay.setAttribute("width",w);gestureOverlay.setAttribute("height",h);
+              }else{
+                gestureOverlay=document.createElementNS(svgNS,"path");const pts=gesture.points;gestureOverlay.setAttribute("d",pts.map((p,i)=>(i?"L":"M")+p.x+" "+p.y).join(" ")+(pts.length>2?" Z":""));gestureOverlay.setAttribute("fill","rgba(116,215,182,.10)");
+              }
+              gestureOverlay.classList.add("se-selection-overlay");gestureOverlay.setAttribute("data-export-remove","");gestureOverlay.setAttribute("pointer-events","none");root.append(gestureOverlay);
+            }
+            function selectedIndicesFromGesture(){
+              const positions=SecondaryExplorer.getCurrentPositions(),current=SecondaryExplorer.getContext().selectedResidues||[];let hit=[];
+              if(mode==="box"){
+                const a=gesture.start,b=gesture.points.at(-1)||a,minX=Math.min(a.x,b.x),maxX=Math.max(a.x,b.x),minY=Math.min(a.y,b.y),maxY=Math.max(a.y,b.y);
+                hit=positions.map((p,i)=>p.x>=minX&&p.x<=maxX&&p.y>=minY&&p.y<=maxY?i:-1).filter(i=>i>=0);
+              }else if(gesture.points.length>=3)hit=positions.map((p,i)=>pointInPolygon(p,gesture.points)?i:-1).filter(i=>i>=0);
+              return gesture.additive?[...new Set([...current,...hit])]:hit;
+            }
+            function selectionGeometry(){
+              const indices=SecondaryExplorer?.getContext?.().selectedResidues||[],positions=SecondaryExplorer?.getCurrentPositions?.()||[];
+              const chosen=indices.filter(i=>positions[i]).map(i=>({i,...positions[i]}));if(!chosen.length)return null;
+              const minX=Math.min(...chosen.map(p=>p.x)),maxX=Math.max(...chosen.map(p=>p.x)),minY=Math.min(...chosen.map(p=>p.y)),maxY=Math.max(...chosen.map(p=>p.y));
+              const center={x:chosen.reduce((s,p)=>s+p.x,0)/chosen.length,y:chosen.reduce((s,p)=>s+p.y,0)/chosen.length};
+              return {chosen,minX,maxX,minY,maxY,center};
+            }
+            function drawSelectionTransformOverlay(){
+              const root=$("secondarySvg");if(!root||gesture)return;root.querySelectorAll(".se-selection-transform-overlay").forEach(el=>el.remove());
+              const geom=selectionGeometry();if(!geom)return;
+              const pad=24,x=geom.minX-pad,y=geom.minY-pad,w=Math.max(48,geom.maxX-geom.minX+pad*2),h=Math.max(48,geom.maxY-geom.minY+pad*2),cx=x+w/2;
+              const layer=document.createElementNS(svgNS,"g");layer.setAttribute("class","se-selection-transform-overlay");layer.setAttribute("data-export-remove","");
+              const rect=document.createElementNS(svgNS,"rect");rect.setAttribute("x",x);rect.setAttribute("y",y);rect.setAttribute("width",w);rect.setAttribute("height",h);rect.setAttribute("rx","5");rect.setAttribute("class","se-transform-box");layer.append(rect);
+              const tag=document.createElementNS(svgNS,"text");tag.setAttribute("x",x+8);tag.setAttribute("y",y+17);tag.setAttribute("class","se-selection-count");tag.textContent=geom.chosen.length+" selected";layer.append(tag);
+              if(geom.chosen.length>=2){
+                const stem=document.createElementNS(svgNS,"line");stem.setAttribute("x1",cx);stem.setAttribute("y1",y);stem.setAttribute("x2",cx);stem.setAttribute("y2",y-30);stem.setAttribute("class","se-transform-stem");layer.append(stem);
+                const rotate=document.createElementNS(svgNS,"circle");rotate.dataset.seTransformHandle="rotate";rotate.setAttribute("cx",cx);rotate.setAttribute("cy",y-30);rotate.setAttribute("r","8");rotate.setAttribute("class","se-transform-handle se-rotate-handle");layer.append(rotate);
+              }
+              [["nw",x,y],["ne",x+w,y],["se",x+w,y+h],["sw",x,y+h]].forEach(([name,hx,hy])=>{const c=document.createElementNS(svgNS,"circle");c.dataset.seTransformHandle="scale";c.dataset.corner=name;c.setAttribute("cx",hx);c.setAttribute("cy",hy);c.setAttribute("r","7");c.setAttribute("class","se-transform-handle se-scale-handle");layer.append(c);});
+              if(transformDrag?.kind==="rotate"){
+                const angle=document.createElementNS(svgNS,"text");angle.setAttribute("x",cx+14);angle.setAttribute("y",y-35);angle.setAttribute("class","se-selected-angle");angle.textContent=Math.round(SecondaryExplorer.getTransformState().selectionRotation)+"°";layer.append(angle);
+              }
+              root.append(layer);
+            }
+            function beginSelectionTransform(event,handle){
+              const geom=selectionGeometry();if(!geom)return false;remember();
+              const p=point(event),state=SecondaryExplorer.getTransformState(),dx=p.x-geom.center.x,dy=p.y-geom.center.y;
+              transformDrag={pointer:event.pointerId,kind:handle,startAngle:Math.atan2(dy,dx),startRadius:Math.max(8,Math.hypot(dx,dy)),startRotation:state.selectionRotation,startScale:state.selectionScale,center:geom.center};
+              $("secondarySvg").setPointerCapture?.(event.pointerId);event.preventDefault();event.stopImmediatePropagation();return true;
+            }
+            function moveSelectionTransform(event){
+              const t=transformDrag,p=point(event),dx=p.x-t.center.x,dy=p.y-t.center.y;
+              if(t.kind==="rotate"){
+                const delta=(Math.atan2(dy,dx)-t.startAngle)*180/Math.PI;
+                SecondaryExplorer.setSelectionTransform({rotation:normalizeAngle(t.startRotation+delta),scale:t.startScale});
+              }else{
+                const ratio=Math.hypot(dx,dy)/t.startRadius;
+                SecondaryExplorer.setSelectionTransform({rotation:t.startRotation,scale:Math.max(.35,Math.min(3,t.startScale*ratio))});
+              }
+            }
+            function resetSelectedTransform(){SecondaryExplorer.setSelectionTransform({rotation:0,scale:1});syncSelectionState();}
+
+            function begin(event){
+              if(event.button!==0)return;const root=$("secondarySvg");if(!root)return;
+              const handle=event.target.closest?.("[data-se-transform-handle]");if(handle&&beginSelectionTransform(event,handle.dataset.seTransformHandle))return;
+              if(mode==="box"&&event.target.closest?.(".se-node,.se-pair,.se-backbone"))return;
+              if(mode!=="box"&&mode!=="lasso")return;
+              event.preventDefault();event.stopImmediatePropagation();const p=point(event);
+              gesture={pointer:event.pointerId,start:p,points:[p],additive:event.shiftKey};root.setPointerCapture?.(event.pointerId);drawGestureOverlay();
+            }
+            function move(event){
+              if(transformDrag&&event.pointerId===transformDrag.pointer){event.preventDefault();event.stopImmediatePropagation();moveSelectionTransform(event);return;}
+              if(!gesture||event.pointerId!==gesture.pointer)return;event.preventDefault();event.stopImmediatePropagation();const p=point(event);
+              if(mode==="box")gesture.points=[gesture.start,p];else if(Math.hypot(p.x-gesture.points.at(-1).x,p.y-gesture.points.at(-1).y)>2)gesture.points.push(p);drawGestureOverlay();
+            }
+            function finish(event){
+              const root=$("secondarySvg");
+              if(transformDrag&&event.pointerId===transformDrag.pointer){event.preventDefault();event.stopImmediatePropagation();if(root.hasPointerCapture?.(event.pointerId))root.releasePointerCapture(event.pointerId);transformDrag=null;drawSelectionTransformOverlay();if($("seSelectionStatus"))$("seSelectionStatus").textContent=selectionMessage();return;}
+              if(!gesture||event.pointerId!==gesture.pointer)return;event.preventDefault();event.stopImmediatePropagation();
+              if(mode==="lasso")gesture.points.push(point(event));else gesture.points=[gesture.start,point(event)];
+              const indices=selectedIndicesFromGesture();if(root.hasPointerCapture?.(event.pointerId))root.releasePointerCapture(event.pointerId);
+              gesture=null;removeGestureOverlay();remember();SecondaryExplorer.highlightResidues(indices);SecondaryExplorer.setSelectionTransform({rotation:0,scale:1});setMode("box");syncSelectionState();
+              if($("seSelectionStatus"))$("seSelectionStatus").textContent=indices.length?`${indices.length} residue${indices.length===1?"":"s"} selected. Use the handles around the selection to rotate or resize it.`:"Nothing was inside the selection.";
+            }
+            function cancel(){gesture=null;transformDrag=null;removeGestureOverlay();drawSelectionTransformOverlay();}
+
+            function buildToolbar(){
+              const stage=document.querySelector("#scene-secondary .secondary-stage"),existing=stage?.querySelector(".se-toolbar"),viewport=stage?.querySelector(".secondary-viewport");if(!stage||!existing||$("seTransformToolbar"))return;
+              const bar=document.createElement("div");bar.id="seTransformToolbar";bar.className="se-transform-toolbar";
+              bar.innerHTML=`<details class="chem-tool-group se-tool-group" open><summary>History</summary><div class="chem-tool-group-body se-tool-group-body"><button id="seUndo" type="button" disabled title="Undo (Ctrl+Z / ⌘Z)">Undo</button><button id="seRedo" type="button" disabled title="Redo (Ctrl+Y / Ctrl+Shift+Z / ⌘Shift+Z)">Redo</button></div></details>
+              <details class="chem-tool-group se-tool-group" open><summary>Select · Residues & regions</summary><div class="chem-tool-group-body se-tool-group-body"><button id="seBoxSelectTool" type="button" aria-pressed="true" class="active">Select / move</button><button id="seLassoSelectTool" type="button" aria-pressed="false">Lasso select</button><button id="seClearRegionSelection" type="button">Clear selection</button><p id="seSelectionStatus" role="status"></p></div></details>`;
+              existing.before(bar);
+              const whole=document.createElement("div");whole.id="seWholeRotationBar";whole.className="se-whole-rotation-bar";whole.innerHTML='<label>Rotate whole RNA <input id="seWholeRotation" type="range" min="-180" max="180" step="1" value="0"><output id="seWholeRotationValue">0°</output></label>';
+              if(viewport)viewport.after(whole);else stage.append(whole);
+              $("seUndo").addEventListener("click",undo);$("seRedo").addEventListener("click",redo);
+              $("seBoxSelectTool").addEventListener("click",()=>setMode("box"));$("seLassoSelectTool").addEventListener("click",()=>setMode("lasso"));
+              $("seClearRegionSelection").addEventListener("click",()=>{remember();SecondaryExplorer.clearHighlights();resetSelectedTransform();syncSelectionState();});
+              const wholeInput=$("seWholeRotation");wholeInput.addEventListener("pointerdown",beginContinuousEdit);wholeInput.addEventListener("pointerup",endContinuousEdit);wholeInput.addEventListener("change",endContinuousEdit);wholeInput.addEventListener("blur",endContinuousEdit);
+              wholeInput.addEventListener("keydown",event=>{if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End","PageUp","PageDown"].includes(event.key))beginContinuousEdit();});
+              wholeInput.addEventListener("input",e=>{beginContinuousEdit();const value=Number(e.target.value);$("seWholeRotationValue").textContent=value+"°";SecondaryExplorer.setWholeRotation(value);});
+              const root=$("secondarySvg");root.addEventListener("pointerdown",begin,true);root.addEventListener("pointermove",move,true);root.addEventListener("pointerup",finish,true);root.addEventListener("pointercancel",cancel,true);
+              document.addEventListener("keydown",event=>{
+                if(event.key==="Escape"){cancel();setMode("box");return;}
+                const target=event.target,typing=target?.matches?.("input:not([type=range]),textarea,[contenteditable=true]");if(typing)return;const mod=event.ctrlKey||event.metaKey;if(!mod)return;
+                if(event.key.toLowerCase()==="z"){event.preventDefault();event.shiftKey?redo():undo();}else if(event.ctrlKey&&event.key.toLowerCase()==="y"){event.preventDefault();redo();}
+              });
+              window.addEventListener("rna-secondary-history-checkpoint",remember);
+              window.addEventListener("rna-secondary-layout",()=>{syncWholeRotation();syncSelectionState();});
+              window.addEventListener("rna-secondary-select",syncSelectionState);window.addEventListener("rna-secondary-pair-select",syncSelectionState);
+              syncWholeRotation();setMode("box");syncSelectionState();syncHistoryButtons();
+            }
+            function setup(){if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",buildToolbar,{once:true});else buildToolbar();}
+            return {setup,setMode,syncSelectionState,undo,redo};
+          })();
+          SecondarySelectionTools.setup();
+          EOF
+
+          cat > /tmp/patch.py <<'PY'
+          from pathlib import Path
+
+          # Molecular drawing: show live angle while the rotate handle is being dragged.
+          p=Path('chemistry-editor.js');s=p.read_text()
+          old='''    const rotate=document.createElementNS(NS,"circle");rotate.dataset.transformHandle="rotate";rotate.setAttribute("cx",cx);rotate.setAttribute("cy",y-30);rotate.setAttribute("r","8");rotate.style.fill="#f2c66d";rotate.style.stroke="#07111c";rotate.style.strokeWidth="2";rotate.style.cursor="grab";layer.append(rotate);svg.append(layer);'''
+          new='''    const rotate=document.createElementNS(NS,"circle");rotate.dataset.transformHandle="rotate";rotate.setAttribute("cx",cx);rotate.setAttribute("cy",y-30);rotate.setAttribute("r","8");rotate.style.fill="#f2c66d";rotate.style.stroke="#07111c";rotate.style.strokeWidth="2";rotate.style.cursor="grab";layer.append(rotate);\n    if(transformDrag?.kind==="rotate"){const angle=document.createElementNS(NS,"text");angle.setAttribute("x",cx+14);angle.setAttribute("y",y-35);angle.setAttribute("class","chem-rotation-angle");angle.textContent=Math.round(transformDrag.angleDegrees||0)+"°";layer.append(angle);}\n    svg.append(layer);'''
+          if old not in s: raise SystemExit('chem rotate overlay anchor missing')
+          s=s.replace(old,new,1)
+          old='''    transformDrag={pointer:pointerId,kind:handle==="rotate"?"rotate":"scale",center,original,startAngle:Math.atan2(dy,dx),startRadius:Math.max(8,Math.hypot(dx,dy))};return true;'''
+          new='''    transformDrag={pointer:pointerId,kind:handle==="rotate"?"rotate":"scale",center,original,startAngle:Math.atan2(dy,dx),startRadius:Math.max(8,Math.hypot(dx,dy)),angleDegrees:0};return true;'''
+          if old not in s: raise SystemExit('chem transform start anchor missing')
+          s=s.replace(old,new,1)
+          old='''      const delta=Math.atan2(dy,dx)-t.startAngle,c=Math.cos(delta),s=Math.sin(delta);\n      t.original.forEach(o=>{const a=atomById(o.id);if(!a)return;const ox=o.x-t.center.x,oy=o.y-t.center.y;a.x=t.center.x+ox*c-oy*s;a.y=t.center.y+ox*s+oy*c;});'''
+          new='''      const delta=Math.atan2(dy,dx)-t.startAngle,c=Math.cos(delta),s=Math.sin(delta);t.angleDegrees=delta*180/Math.PI;\n      t.original.forEach(o=>{const a=atomById(o.id);if(!a)return;const ox=o.x-t.center.x,oy=o.y-t.center.y;a.x=t.center.x+ox*c-oy*s;a.y=t.center.y+ox*s+oy*c;});'''
+          if old not in s: raise SystemExit('chem transform move anchor missing')
+          s=s.replace(old,new,1);p.write_text(s)
+
+          p=Path('chemistry-editor.css');s=p.read_text();s+='''\n\n.chem-rotation-angle{fill:#f2c66d;font:700 13px "DM Mono",monospace;paint-order:stroke;stroke:#07111c;stroke-width:4px;pointer-events:none;}\n''';p.write_text(s)
+
+          # Secondary structure: index labels get their own offsets, independent dragging, and general-history checkpoints.
+          p=Path('secondary.js');s=p.read_text()
+          old='''  let panX=0,panY=0,indexMode="default",indexSelection=new Set(),indexOverrides={};'''
+          new='''  let panX=0,panY=0,indexMode="default",indexSelection=new Set(),indexOverrides={},indexOffsets={};'''
+          if old not in s: raise SystemExit('index state anchor missing')
+          s=s.replace(old,new,1)
+          old='''      legendSettings,residueOverrides,backboneOverrides,indexMode,indexSelection:[...indexSelection],indexOverrides,pinnedResidues:[...pinnedResidues],'''
+          new='''      legendSettings,residueOverrides,backboneOverrides,indexMode,indexSelection:[...indexSelection],indexOverrides,indexOffsets,pinnedResidues:[...pinnedResidues],'''
+          if old not in s: raise SystemExit('snapshot index anchor missing')
+          s=s.replace(old,new,1)
+          old='''      residueOverrides=w.residueOverrides||{};backboneOverrides=w.backboneOverrides||{};indexMode=w.indexMode||"default";indexSelection=new Set(w.indexSelection||[]);indexOverrides=w.indexOverrides||{};pinnedResidues=new Set(w.pinnedResidues||[]);'''
+          new='''      residueOverrides=w.residueOverrides||{};backboneOverrides=w.backboneOverrides||{};indexMode=w.indexMode||"default";indexSelection=new Set(w.indexSelection||[]);indexOverrides=w.indexOverrides||{};indexOffsets=w.indexOffsets||{};pinnedResidues=new Set(w.pinnedResidues||[]);'''
+          if old not in s: raise SystemExit('restore index anchor missing')
+          s=s.replace(old,new,1)
+          old='''  function pushLayoutHistory(){\n    layoutHistory.push(JSON.stringify(manualOffsets));if(layoutHistory.length>60)layoutHistory.shift();layoutFuture=[];\n  }\n  function undoLayout(){if(!layoutHistory.length)return;layoutFuture.push(JSON.stringify(manualOffsets));manualOffsets=JSON.parse(layoutHistory.pop());render();}\n  function redoLayout(){if(!layoutFuture.length)return;layoutHistory.push(JSON.stringify(manualOffsets));manualOffsets=JSON.parse(layoutFuture.pop());render();}'''
+          new='''  function layoutEditSnapshot(){return JSON.stringify({manualOffsets,indexOffsets});}\n  function restoreLayoutEdit(raw){const state=JSON.parse(raw);if(state&&Object.prototype.hasOwnProperty.call(state,"manualOffsets")){manualOffsets=state.manualOffsets||{};indexOffsets=state.indexOffsets||{};}else manualOffsets=state||{};}\n  function pushLayoutHistory(){\n    if(typeof window!=="undefined"&&typeof CustomEvent!=="undefined")window.dispatchEvent(new CustomEvent("rna-secondary-history-checkpoint"));\n    layoutHistory.push(layoutEditSnapshot());if(layoutHistory.length>60)layoutHistory.shift();layoutFuture=[];\n  }\n  function undoLayout(){if(!layoutHistory.length)return;layoutFuture.push(layoutEditSnapshot());restoreLayoutEdit(layoutHistory.pop());render();}\n  function redoLayout(){if(!layoutFuture.length)return;layoutHistory.push(layoutEditSnapshot());restoreLayoutEdit(layoutFuture.pop());render();}'''
+          if old not in s: raise SystemExit('layout history anchor missing')
+          s=s.replace(old,new,1)
+
+          old='''    root.addEventListener("pointerdown",event=>{\n      if(event.button!==0)return;\n      const node=event.target.closest?.(".se-node");if(!node)return;\n      const index=Number(node.dataset.residueIndex);if(!Number.isInteger(index))return;\n      select(index);\n      const weights=dragWeightsFor(index);\n      if(!weights.size){$("seDragStatus").textContent="That selection is pinned. Unpin it before moving.";return;}\n      pushLayoutHistory();\n      const start=pointerInSecondary(event),base={};\n      weights.forEach((w,i)=>base[i]={x:manualOffsets[i]?.x||0,y:manualOffsets[i]?.y||0,w});\n      nodeDrag={pointer:event.pointerId,start,base,moved:false};\n      root.setPointerCapture?.(event.pointerId);event.preventDefault();\n    });'''
+          new='''    root.addEventListener("pointerdown",event=>{\n      if(event.button!==0)return;\n      const indexLabel=event.target.closest?.(".se-index");\n      if(indexLabel){\n        const index=Number(indexLabel.dataset.indexLabel);if(!Number.isInteger(index))return;pushLayoutHistory();\n        const start=pointerInSecondary(event),base=indexOffsets[index]||{x:0,y:0};\n        nodeDrag={kind:"index",index,pointer:event.pointerId,start,base:{x:Number(base.x)||0,y:Number(base.y)||0},moved:false};\n        root.setPointerCapture?.(event.pointerId);event.preventDefault();return;\n      }\n      const node=event.target.closest?.(".se-node");if(!node)return;\n      const index=Number(node.dataset.residueIndex);if(!Number.isInteger(index))return;\n      select(index);\n      const weights=dragWeightsFor(index);\n      if(!weights.size){$("seDragStatus").textContent="That selection is pinned. Unpin it before moving.";return;}\n      pushLayoutHistory();\n      const start=pointerInSecondary(event),base={};\n      weights.forEach((w,i)=>base[i]={x:manualOffsets[i]?.x||0,y:manualOffsets[i]?.y||0,w});\n      nodeDrag={kind:"residue",pointer:event.pointerId,start,base,moved:false};\n      root.setPointerCapture?.(event.pointerId);event.preventDefault();\n    });'''
+          if old not in s: raise SystemExit('node pointerdown anchor missing')
+          s=s.replace(old,new,1)
+          old='''      const p=pointerInSecondary(event),dx=p.x-nodeDrag.start.x,dy=p.y-nodeDrag.start.y;\n      if(Math.hypot(dx,dy)>1)nodeDrag.moved=true;\n      Object.entries(nodeDrag.base).forEach(([key,o])=>{\n        const i=Number(key);manualOffsets[i]={x:o.x+dx*o.w,y:o.y+dy*o.w};\n      });\n      suppressNodeClick=nodeDrag.moved;render();'''
+          new='''      const p=pointerInSecondary(event),dx=p.x-nodeDrag.start.x,dy=p.y-nodeDrag.start.y;\n      if(Math.hypot(dx,dy)>1)nodeDrag.moved=true;\n      if(nodeDrag.kind==="index")indexOffsets[nodeDrag.index]={x:nodeDrag.base.x+dx,y:nodeDrag.base.y+dy};\n      else Object.entries(nodeDrag.base).forEach(([key,o])=>{\n        const i=Number(key);manualOffsets[i]={x:o.x+dx*o.w,y:o.y+dy*o.w};\n      });\n      suppressNodeClick=nodeDrag.moved;render();'''
+          if old not in s: raise SystemExit('node pointermove anchor missing')
+          s=s.replace(old,new,1)
+          old='''      const moved=nodeDrag.moved;nodeDrag=null;\n      if(root.hasPointerCapture?.(event.pointerId))root.releasePointerCapture(event.pointerId);\n      $("seDragStatus").textContent=moved?"Manual layout updated. Connected backbone and pair lines follow the moved residues.":"Drag a nucleotide, branch/stem, or whole structure.";'''
+          new='''      const moved=nodeDrag.moved,kind=nodeDrag.kind;nodeDrag=null;\n      if(root.hasPointerCapture?.(event.pointerId))root.releasePointerCapture(event.pointerId);\n      $("seDragStatus").textContent=moved?(kind==="index"?"Residue index moved independently; the RNA structure did not move.":"Manual layout updated. Connected backbone and pair lines follow the moved residues."):"Drag a nucleotide, branch/stem, whole structure, or a residue index label.";'''
+          if old not in s: raise SystemExit('node finish anchor missing')
+          s=s.replace(old,new,1)
+
+          old='''        const style={...indexSettings,...indexOverrides[i]};\n        const number=text(g,String(i+1),{x:layout==="arc"?0:away.x/norm*30,y:layout==="arc"?36:away.y/norm*30+4,fill:style.color,"font-size":style.size,"font-family":style.font,"font-style":style.fontStyle==="italic"?"italic":"normal","font-weight":style.fontStyle==="bold"?700:400,"text-anchor":"middle"});\n        number.setAttribute("class","se-index");'''
+          new='''        const style={...indexSettings,...indexOverrides[i]},offset=indexOffsets[i]||{x:0,y:0};\n        const baseX=layout==="arc"?0:away.x/norm*30,baseY=layout==="arc"?36:away.y/norm*30+4;\n        const number=text(g,String(i+1),{x:baseX+(Number(offset.x)||0),y:baseY+(Number(offset.y)||0),fill:style.color,"font-size":style.size,"font-family":style.font,"font-style":style.fontStyle==="italic"?"italic":"normal","font-weight":style.fontStyle==="bold"?700:400,"text-anchor":"middle"});\n        number.setAttribute("class","se-index");number.dataset.indexLabel=i;number.setAttribute("aria-label",`Move residue index ${i+1}`);'''
+          if old not in s: raise SystemExit('index render anchor missing')
+          s=s.replace(old,new,1)
+
+          old='''      if(changed){selectedResidues=new Set();selectedPairKeys=new Set();selectedPairKey=null;overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;pairProbabilities={};pairProbEnabled=false;pairProbTicket++;pairChemistry={};manualOffsets={};pinnedResidues=new Set();zoom=1;panX=panY=0;wholeRotation=0;selectionRotation=0;selectionScale=1;\n      indexMode="default";indexOverrides={};indexSelection=new Set([...sequence].map((_,i)=>i).filter(i=>i===0||(i+1)%5===0||i===sequence.length-1));'''
+          new='''      if(changed){selectedResidues=new Set();selectedPairKeys=new Set();selectedPairKey=null;overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;pairProbabilities={};pairProbEnabled=false;pairProbTicket++;pairChemistry={};manualOffsets={};pinnedResidues=new Set();zoom=1;panX=panY=0;wholeRotation=0;selectionRotation=0;selectionScale=1;\n      indexMode="default";indexOverrides={};indexOffsets={};indexSelection=new Set([...sequence].map((_,i)=>i).filter(i=>i===0||(i+1)%5===0||i===sequence.length-1));'''
+          if old not in s: raise SystemExit('load reset anchor missing')
+          s=s.replace(old,new,1)
+
+          old='''    toolbar.innerHTML='<button id="seZoomOut" type="button" aria-label="Zoom out">−</button><output id="seZoomValue" aria-live="polite">100%</output><button id="seZoomIn" type="button" aria-label="Zoom in">+</button><button id="seZoomReset" type="button">Fit structure</button><button id="seUndoLayout" type="button">Undo move</button><button id="seRedoLayout" type="button">Redo move</button><label>Move<select id="seDragMode"><option value="residue">Nucleotide</option><option value="branch">Stem / branch</option><option value="whole">Whole structure</option></select></label><label class="se-inline-check"><input id="seFlexDrag" type="checkbox" checked> Flexible neighbors</label><button id="sePinSelected" type="button">Pin selected</button><button id="seResetManualLayout" type="button">Reset layout edits</button><label>Go to residue<input id="seGoToResidue" type="number" min="1" value="1"></label><button id="seGoToButton" type="button">Go</button><button id="seExportDialogButton" type="button">Export…</button>';'''
+          new='''    toolbar.innerHTML='<button id="seZoomOut" type="button" aria-label="Zoom out">−</button><output id="seZoomValue" aria-live="polite">100%</output><button id="seZoomIn" type="button" aria-label="Zoom in">+</button><button id="seZoomReset" type="button">Fit structure</button><label>Move<select id="seDragMode"><option value="residue">Nucleotide</option><option value="branch">Stem / branch</option><option value="whole">Whole structure</option></select></label><label class="se-inline-check"><input id="seFlexDrag" type="checkbox" checked> Flexible neighbors</label><button id="sePinSelected" type="button">Pin selected</button><button id="seResetManualLayout" type="button">Reset layout edits</button><label>Go to residue<input id="seGoToResidue" type="number" min="1" value="1"></label><button id="seGoToButton" type="button">Go</button><button id="seExportDialogButton" type="button">Export…</button>';'''
+          if old not in s: raise SystemExit('secondary toolbar anchor missing')
+          s=s.replace(old,new,1)
+          old='''    $("seZoomReset").addEventListener("click",fitStructure);\n    $("seUndoLayout").addEventListener("click",undoLayout);$("seRedoLayout").addEventListener("click",redoLayout);'''
+          new='''    $("seZoomReset").addEventListener("click",fitStructure);'''
+          if old not in s: raise SystemExit('undo move listeners anchor missing')
+          s=s.replace(old,new,1);p.write_text(s)
+
+          p=Path('secondary-selection-tools.css');s=p.read_text();s='''/* Secondary selection/history controls mirror the molecular drawing workspace. */\n.se-transform-toolbar{display:flex;flex-wrap:wrap;gap:9px;align-items:flex-start;margin-bottom:9px}\n.se-tool-group{border:1px solid rgba(116,215,182,.24);border-radius:9px;background:rgba(255,255,255,.025);overflow:hidden}\n.se-tool-group>summary{cursor:pointer;padding:9px 11px;color:var(--cream);font-size:.82rem;font-weight:700;user-select:none}\n.se-tool-group-body{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:0 10px 10px}\n.se-tool-group-body button{border:1px solid var(--line);background:var(--ink-soft);color:var(--text);border-radius:7px;padding:8px 10px;cursor:pointer}\n.se-tool-group-body button.active,.se-tool-group-body button[aria-pressed="true"]{border-color:var(--mint);background:rgba(116,215,182,.12);color:var(--mint)}\n.se-tool-group-body button:disabled{opacity:.42;cursor:default}\n#seSelectionStatus{flex:1 1 100%;margin:1px 0 0;color:var(--muted);font-size:.78rem;line-height:1.45;max-width:620px}\n.se-whole-rotation-bar{display:flex;justify-content:center;padding:11px 12px;margin:8px 0 2px;border:1px solid rgba(116,215,182,.18);border-radius:9px;background:rgba(116,215,182,.025)}\n.se-whole-rotation-bar label{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:.8rem}\n.se-whole-rotation-bar input[type="range"]{width:min(520px,55vw)}\n.se-whole-rotation-bar output{min-width:48px;color:var(--cream);font:13px "DM Mono",monospace;text-align:right}\n#secondarySvg.se-selecting{cursor:crosshair;touch-action:none}\n.se-selection-overlay{stroke:#74d7b6;stroke-width:2;stroke-dasharray:7 5;fill:rgba(116,215,182,.10);vector-effect:non-scaling-stroke;filter:drop-shadow(0 0 3px rgba(116,215,182,.35))}\n.se-transform-box{fill:rgba(242,198,109,.025);stroke:#f2c66d;stroke-width:1.5;stroke-dasharray:6 4;vector-effect:non-scaling-stroke;pointer-events:none}\n.se-transform-stem{stroke:#f2c66d;stroke-width:1.5;vector-effect:non-scaling-stroke;pointer-events:none}\n.se-transform-handle{fill:#07111c;stroke:#f2c66d;stroke-width:2;vector-effect:non-scaling-stroke;cursor:nwse-resize}\n.se-rotate-handle{fill:#f2c66d;stroke:#07111c;cursor:grab}\n.se-selection-count,.se-selected-angle{fill:#f2c66d;font:700 12px "DM Mono",monospace;paint-order:stroke;stroke:#07111c;stroke-width:4px;pointer-events:none}\n.se-selected-angle{font-size:13px}\n.se-index{cursor:move;pointer-events:auto;user-select:none}\n\n/* Homepage Did-you-know strip */\nbody:not([data-page-mode="home"]) .home-fact-strip{display:none!important}\n.home-fact-strip{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:18px;align-items:center;margin:-34px 0 38px;padding:16px 20px;border:1px solid rgba(116,215,182,.34);border-radius:14px;background:linear-gradient(90deg,rgba(116,215,182,.11),rgba(232,187,105,.07));box-shadow:0 12px 30px rgba(0,0,0,.13)}\n.home-fact-label{font:800 .82rem "DM Mono",monospace;color:var(--mint);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}.home-fact-strip p{margin:0;color:var(--cream);font-size:1rem;line-height:1.55}.home-fact-strip button{border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.035);color:var(--text);padding:8px 11px;cursor:pointer;white-space:nowrap}.home-fact-strip button:hover{border-color:var(--mint);color:var(--mint)}\n\n/* Four-level flashcard picker */\n.flashcard-level-wrap{display:grid;gap:10px;margin:0 0 18px}.flashcard-level-heading{display:flex;justify-content:space-between;gap:16px;align-items:baseline}.flashcard-level-heading strong{font-size:1rem}.flashcard-level-heading span{color:var(--muted);font-size:.85rem;text-align:right}.flashcard-levels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.flashcard-levels button{border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.025);color:var(--text);padding:11px 8px;cursor:pointer;font-weight:750}.flashcard-levels button.active,.flashcard-levels button:hover{border-color:var(--mint);background:rgba(116,215,182,.1);color:var(--mint)}\n\n@media(max-width:720px){\n  .se-transform-toolbar{align-items:stretch}.se-tool-group{flex:1 1 100%}.se-whole-rotation-bar label{width:100%;display:grid;grid-template-columns:auto 1fr auto}.se-whole-rotation-bar input[type="range"]{width:100%}\n  .home-fact-strip{grid-template-columns:1fr;gap:8px;margin-top:-24px}.home-fact-strip button{justify-self:start}\n  .flashcard-levels{grid-template-columns:repeat(2,minmax(0,1fr))}.flashcard-level-heading{display:grid;gap:4px}.flashcard-level-heading span{text-align:left}.rna-flashcard{min-height:230px;padding:24px 18px}.rna-flashcard strong{font-size:clamp(1.2rem,6vw,1.65rem)}\n}\n''';p.write_text(s)
+
+          p=Path('index.html');s=p.read_text();
+          replacements={
+            'chemistry-editor.css?v=chem-editor-7':'chemistry-editor.css?v=chem-editor-8',
+            'secondary-selection-tools.css?v=2':'secondary-selection-tools.css?v=3',
+            'chemistry-editor.js?v=chem-editor-12':'chemistry-editor.js?v=chem-editor-13',
+            'secondary.js?v=secondary-23':'secondary.js?v=secondary-24',
+            'secondary-selection-tools.js?v=2':'secondary-selection-tools.js?v=3'
+          }
+          for a,b in replacements.items():
+            if a not in s: raise SystemExit('index cache anchor missing: '+a)
+            s=s.replace(a,b,1)
+          p.write_text(s)
+          PY
+          python3 /tmp/patch.py
+
+      - name: Validate JavaScript and expected UI source
+        run: |
+          node --check chemistry-editor.js
+          node --check secondary.js
+          node --check secondary-selection-tools.js
+          grep -q 'summary>History' secondary-selection-tools.js
+          grep -q 'Select · Residues & regions' secondary-selection-tools.js
+          ! grep -q 'id="seUndoLayout"' secondary.js
+          ! grep -q 'id="seRedoLayout"' secondary.js
+          grep -q 'data.indexLabel' secondary.js
+          grep -q 'chem-rotation-angle' chemistry-editor.js
+
+      - name: Install browser test dependencies
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Build test copy
+        run: |
+          rm -rf dist && mkdir dist
+          cp index.html *.js *.css dist/
+          cp -r data assets dist/
+
+      - name: Browser-test interactions
+        run: |
+          python3 -m http.server 4173 --directory dist >/tmp/rna-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID' EXIT
+          node --input-type=module <<'JS'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1000}});
+          const errors=[];page.on('pageerror',e=>errors.push(String(e)));
+          try{
+            await page.goto('http://127.0.0.1:4173/?page=secondary&start=example',{waitUntil:'networkidle'});
+            await page.waitForSelector('#seTransformToolbar',{state:'visible'});
+            const summaries=await page.locator('#seTransformToolbar summary').allTextContents();
+            if(!summaries.includes('History')||!summaries.includes('Select · Residues & regions'))throw new Error('History/Select grouping mismatch: '+JSON.stringify(summaries));
+            if(await page.locator('#seUndoLayout,#seRedoLayout').count())throw new Error('Old Undo move / Redo move controls still exist');
+            const order=await page.evaluate(()=>{const v=document.querySelector('.secondary-viewport'),w=document.querySelector('#seWholeRotationBar');return Boolean(v&&w&&(v.compareDocumentPosition(w)&Node.DOCUMENT_POSITION_FOLLOWING));});
+            if(!order)throw new Error('Whole-RNA rotation control is not below the structure viewport');
+            await page.locator('#seWholeRotation').evaluate(el=>{el.value='35';el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));});
+            const wholeState=await page.evaluate(()=>SecondaryExplorer.getTransformState());
+            if(wholeState.wholeRotation!==35)throw new Error('Whole rotation failed');
+            if((await page.locator('#seWholeRotationValue').textContent())!=='35°')throw new Error('Whole rotation angle is not shown');
+
+            await page.evaluate(()=>{SecondaryExplorer.setWholeRotation(0);SecondaryExplorer.highlightResidues([0,1,2,3]);SecondaryExplorer.setSelectionTransform({rotation:0,scale:1});});
+            await page.waitForSelector('[data-se-transform-handle="rotate"]',{state:'visible'});
+            const rotate=await page.locator('[data-se-transform-handle="rotate"]').boundingBox();if(!rotate)throw new Error('Selected-region rotate handle missing');
+            await page.mouse.move(rotate.x+rotate.width/2,rotate.y+rotate.height/2);await page.mouse.down();await page.mouse.move(rotate.x+rotate.width/2+45,rotate.y+rotate.height/2+25,{steps:8});
+            const selectedAngle=(await page.locator('.se-selected-angle').textContent())||'';
+            if(!selectedAngle.includes('°'))throw new Error('Selected-region live angle is not shown');
+            const duringRotate=await page.evaluate(()=>SecondaryExplorer.getTransformState().selectionRotation);if(Math.abs(duringRotate)<1)throw new Error('Selected region did not rotate');
+            await page.mouse.up();
+            await page.click('#seUndo');
+            const afterUndo=await page.evaluate(()=>SecondaryExplorer.getTransformState().selectionRotation);if(Math.abs(afterUndo)>1e-6)throw new Error('History Undo did not restore selected rotation');
+            await page.click('#seRedo');
+            const afterRedo=await page.evaluate(()=>SecondaryExplorer.getTransformState().selectionRotation);if(Math.abs(afterRedo)<1)throw new Error('History Redo did not restore selected rotation');
+
+            // Drag a residue index independently and confirm RNA coordinates do not move.
+            await page.evaluate(()=>{SecondaryExplorer.setSelectionTransform({rotation:0,scale:1});SecondaryExplorer.clearHighlights();});
+            await page.waitForSelector('#secondarySvg .se-index',{state:'visible'});
+            const beforePositions=await page.evaluate(()=>SecondaryExplorer.getCurrentPositions());
+            const indexLocator=page.locator('#secondarySvg .se-index').first();const beforeIndex=await indexLocator.boundingBox();if(!beforeIndex)throw new Error('Residue index not measurable');
+            await page.mouse.move(beforeIndex.x+beforeIndex.width/2,beforeIndex.y+beforeIndex.height/2);await page.mouse.down();await page.mouse.move(beforeIndex.x+beforeIndex.width/2+42,beforeIndex.y+beforeIndex.height/2+24,{steps:8});await page.mouse.up();await page.waitForTimeout(100);
+            const afterPositions=await page.evaluate(()=>SecondaryExplorer.getCurrentPositions());
+            const maxResidueShift=Math.max(...afterPositions.map((p,i)=>Math.hypot(p.x-beforePositions[i].x,p.y-beforePositions[i].y)));
+            if(maxResidueShift>1e-6)throw new Error('Dragging a residue index moved the RNA structure: '+maxResidueShift);
+            const afterIndex=await page.locator('#secondarySvg .se-index').first().boundingBox();if(!afterIndex||Math.hypot(afterIndex.x-beforeIndex.x,afterIndex.y-beforeIndex.y)<10)throw new Error('Residue index did not move independently');
+            await page.click('#seUndo');await page.waitForTimeout(100);
+            const undoIndex=await page.locator('#secondarySvg .se-index').first().boundingBox();if(!undoIndex||Math.hypot(undoIndex.x-beforeIndex.x,undoIndex.y-beforeIndex.y)>3)throw new Error('History Undo did not restore residue-index position');
+
+            // A normal nucleotide move must also be undoable from the History block.
+            const node=page.locator('#secondarySvg .se-node').nth(5);const nodeBox=await node.boundingBox();if(!nodeBox)throw new Error('Nucleotide not measurable');
+            const residueBefore=await page.evaluate(()=>SecondaryExplorer.getCurrentPositions()[5]);
+            await page.mouse.move(nodeBox.x+nodeBox.width/2,nodeBox.y+nodeBox.height/2);await page.mouse.down();await page.mouse.move(nodeBox.x+nodeBox.width/2+35,nodeBox.y+nodeBox.height/2+20,{steps:8});await page.mouse.up();await page.waitForTimeout(100);
+            const residueMoved=await page.evaluate(()=>SecondaryExplorer.getCurrentPositions()[5]);if(Math.hypot(residueMoved.x-residueBefore.x,residueMoved.y-residueBefore.y)<5)throw new Error('Nucleotide drag did not move');
+            await page.click('#seUndo');await page.waitForTimeout(100);
+            const residueRestored=await page.evaluate(()=>SecondaryExplorer.getCurrentPositions()[5]);if(Math.hypot(residueRestored.x-residueBefore.x,residueRestored.y-residueBefore.y)>2)throw new Error('History Undo did not restore nucleotide move');
+
+            // Molecular drawing rotate handle must show a live angle while dragging.
+            await page.evaluate(()=>MoleculeEditor.openBase('A'));
+            await page.waitForSelector('#chemEditorDialog[open]');
+            const atoms=page.locator('#chemEditorSvg [data-atom-id]');
+            await atoms.nth(0).click();await atoms.nth(1).click({modifiers:['Shift']});
+            await page.waitForSelector('#chemEditorSvg [data-transform-handle="rotate"]',{state:'visible'});
+            const chemRotate=await page.locator('#chemEditorSvg [data-transform-handle="rotate"]').boundingBox();if(!chemRotate)throw new Error('Molecular rotate handle missing');
+            await page.mouse.move(chemRotate.x+chemRotate.width/2,chemRotate.y+chemRotate.height/2);await page.mouse.down();await page.mouse.move(chemRotate.x+chemRotate.width/2+38,chemRotate.y+chemRotate.height/2+24,{steps:8});
+            const chemAngle=(await page.locator('#chemEditorSvg .chem-rotation-angle').textContent())||'';if(!chemAngle.includes('°'))throw new Error('Molecular drawing live rotation angle missing');
+            await page.mouse.up();
+
+            const serious=errors.filter(x=>!/favicon|ResizeObserver loop/i.test(x));if(serious.length)throw new Error('Browser errors: '+serious.join('\n'));
+            console.log(JSON.stringify({result:'PASS',selectedAngle,chemAngle,maxResidueShift}));
+          } finally {await browser.close();}
+          JS
+
+      - name: Commit verified update and remove workflow
+        run: |
+          rm .github/workflows/secondary-workspace-ui-v3.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Refine secondary workspace selection and history'
+          git push
