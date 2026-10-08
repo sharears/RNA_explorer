@@ -416,17 +416,19 @@ const ExportTools = (() => {
   }
 
   function keepMolecularWorkspaceDedicated() {
+    let observer = null;
     const update = () => {
       const dialog = document.getElementById('chemEditorDialog');
-      if (!dialog) return;
+      if (!dialog) return false;
       dialog.setAttribute('aria-label', 'Molecular Drawing workspace');
       dialog.dataset.workspaceShell = 'drawing';
       const eyebrow = dialog.querySelector('.eyebrow');
-      if (eyebrow) eyebrow.textContent = 'Explore · Molecular Drawing';
+      if (eyebrow && eyebrow.textContent !== 'Explore · Molecular Drawing') eyebrow.textContent = 'Explore · Molecular Drawing';
+      return true;
     };
-    const observer = new MutationObserver(update);
+    if (update()) return;
+    observer = new MutationObserver(() => { if (update()) observer?.disconnect(); });
     observer.observe(document.body, { childList: true, subtree: true });
-    update();
   }
 
   function initWorkspacePolish() {
