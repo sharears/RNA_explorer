@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Apply, fix viewport target, and browser-test
+      - name: Apply, fix interaction details, and browser-test
         run: |
           python3 -m pip install --quiet pyyaml
           python3 - <<'PY'
@@ -33,6 +33,10 @@ jobs:
           subprocess.run(['bash','-lc',apply],check=True)
           p=Path('secondary-selection-tools.js')
           s=p.read_text().replace('.secondary-viewport','.se-viewport')
+          old='''              }\n            }\n            function resetSelectedTransform'''
+          new='''              }\n              drawSelectionTransformOverlay();\n            }\n            function resetSelectedTransform'''
+          if old not in s: raise SystemExit('selected-transform redraw anchor missing')
+          s=s.replace(old,new,1)
           p.write_text(s)
 
           validate=scripts['Validate JavaScript and source expectations'].replace("grep -q 'data.indexLabel' secondary.js","grep -q 'dataset.indexLabel' secondary.js")
@@ -51,4 +55,4 @@ jobs:
           git commit -m 'Refine secondary workspace selection and history'
           git push
 
-# retrigger after correcting the runtime viewport selector
+# retrigger after keeping the selected-region angle overlay visible during rotation
