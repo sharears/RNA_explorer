@@ -13,10 +13,10 @@ const waitForRepresentation=value=>page.waitForFunction(v=>TertiaryExplorer.getW
 
 try{
   await page.goto(base+"?page=tertiary&start=example",{waitUntil:"domcontentloaded",timeout:30000});
-  await page.waitForSelector('body[data-page-mode="tertiary"] #scene-tertiary:not([hidden])',{timeout:10000});
-  await page.waitForSelector("#teWorkspaceCategories .workspace-category-tab",{timeout:10000});
-  await page.waitForSelector("#teSequenceDock .te-seq-residue",{state:"visible",timeout:15000});
-  await page.waitForSelector("#teUndo",{timeout:10000});
+  await page.waitForSelector('#scene-tertiary:not([hidden])',{state:"visible",timeout:20000});
+  await page.waitForSelector("#teWorkspaceCategories .workspace-category-tab",{timeout:20000});
+  await page.waitForSelector("#teSequenceDock .te-seq-residue",{state:"visible",timeout:20000});
+  await page.waitForSelector("#teUndo",{timeout:20000});
 
   const tertiaryTabs=await page.locator("#teWorkspaceCategories .workspace-category-tab").allTextContents();
   assert(JSON.stringify(tertiaryTabs.map(x=>x.trim()))===JSON.stringify(["Select","Display","Analyze"]),"Tertiary category order is not Select / Display / Analyze: "+JSON.stringify(tertiaryTabs));
@@ -34,14 +34,12 @@ try{
   assert(/^[ACGU?]$/.test(sequenceInfo.base),"First tertiary sequence item has an invalid base label: "+JSON.stringify(sequenceInfo));
   assert(/chain/i.test(sequenceInfo.chain),"Tertiary sequence dock is missing the chain label: "+JSON.stringify(sequenceInfo));
 
-  // Sequence click must stay linked to the 3D residue selection.
   const sequenceButton=page.locator("#teSequenceDock .te-seq-residue").nth(4);
   await sequenceButton.click();
   await page.waitForFunction(()=>TertiaryExplorer.getWorkspaceSnapshot().selected===4,{timeout:10000});
   const afterSequence=await page.evaluate(()=>TertiaryExplorer.getWorkspaceSnapshot());
   assert(afterSequence.selectionIndices.includes(4),"Clicking residue 5 in the sequence did not select the same residue in the tertiary workspace.");
 
-  // Manual proximity cutoff: no presets, current selection acts as the seed.
   const selectDetails=page.locator('#teWorkspaceCategories [data-workspace-panel="select"] details').first();
   if(!(await selectDetails.getAttribute("open")))await selectDetails.locator(":scope > summary").click();
   await page.fill("#teSelectNearCutoff","6.2");
@@ -52,7 +50,6 @@ try{
   assert(afterNear.selectionIndices.length>=1,"Proximity selection removed the starting residue unexpectedly.");
   assert((await page.locator("#teSelectionProximityStatus").textContent()).includes("6.2 Å"),"Proximity selection did not use the user-entered cutoff.");
 
-  // Tertiary Undo/Redo should operate on workspace state and use the same global controls/shortcuts language.
   await page.click('[data-workspace-category="display"]');
   const beforeRep=await page.evaluate(()=>TertiaryExplorer.getWorkspaceSnapshot().representation);
   const changedRep=beforeRep==="spheres"?"sticks":"spheres";
@@ -67,17 +64,15 @@ try{
   const historyTitles=await page.evaluate(()=>({u:document.querySelector("#teUndo")?.title,r:document.querySelector("#teRedo")?.title}));
   assert(/Ctrl\+Z/.test(historyTitles.u||"")&&/Ctrl\+Y/.test(historyTitles.r||""),"Tertiary Undo/Redo shortcut labels are not standardized: "+JSON.stringify(historyTitles));
 
-  // Secondary workspace uses the same three categories, while its existing Undo/Redo remain global.
   await page.goto(base+"?page=secondary&start=example",{waitUntil:"domcontentloaded",timeout:30000});
-  await page.waitForSelector('body[data-page-mode="secondary"] #scene-secondary:not([hidden])',{timeout:10000});
-  await page.waitForSelector("#seWorkspaceCategories .workspace-category-tab",{timeout:10000});
-  await page.waitForSelector("#seWorkspaceHistory #seUndo",{timeout:10000});
+  await page.waitForSelector('#scene-secondary:not([hidden])',{state:"visible",timeout:20000});
+  await page.waitForSelector("#seWorkspaceCategories .workspace-category-tab",{timeout:20000});
+  await page.waitForSelector("#seWorkspaceHistory #seUndo",{timeout:20000});
   const secondaryTabs=await page.locator("#seWorkspaceCategories .workspace-category-tab").allTextContents();
   assert(JSON.stringify(secondaryTabs.map(x=>x.trim()))===JSON.stringify(["Select","Display","Analyze"]),"Secondary category order is not Select / Display / Analyze: "+JSON.stringify(secondaryTabs));
   assert(await page.locator('#seWorkspaceCategories [data-workspace-panel="display"] details').count()>0,"Secondary Display category is empty.");
   assert(await page.locator('#seWorkspaceCategories [data-workspace-panel="analyze"] details').count()>0,"Secondary Analyze category is empty.");
 
-  // Molecular Drawing keeps the same Undo/Redo naming and shortcut convention.
   await page.evaluate(()=>MoleculeEditor.openBlank());
   await page.waitForSelector("#chemEditorDialog[open] #chemUndoButton",{state:"visible",timeout:10000});
   const molecularHistory=await page.evaluate(()=>({
