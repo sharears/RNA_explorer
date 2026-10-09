@@ -1,0 +1,36 @@
+name: Hotfix workspace organizer load freeze
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/hotfix-workspace-organizer.yml
+
+permissions:
+  contents: write
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch organizer
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('workspace-organizer.js')
+          s = p.read_text()
+          s = s.replace("if(u){u.textContent='Undo';u.title='Undo (Ctrl/⌘ Z)';}", "if(u){if(u.textContent!=='Undo')u.textContent='Undo';if(u.title!=='Undo (Ctrl/⌘ Z)')u.title='Undo (Ctrl/⌘ Z)';}")
+          s = s.replace("if(r){r.textContent='Redo';r.title='Redo (Ctrl/⌘ Shift Z)';}", "if(r){if(r.textContent!=='Redo')r.textContent='Redo';if(r.title!=='Redo (Ctrl/⌘ Shift Z)')r.title='Redo (Ctrl/⌘ Shift Z)';}")
+          s = s.replace("if(label&&chain){const option=chain.options?.[chain.selectedIndex];label.textContent='Chain '+(option?.textContent||chain.value||'RNA');}", "if(label&&chain){const option=chain.options?.[chain.selectedIndex];const next='Chain '+(option?.textContent||chain.value||'RNA');if(label.textContent!==next)label.textContent=next;}")
+          s = s.replace("const observer=new MutationObserver(()=>run());observer.observe(document.body,{childList:true,subtree:true});\n    setTimeout(run,250);setTimeout(run,1000);", "setTimeout(run,250);setTimeout(run,1000);setTimeout(run,2500);")
+          p.write_text(s)
+          PY
+      - name: Commit hotfix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add workspace-organizer.js
+          git diff --cached --quiet && exit 0
+          git commit -m "Fix workspace organizer load freeze"
+          git push
