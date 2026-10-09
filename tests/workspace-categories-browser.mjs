@@ -42,6 +42,8 @@ try{
   assert(afterSequence.selectionIndices.includes(4),"Clicking residue 5 in the sequence did not select the same residue in the tertiary workspace.");
 
   // Manual proximity cutoff: no presets, current selection acts as the seed.
+  const selectDetails=page.locator('#teWorkspaceCategories [data-workspace-panel="select"] details').first();
+  if(!(await selectDetails.getAttribute("open")))await selectDetails.locator(":scope > summary").click();
   await page.fill("#teSelectNearCutoff","6.2");
   assert(await page.getAttribute("#teSelectNearCutoff","max")==="25","Tertiary proximity selection should allow manual cutoffs only up to 25 Å.");
   await page.click("#teSelectNearButton");
