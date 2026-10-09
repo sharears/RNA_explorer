@@ -184,10 +184,19 @@
     }
   }
 
+  function loadWorkspaceTools() {
+    if (document.querySelector('script[data-rna-workspace-tools="true"]')) return;
+    const script = document.createElement("script");
+    script.src = "workspace-tools.js?v=1";
+    script.dataset.rnaWorkspaceTools = "true";
+    document.body.appendChild(script);
+  }
+
   function initializeUiFixes() {
     setupUtilityMenuHover();
     syncLearningAdvancedControls();
     setupHomeCoverArtwork();
+    loadWorkspaceTools();
 
     const observer = new MutationObserver(() => {
       syncLearningAdvancedControls();
