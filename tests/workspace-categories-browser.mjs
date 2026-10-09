@@ -43,7 +43,21 @@ try{
   await page.click('#teWorkspaceCategories [data-workspace-category="select"]');
   const cutoff=page.locator("#teSelectNearCutoff");
   const cutoffDetails=cutoff.locator("xpath=ancestor::details[1]");
-  if(!(await cutoffDetails.getAttribute("open")))await cutoffDetails.locator(":scope > summary").click();
+  if(!(await cutoffDetails.getAttribute("open")))await cutoffDetails.evaluate(el=>{el.open=true;});
+  if(!(await cutoff.isVisible())){
+    const visibility=await cutoff.evaluate(el=>{
+      const path=[];let node=el;
+      while(node){
+        const style=getComputedStyle(node),rect=node.getBoundingClientRect();
+        path.push({tag:node.tagName,id:node.id||"",className:typeof node.className==="string"?node.className:"",hidden:Boolean(node.hidden),open:node.tagName==="DETAILS"?node.open:null,display:style.display,visibility:style.visibility,opacity:style.opacity,width:rect.width,height:rect.height});
+        node=node.parentElement;
+      }
+      return {path,activeCategory:document.getElementById("teWorkspaceCategories")?.dataset.activeCategory,selectPanelHidden:document.querySelector('#teWorkspaceCategories [data-workspace-panel="select"]')?.hidden,selectPanelHtml:document.querySelector('#teWorkspaceCategories [data-workspace-panel="select"]')?.innerHTML.slice(0,1200)};
+    });
+    fs.mkdirSync("test-output",{recursive:true});
+    fs.writeFileSync("test-output/workspace-cutoff-visibility.json",JSON.stringify(visibility,null,2));
+    throw new Error("Tertiary proximity cutoff is hidden after activating Select. "+JSON.stringify(visibility));
+  }
   await cutoff.fill("6.2");
   assert(await cutoff.getAttribute("max")==="25","Tertiary proximity selection should allow manual cutoffs only up to 25 Å.");
   await page.click("#teSelectNearButton");
