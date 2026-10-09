@@ -67,9 +67,13 @@ try{
   assert((await page.locator("#teSelectionProximityStatus").textContent()).includes("6.2 Å"),"Proximity selection did not use the user-entered cutoff.");
 
   await page.click('#teWorkspaceCategories [data-workspace-category="display"]');
+  const representation=page.locator("#teRepresentation");
+  const representationDetails=representation.locator("xpath=ancestor::details[1]");
+  if(!(await representationDetails.getAttribute("open")))await representationDetails.evaluate(el=>{el.open=true;});
+  await representation.waitFor({state:"visible",timeout:10000});
   const beforeRep=await page.evaluate(()=>TertiaryExplorer.getWorkspaceSnapshot().representation);
   const changedRep=beforeRep==="spheres"?"sticks":"spheres";
-  await page.selectOption("#teRepresentation",changedRep);
+  await representation.selectOption(changedRep);
   await waitForRepresentation(changedRep);
   await page.waitForFunction(()=>!document.querySelector("#teUndo")?.disabled,{timeout:10000});
   await page.click("#teUndo");
