@@ -187,8 +187,15 @@
   function loadWorkspaceTools() {
     if (document.querySelector('script[data-rna-workspace-tools="true"]')) return;
     const script = document.createElement("script");
-    script.src = "workspace-tools.js?v=1";
+    script.src = "workspace-tools.js?v=2";
     script.dataset.rnaWorkspaceTools = "true";
+    script.onload = () => {
+      if (document.querySelector('script[data-rna-workspace-tools-fix="true"]')) return;
+      const fix = document.createElement("script");
+      fix.src = "workspace-tools-fix.js?v=1";
+      fix.dataset.rnaWorkspaceToolsFix = "true";
+      document.body.appendChild(fix);
+    };
     document.body.appendChild(script);
   }
 
