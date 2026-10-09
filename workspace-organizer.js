@@ -136,7 +136,7 @@
       const base=document.createElement('span');base.className='rna-seq-base';base.textContent=m[1]||'?';
       b.append(idx,base);
     });
-    const chain=$('teChainSelect');const label=q('#teSequenceDock .rna-chain-label');if(label&&chain){const option=chain.options?.[chain.selectedIndex];label.textContent='Chain '+(option?.textContent||chain.value||'RNA');}
+    const chain=$('teChainSelect');const label=q('#teSequenceDock .rna-chain-label');if(label&&chain){const option=chain.options?.[chain.selectedIndex];const next='Chain '+(option?.textContent||chain.value||'RNA');if(label.textContent!==next)label.textContent=next;}
   }
 
   function dockTertiarySequence(){
@@ -182,8 +182,8 @@
   function standardizeChemHistory(){
     const dialog=$('chemEditorDialog');if(!dialog)return false;
     const u=$('chemUndoButton'),r=$('chemRedoButton');
-    if(u){u.textContent='Undo';u.title='Undo (Ctrl/⌘ Z)';}
-    if(r){r.textContent='Redo';r.title='Redo (Ctrl/⌘ Shift Z)';}
+    if(u){if(u.textContent!=='Undo')u.textContent='Undo';if(u.title!=='Undo (Ctrl/⌘ Z)')u.title='Undo (Ctrl/⌘ Z)';}
+    if(r){if(r.textContent!=='Redo')r.textContent='Redo';if(r.title!=='Redo (Ctrl/⌘ Shift Z)')r.title='Redo (Ctrl/⌘ Shift Z)';}
     return true;
   }
 
@@ -208,8 +208,7 @@
       categorizeTertiary();dockTertiarySequence();categorizeSecondary();standardizeChemHistory();
     };
     run();
-    const observer=new MutationObserver(()=>run());observer.observe(document.body,{childList:true,subtree:true});
-    setTimeout(run,250);setTimeout(run,1000);
+    setTimeout(run,250);setTimeout(run,1000);setTimeout(run,2500);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
