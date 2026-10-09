@@ -25,6 +25,7 @@ jobs:
           SERVER_PID=$!
           trap 'kill $SERVER_PID' EXIT
           node tests/workspace-interactions-browser.mjs
+          node tests/workspace-categories-browser.mjs
           node tests/utility-hover-browser.mjs
           node tests/mini3d-trackball-browser.mjs
           node tests/afternoon-updates-browser.mjs
@@ -34,7 +35,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: workspace-interaction-diagnostics
-          path: test-output/workspace-interactions-error.txt
+          path: |
+            test-output/workspace-interactions-error.txt
+            test-output/workspace-categories-error.txt
           if-no-files-found: ignore
       - name: Upload 1HS8 styled screenshot
         if: always()
