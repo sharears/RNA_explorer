@@ -40,7 +40,7 @@ try{
   const afterSequence=await page.evaluate(()=>TertiaryExplorer.getWorkspaceSnapshot());
   assert(afterSequence.selectionIndices.includes(4),"Clicking residue 5 in the sequence did not select the same residue in the tertiary workspace.");
 
-  await page.click('[data-workspace-category="select"]');
+  await page.click('#teWorkspaceCategories [data-workspace-category="select"]');
   const cutoff=page.locator("#teSelectNearCutoff");
   const cutoffDetails=cutoff.locator("xpath=ancestor::details[1]");
   if(!(await cutoffDetails.getAttribute("open")))await cutoffDetails.locator(":scope > summary").click();
@@ -52,7 +52,7 @@ try{
   assert(afterNear.selectionIndices.length>=1,"Proximity selection removed the starting residue unexpectedly.");
   assert((await page.locator("#teSelectionProximityStatus").textContent()).includes("6.2 Å"),"Proximity selection did not use the user-entered cutoff.");
 
-  await page.click('[data-workspace-category="display"]');
+  await page.click('#teWorkspaceCategories [data-workspace-category="display"]');
   const beforeRep=await page.evaluate(()=>TertiaryExplorer.getWorkspaceSnapshot().representation);
   const changedRep=beforeRep==="spheres"?"sticks":"spheres";
   await page.selectOption("#teRepresentation",changedRep);
