@@ -7,7 +7,8 @@
     const lower=String(summary||"").trim().toLowerCase();
     if(lower.startsWith("select")||lower.includes("saved object")||lower.includes("focus on structural"))return "select";
     if(lower.startsWith("analyze")||lower.includes("compare / align"))return "analyze";
-    return "display";
+    if(lower==="display"||lower.includes("residue index")||lower==="clipping"||lower.includes("saved camera"))return "display";
+    return null;
   }
 
   function tidy(details,category){
@@ -21,11 +22,10 @@
     const controls=document.querySelector("#tertiaryControls .te-controls"),shell=document.getElementById("teWorkspaceCategories");
     if(!controls||!shell)return false;
     const panels=Object.fromEntries(CATEGORY_ORDER.map(key=>[key,shell.querySelector(`[data-workspace-panel="${key}"]`)]));
-    [...controls.children].filter(el=>el.tagName==="DETAILS").forEach(details=>{
+    [...controls.querySelectorAll("details")].filter(details=>!shell.contains(details)).forEach(details=>{
       const summary=details.querySelector(":scope > summary")?.textContent.trim()||"";
-      const lower=summary.toLowerCase();
-      if(lower.includes("import structure"))return;
-      const category=categoryFor(summary);
+      if(!summary||summary.toLowerCase().includes("import structure"))return;
+      const category=categoryFor(summary);if(!category)return;
       tidy(details,category);
       panels[category]?.append(details);
     });
