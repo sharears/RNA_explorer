@@ -40,6 +40,7 @@ try{
   const afterSequence=await page.evaluate(()=>TertiaryExplorer.getWorkspaceSnapshot());
   assert(afterSequence.selectionIndices.includes(4),"Clicking residue 5 in the sequence did not select the same residue in the tertiary workspace.");
 
+  await page.click('[data-workspace-category="select"]');
   const cutoff=page.locator("#teSelectNearCutoff");
   const cutoffDetails=cutoff.locator("xpath=ancestor::details[1]");
   if(!(await cutoffDetails.getAttribute("open")))await cutoffDetails.locator(":scope > summary").click();
