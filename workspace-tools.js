@@ -136,7 +136,7 @@
     directDetails.forEach((details, index) => {
       const summary = details.querySelector(":scope > summary")?.textContent.trim() || "";
       const lower = summary.toLowerCase();
-      if (index === 0 || lower.includes("import structure")) return; // global load/mapping controls
+      if (index === 0 || lower.includes("import structure")) return;
       let category = "display";
       if (lower.startsWith("select") || lower.includes("saved object") || lower.includes("focus on structural")) category = "select";
       else if (lower.startsWith("analyze") || lower.includes("compare / align")) category = "analyze";
@@ -186,7 +186,8 @@
       if (!label) return;
       const text = select?.selectedOptions?.[0]?.textContent?.trim();
       const value = select?.value;
-      label.textContent = text ? `Chain ${value || text}` : "RNA chain";
+      const next = text ? `Chain ${value || text}` : "RNA chain";
+      if (label.textContent !== next) label.textContent = next;
     };
     const chainSelect = document.getElementById("teChainSelect");
     if (chainSelect && chainSelect.dataset.sequenceDockReady !== "true") {
