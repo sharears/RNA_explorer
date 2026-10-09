@@ -1,0 +1,32 @@
+name: Workspace organizer browser
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - workspace-organizer.js
+      - index.html
+      - tertiary.js
+      - secondary.js
+      - secondary-selection-tools.js
+      - chemistry-editor.js
+      - tests/workspace-organizer-browser.mjs
+      - .github/workflows/workspace-organizer-browser.yml
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - name: Serve RNA Explorer
+        run: |
+          python3 -m http.server 4173 >/tmp/rna-http.log 2>&1 &
+          echo $! > /tmp/rna-http.pid
+          sleep 2
+      - name: Run workspace organizer browser test
+        run: node tests/workspace-organizer-browser.mjs
