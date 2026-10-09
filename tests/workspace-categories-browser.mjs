@@ -40,10 +40,11 @@ try{
   const afterSequence=await page.evaluate(()=>TertiaryExplorer.getWorkspaceSnapshot());
   assert(afterSequence.selectionIndices.includes(4),"Clicking residue 5 in the sequence did not select the same residue in the tertiary workspace.");
 
-  const selectDetails=page.locator('#teWorkspaceCategories [data-workspace-panel="select"] details').first();
-  if(!(await selectDetails.getAttribute("open")))await selectDetails.locator(":scope > summary").click();
-  await page.fill("#teSelectNearCutoff","6.2");
-  assert(await page.getAttribute("#teSelectNearCutoff","max")==="25","Tertiary proximity selection should allow manual cutoffs only up to 25 Å.");
+  const cutoff=page.locator("#teSelectNearCutoff");
+  const cutoffDetails=cutoff.locator("xpath=ancestor::details[1]");
+  if(!(await cutoffDetails.getAttribute("open")))await cutoffDetails.locator(":scope > summary").click();
+  await cutoff.fill("6.2");
+  assert(await cutoff.getAttribute("max")==="25","Tertiary proximity selection should allow manual cutoffs only up to 25 Å.");
   await page.click("#teSelectNearButton");
   await page.waitForFunction(()=>/Selected \d+ residue/.test(document.querySelector("#teSelectionProximityStatus")?.textContent||""),{timeout:15000});
   const afterNear=await page.evaluate(()=>TertiaryExplorer.getWorkspaceSnapshot());
