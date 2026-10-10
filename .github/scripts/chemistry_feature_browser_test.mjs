@@ -32,13 +32,11 @@ let box=await svg.boundingBox();
 assert(box,'2D SVG should have a box');
 assert(box.y < 1000 && box.y+box.height > 0,'2D SVG should be in the browser viewport');
 
-// Trigger toolbar controls through their real DOM click handlers. Canvas and atom interactions
-// still use actual pointer input; this avoids Chromium trying to scroll a fixed dialog to controls.
 await clickControl('[data-chem-tool="atom"]');
-box=await svg.boundingBox();
-await page.mouse.click(box.x+box.width*.30,box.y+box.height*.42);
-await page.mouse.click(box.x+box.width*.55,box.y+box.height*.42);
-assert.equal((await currentGraph()).atoms.length,2,'two atoms should be drawn');
+await clickSvgAt(.30,.42);
+assert.equal((await currentGraph()).atoms.length,1,'first atom should be drawn');
+await clickSvgAt(.60,.42);
+assert.equal((await currentGraph()).atoms.length,2,'second atom should be drawn');
 
 await clickControl('[data-chem-tool="bond"]');
 await bondAtoms(0,1);
@@ -48,10 +46,8 @@ assert.equal((await currentGraph()).bonds[0].order,2,'repeating add promotes to 
 await bondAtoms(0,1);
 assert.equal((await currentGraph()).bonds[0].order,3,'repeating add promotes to triple bond');
 
-// Make carbon 0 intentionally over-valent: triple bond + double bond = valence 5.
 await clickControl('[data-chem-tool="atom"]');
-box=await svg.boundingBox();
-await page.mouse.click(box.x+box.width*.43,box.y+box.height*.72);
+await clickSvgAt(.45,.74);
 assert.equal((await currentGraph()).atoms.length,3,'third atom should be drawn');
 await clickControl('[data-chem-tool="bond"]');
 await bondAtoms(0,2);
@@ -93,6 +89,11 @@ await browser.close();
 
 async function currentGraph(){ return page.evaluate(()=>MoleculeEditor.getCurrentGraph()); }
 async function clickControl(selector){ await page.locator(selector).evaluate(el=>el.click()); }
+async function clickSvgAt(fx,fy){
+  await svg.evaluate(el=>el.scrollIntoView({block:'center'}));
+  const b=await svg.boundingBox();assert(b,'SVG box missing');
+  await page.mouse.click(b.x+b.width*fx,b.y+b.height*fy);
+}
 async function bondAtoms(a,b){
   const aa=page.locator('.chem-editor-atom').nth(a),bb=page.locator('.chem-editor-atom').nth(b);
   await aa.dispatchEvent('pointerdown',{button:0,pointerId:11,clientX:10,clientY:10});
