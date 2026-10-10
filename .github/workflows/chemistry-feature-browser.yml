@@ -1,0 +1,30 @@
+name: Molecular drawing feature browser
+
+on:
+  push:
+    branches: [chemistry-upgrade-20261009]
+    paths:
+      - chemistry-editor.js
+      - chemistry-editor.css
+      - .github/scripts/chemistry_feature_browser_test.mjs
+      - .github/workflows/chemistry-feature-browser.yml
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chemistry-upgrade-20261009
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - name: Serve RNA Explorer
+        run: |
+          python3 -m http.server 4173 >/tmp/rna-chem-http.log 2>&1 &
+          echo $! > /tmp/rna-chem-http.pid
+          sleep 2
+      - name: Test molecular drawing features in Chromium
+        run: node .github/scripts/chemistry_feature_browser_test.mjs
