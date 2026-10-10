@@ -9,7 +9,11 @@ page.on('pageerror', error => errors.push('pageerror: ' + error.message));
 page.on('console', msg => { if (msg.type() === 'error') errors.push('console: ' + msg.text()); });
 
 async function waitForEditor() {
-  await page.waitForFunction(() => typeof window.MoleculeEditor !== 'undefined');
+  await page.waitForFunction(() => typeof MoleculeEditor !== 'undefined');
+}
+
+async function openToolGroups() {
+  await page.locator('#chemEditorDialog details.chem-tool-group').evaluateAll(groups => groups.forEach(group => { group.open = true; }));
 }
 
 async function layoutSnapshot() {
@@ -52,14 +56,15 @@ try {
   await waitForEditor();
 
   // Path 1: load an existing molecular template.
-  await page.evaluate(() => window.MoleculeEditor.openBase('A'));
+  await page.evaluate(() => MoleculeEditor.openBase('A'));
   await page.waitForSelector('#chemEditorDialog[open]');
+  await openToolGroups();
   let snap = await layoutSnapshot();
   assertFullWorkspace(snap, 'Template editor');
 
   // Repeated Add bond on the same atom pair must promote single -> double -> triple.
   const firstSingle = await page.evaluate(() => {
-    const g = window.MoleculeEditor.getCurrentGraph();
+    const g = MoleculeEditor.getCurrentGraph();
     const b = g.bonds.find(x => Number(x.order || 1) === 1);
     return b ? { a: b.a, b: b.b, order: Number(b.order || 1) } : null;
   });
@@ -68,7 +73,7 @@ try {
   await page.locator(`#chemEditorDialog [data-atom-id="${firstSingle.a}"]`).click();
   await page.locator(`#chemEditorDialog [data-atom-id="${firstSingle.b}"]`).click();
   let promoted = await page.evaluate(({a,b}) => {
-    const bond = window.MoleculeEditor.getCurrentGraph().bonds.find(x => (x.a === a && x.b === b) || (x.a === b && x.b === a));
+    const bond = MoleculeEditor.getCurrentGraph().bonds.find(x => (x.a === a && x.b === b) || (x.a === b && x.b === a));
     return Number(bond?.order || 0);
   }, firstSingle);
   assert.equal(promoted, 2, 'First repeated Add bond did not promote the bond to double');
@@ -76,7 +81,7 @@ try {
   await page.locator(`#chemEditorDialog [data-atom-id="${firstSingle.a}"]`).click();
   await page.locator(`#chemEditorDialog [data-atom-id="${firstSingle.b}"]`).click();
   promoted = await page.evaluate(({a,b}) => {
-    const bond = window.MoleculeEditor.getCurrentGraph().bonds.find(x => (x.a === a && x.b === b) || (x.a === b && x.b === a));
+    const bond = MoleculeEditor.getCurrentGraph().bonds.find(x => (x.a === a && x.b === b) || (x.a === b && x.b === a));
     return Number(bond?.order || 0);
   }, firstSingle);
   assert.equal(promoted, 3, 'Second repeated Add bond did not promote the bond to triple');
@@ -84,6 +89,7 @@ try {
   // The atom-specific valence indicator should appear when the promoted structure exceeds a simple valence check.
   const warningCount = await page.locator('#chemEditorDialog .chem-editor-atom.valence-warning').count();
   assert(warningCount > 0, 'No atom-specific valence warning appeared after creating an over-valent template');
+  await page.locator('[data-chem-tool="select"]').click();
   const warningAtom = page.locator('#chemEditorDialog .chem-editor-atom.valence-warning').first();
   await warningAtom.click();
   const ignoreButton = page.locator('#chemIgnoreValence');
@@ -118,7 +124,7 @@ try {
   await page.waitForFunction(() => !document.querySelector('#chemEditorDialog')?.open);
 
   // Path 2: blank / Draw your own workspace must use the same correct layout.
-  await page.evaluate(() => window.MoleculeEditor.openBlank());
+  await page.evaluate(() => MoleculeEditor.openBlank());
   await page.waitForSelector('#chemEditorDialog[open]');
   snap = await layoutSnapshot();
   assertFullWorkspace(snap, 'Blank editor');
