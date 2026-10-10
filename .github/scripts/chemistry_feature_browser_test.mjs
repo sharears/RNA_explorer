@@ -25,6 +25,8 @@ assert(headerBox&&dialogBox,'header/dialog bounding boxes should exist');
 assert(dialogBox.y>=headerBox.y+headerBox.height-2,'drawing workspace should begin below the site header');
 assert.equal(await page.locator('#chemEditorDialog').evaluate(d=>d.matches(':modal')),false,'drawing dialog should be non-modal so site navigation remains usable');
 
+const displayGroup=page.locator('.chem-tool-group').filter({hasText:'Display · Labels & chemistry'});
+if(!(await displayGroup.getAttribute('open'))) await displayGroup.locator('summary').click();
 await page.locator('#chem3DToggle').click();
 await assertVisible(page.locator('#chem3DPanel'),'3D split panel should open');
 assert.equal(await page.locator('#chem3DToggle').getAttribute('aria-pressed'),'true');
