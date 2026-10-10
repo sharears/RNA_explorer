@@ -51,8 +51,10 @@ assert.equal((await currentGraph()).atoms.length,3,'third atom should be drawn')
 await page.locator('[data-chem-tool="bond"]').click();
 await bondAtoms(0,2);
 await bondAtoms(0,2);
-assert.equal((await currentGraph()).bonds.length,2,'second bond should be created');
-assert.equal((await currentGraph()).bonds.find(b=>[b.a,b.b].includes((await currentGraph()).atoms[2]?.id))?.order ?? 2,2,'second pair should be promoted to a double bond');
+const overGraph=await currentGraph();
+assert.equal(overGraph.bonds.length,2,'second bond should be created');
+const thirdId=overGraph.atoms[2].id;
+assert.equal(overGraph.bonds.find(b=>b.a===thirdId||b.b===thirdId)?.order,2,'second pair should be promoted to a double bond');
 assert(await page.locator('.chem-editor-atom.valence-warning').count()>=1,'over-valent atom should be marked with atom-specific warning');
 
 // Smart geometry cleanup is a Build control and should remain usable.
