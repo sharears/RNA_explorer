@@ -194,3 +194,35 @@
 }
 
 .chem-rotation-angle,.chem-transform-zoom{fill:#f5e9c8;font:700 14px "DM Mono",monospace;paint-order:stroke;stroke:#07111c;stroke-width:4px;stroke-linejoin:round}.chem-transform-zoom{font-size:12px}
+
+
+/* October 2026 molecular drawing workspace upgrades */
+body.chem-editor-open{overflow:hidden}
+body.chem-editor-open main{pointer-events:none;filter:brightness(.48);user-select:none}
+body.chem-editor-open .topbar{position:relative;z-index:1200;background:var(--ink)}
+.chem-editor-dialog[open]{
+  position:fixed;inset:82px auto auto 50%;transform:translateX(-50%);margin:0;
+  width:min(1420px,97vw);height:calc(100dvh - 94px);max-height:calc(100dvh - 94px);
+  overflow:auto;z-index:1100;box-shadow:0 24px 90px rgba(0,0,0,.65);background:#08111e;
+}
+.chem-editor-dialog::backdrop{display:none}
+.chem-editor-shell{min-height:100%}
+.chem-editor-workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;min-height:420px}
+.chem-editor-workspace.with-3d{grid-template-columns:minmax(0,1fr) minmax(360px,.9fr)}
+.chem-3d-panel{min-width:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#07111c;display:grid;grid-template-rows:auto minmax(0,1fr)}
+.chem-3d-panel[hidden]{display:none}
+.chem-3d-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:9px 11px;border-bottom:1px solid var(--line);background:#0a1421}
+.chem-3d-heading strong{font-size:.78rem;color:var(--cream)}
+.chem-3d-heading span{font-size:.67rem;color:var(--muted)}
+#chem3DCanvas{display:block;width:100%;height:min(58vh,600px);min-height:360px;touch-action:none;cursor:grab;background:#07111c}
+#chem3DCanvas:active{cursor:grabbing}
+.chem-editor-atom.valence-warning .chem-atom-circle{stroke:#ff5a67!important;fill:rgba(255,60,76,.10)!important;stroke-width:3!important;animation:chemValencePulse 1s ease-in-out infinite}
+.chem-editor-atom.valence-warning .chem-atom-label{fill:#ff6b75!important;filter:drop-shadow(0 0 7px rgba(255,75,90,.85))!important}
+@keyframes chemValencePulse{0%,100%{opacity:.48;filter:drop-shadow(0 0 2px rgba(255,70,80,.3))}50%{opacity:1;filter:drop-shadow(0 0 10px rgba(255,70,80,.9))}}
+#chemIgnoreValence:not(:disabled){border-color:#ff6b75;color:#ff9aa2}
+#chem3DToggle[aria-pressed="true"],#chemSmartLayoutToggle[aria-pressed="true"]{border-color:var(--mint);color:var(--mint);background:rgba(116,215,182,.08)}
+@media(max-width:900px){
+  .chem-editor-dialog[open]{inset:78px auto auto 50%;width:99vw;height:calc(100dvh - 84px);max-height:calc(100dvh - 84px)}
+  .chem-editor-workspace.with-3d{grid-template-columns:1fr}
+  #chemEditorSvg,#chem3DCanvas{height:44vh;min-height:300px}
+}
