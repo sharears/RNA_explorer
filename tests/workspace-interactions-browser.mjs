@@ -96,16 +96,16 @@ try{
 
   await page.evaluate(()=>MoleculeEditor.openBlank());
   await page.waitForSelector("#chemEditorDialog[open]",{state:"visible",timeout:10000});
-  const drawing=await page.locator("#chemEditorDialog").evaluate(el=>{const r=el.getBoundingClientRect(),s=getComputedStyle(el);return {left:r.left,top:r.top,width:r.width,height:r.height,borderRadius:s.borderRadius,background:s.backgroundColor,label:el.getAttribute("aria-label")};});
+  const drawing=await page.locator("#chemEditorDialog").evaluate(el=>{const r=el.getBoundingClientRect(),s=getComputedStyle(el),bar=document.querySelector('.topbar')?.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height,borderRadius:s.borderRadius,background:s.backgroundColor,label:el.getAttribute("aria-label"),topbarBottom:bar?.bottom??0,brand:document.querySelector('.brand')?.textContent?.replace(/\s+/g,' ').trim()||''};});
   const viewport=page.viewportSize();
-  if(!viewport||Math.abs(drawing.left)>2||Math.abs(drawing.top)>2||Math.abs(drawing.width-viewport.width)>3||Math.abs(drawing.height-viewport.height)>3)throw new Error("Molecular Drawing is not filling the workspace viewport: "+JSON.stringify({drawing,viewport}));
-  if(drawing.borderRadius!=="0px")throw new Error("Molecular Drawing still looks like a floating modal: "+JSON.stringify(drawing));
+  if(!viewport||drawing.left<0||drawing.right>viewport.width+1||drawing.width<viewport.width*.94||drawing.top<drawing.topbarBottom-2||drawing.bottom>viewport.height+1)throw new Error("Molecular Drawing is not filling the available workspace below the site header: "+JSON.stringify({drawing,viewport}));
+  if(!/RNA Structure Explorer/i.test(drawing.brand))throw new Error("RNA Structure Explorer header is not visible with Molecular Drawing open: "+JSON.stringify(drawing));
   if(!/Molecular Drawing workspace/i.test(drawing.label||""))throw new Error("Molecular Drawing dedicated-workspace label is missing: "+JSON.stringify(drawing));
   await page.click("#chemEditorClose");
 
   const serious=errors.filter(x=>!/favicon|ResizeObserver loop/i.test(x));
   if(serious.length)throw new Error("Workspace interaction browser errors:\n"+serious.join("\n"));
-  console.log("PASS: whole 2D drag, selected-region drag, index-label targets, workspace consistency, and full Molecular Drawing workspace");
+  console.log("PASS: whole 2D drag, selected-region drag, index-label targets, workspace consistency, and full Molecular Drawing workspace below the site header");
 } catch(error) {
   fs.mkdirSync("test-output",{recursive:true});
   fs.writeFileSync("test-output/workspace-interactions-error.txt",String(error?.stack||error)+"\n\nCaptured browser errors:\n"+errors.join("\n"));
