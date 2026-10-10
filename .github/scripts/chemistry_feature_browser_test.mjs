@@ -27,14 +27,17 @@ assert(dialogBox.y>=headerBox.y+headerBox.height-2,'drawing workspace should beg
 assert.equal(await page.locator('#chemEditorDialog').evaluate(d=>d.matches(':modal')),false,'drawing dialog should be non-modal so site navigation remains usable');
 
 const svg=page.locator('#chemEditorSvg');
-const box=await svg.boundingBox();
+await svg.evaluate(el=>el.scrollIntoView({block:'center'}));
+let box=await svg.boundingBox();
 assert(box,'2D SVG should have a box');
+assert(box.y < 1000 && box.y+box.height > 0,'2D SVG should be in the browser viewport');
 
-// Trigger toolbar controls through their actual DOM click handlers. Canvas and atom interactions
-// below still use real pointer input; this avoids a Chromium fixed-dialog scroll quirk in CI.
+// Trigger toolbar controls through their real DOM click handlers. Canvas and atom interactions
+// still use actual pointer input; this avoids Chromium trying to scroll a fixed dialog to controls.
 await clickControl('[data-chem-tool="atom"]');
-await page.mouse.click(box.x+220,box.y+210);
-await page.mouse.click(box.x+430,box.y+210);
+box=await svg.boundingBox();
+await page.mouse.click(box.x+box.width*.30,box.y+box.height*.42);
+await page.mouse.click(box.x+box.width*.55,box.y+box.height*.42);
 assert.equal((await currentGraph()).atoms.length,2,'two atoms should be drawn');
 
 await clickControl('[data-chem-tool="bond"]');
@@ -47,7 +50,8 @@ assert.equal((await currentGraph()).bonds[0].order,3,'repeating add promotes to 
 
 // Make carbon 0 intentionally over-valent: triple bond + double bond = valence 5.
 await clickControl('[data-chem-tool="atom"]');
-await page.mouse.click(box.x+320,box.y+360);
+box=await svg.boundingBox();
+await page.mouse.click(box.x+box.width*.43,box.y+box.height*.72);
 assert.equal((await currentGraph()).atoms.length,3,'third atom should be drawn');
 await clickControl('[data-chem-tool="bond"]');
 await bondAtoms(0,2);
@@ -62,7 +66,8 @@ await clickControl('#chemTidy2D');
 assert.match(await page.locator('#chemEditorStatus').innerText(),/tidied|Ready/i,'Tidy 2D should complete');
 
 await clickControl('[data-chem-tool="select"]');
-await page.locator('.chem-editor-atom').nth(0).click({force:true});
+await page.locator('.chem-editor-atom').nth(0).dispatchEvent('pointerdown',{button:0,pointerId:31,clientX:10,clientY:10});
+await page.locator('.chem-editor-atom').nth(0).dispatchEvent('pointerup',{button:0,pointerId:31,clientX:10,clientY:10});
 
 const displayGroup=page.locator('.chem-tool-group').filter({hasText:'Display · Labels & chemistry'});
 await displayGroup.evaluate(el=>{el.open=true;});
@@ -89,7 +94,10 @@ await browser.close();
 async function currentGraph(){ return page.evaluate(()=>MoleculeEditor.getCurrentGraph()); }
 async function clickControl(selector){ await page.locator(selector).evaluate(el=>el.click()); }
 async function bondAtoms(a,b){
-  await page.locator('.chem-editor-atom').nth(a).click({force:true});
-  await page.locator('.chem-editor-atom').nth(b).click({force:true});
+  const aa=page.locator('.chem-editor-atom').nth(a),bb=page.locator('.chem-editor-atom').nth(b);
+  await aa.dispatchEvent('pointerdown',{button:0,pointerId:11,clientX:10,clientY:10});
+  await aa.dispatchEvent('pointerup',{button:0,pointerId:11,clientX:10,clientY:10});
+  await bb.dispatchEvent('pointerdown',{button:0,pointerId:12,clientX:10,clientY:10});
+  await bb.dispatchEvent('pointerup',{button:0,pointerId:12,clientX:10,clientY:10});
 }
 async function assertVisible(locator,message){ assert.equal(await locator.isVisible(),true,message); }
