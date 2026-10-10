@@ -1,0 +1,396 @@
+from pathlib import Path
+
+js_path = Path("chemistry-editor.js")
+css_path = Path("chemistry-editor.css")
+js = js_path.read_text(encoding="utf-8")
+css = css_path.read_text(encoding="utf-8")
+
+
+def replace_once(old, new):
+    global js
+    count = js.count(old)
+    if count != 1:
+        raise SystemExit(f"Expected exactly one match, found {count}: {old[:100]!r}")
+    js = js.replace(old, new, 1)
+
+
+# Shared state for smart geometry, atom-specific valence warnings, and live 3D preview.
+replace_once(
+    '  let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false,showAtomLabels=true,showAtomNumbers=false;\n',
+    '  let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false,showAtomLabels=true,showAtomNumbers=false;\n'
+    '  let ignoredValenceWarnings=new Set(),smartLayoutEnabled=true,threeDVisible=false;\n'
+    '  let threeDCanvas=null,threeDPanel=null,threeDFrame=0,threeDDrag=null,threeDCoords=[],threeDSignature="";\n'
+    '  const threeDView={rx:-0.38,ry:0.58,zoom:1,panX:0,panY:0};\n'
+)
+
+# Add chemistry/valence helpers and a non-modal workspace opener. The real site header
+# therefore remains visible/clickable while molecular drawing is open.
+replace_once(
+    '  const bondBetween=(a,b)=>graph.bonds.find(x=>(x.a===a&&x.b===b)||(x.a===b&&x.b===a));\n\n  function ensureDialog(){',
+    '''  const bondBetween=(a,b)=>graph.bonds.find(x=>(x.a===a&&x.b===b)||(x.a===b&&x.b===a));
+
+  function atomValenceSum(id){
+    return graph.bonds.reduce((sum,b)=>sum+((b.a===id||b.b===id)?Number(b.order||1):0),0);
+  }
+  function atomValenceState(a){
+    const base=standardValence[a?.element],used=a?atomValenceSum(a.id):0,limit=base?base+Math.max(0,Number(a.charge||0)):null;
+    return {used,limit,invalid:Boolean(limit&&used>limit)};
+  }
+  function isValenceWarning(a){return atomValenceState(a).invalid&&!ignoredValenceWarnings.has(a.id);}
+  function syncValenceIgnoreButton(){
+    const button=dialog?.querySelector("#chemIgnoreValence");if(!button)return;
+    const ids=selectedAtoms.size?[...selectedAtoms]:(selectedAtom?[selectedAtom]:[]);
+    const flagged=ids.filter(id=>{const a=atomById(id);return a&&atomValenceState(a).invalid&&!ignoredValenceWarnings.has(id);});
+    button.disabled=!flagged.length;
+    button.textContent=flagged.length?"Ignore valence warning"+(flagged.length>1?"s":""):"Ignore valence warning";
+  }
+  function ignoreSelectedValenceWarnings(){
+    const ids=selectedAtoms.size?[...selectedAtoms]:(selectedAtom?[selectedAtom]:[]);
+    const flagged=ids.filter(id=>{const a=atomById(id);return a&&atomValenceState(a).invalid;});
+    if(!flagged.length){status.textContent="Select a red-flashing atom with a valence warning first.";return;}
+    flagged.forEach(id=>ignoredValenceWarnings.add(id));render();validate();
+    status.textContent="Valence warning accepted for "+flagged.length+" selected atom"+(flagged.length===1?"":"s")+". The structure is unchanged.";
+  }
+  function showEditorWindow(){
+    if(!dialog)return;
+    try{window.scrollTo({top:0,left:0,behavior:"instant"});}catch(_){window.scrollTo(0,0);}
+    document.body.classList.add("chem-editor-open");
+    if(!dialog.open)dialog.show();
+    requestAnimationFrame(()=>{fitCanvasToDrawing(false);if(threeDVisible)schedule3DRender(true);});
+  }
+
+  function ensureDialog(){'''
+)
+
+# New controls.
+replace_once(
+    '          <button type="button" id="chemIupacButton">IUPAC name</button>\n',
+    '          <button type="button" id="chemIupacButton">IUPAC name</button>\n'
+    '          <button type="button" id="chemSmartLayoutToggle" aria-pressed="true">Smart geometry: on</button>\n'
+    '          <button type="button" id="chemTidy2D">Tidy 2D</button>\n'
+    '          <button type="button" id="chemIgnoreValence" disabled>Ignore valence warning</button>\n'
+    '          <button type="button" id="chem3DToggle" aria-pressed="false">Show in 3D</button>\n'
+)
+
+# 2D/3D split workspace.
+replace_once(
+    '''        <div class="chem-editor-canvas-wrap">
+          <svg id="chemEditorSvg" viewBox="0 0 820 470" aria-label="Editable molecular structure"></svg>
+        </div>
+        <div class="chem-editor-footer">''',
+    '''        <div class="chem-editor-workspace">
+          <div class="chem-editor-canvas-wrap">
+            <svg id="chemEditorSvg" viewBox="0 0 820 470" aria-label="Editable molecular structure"></svg>
+          </div>
+          <aside class="chem-3d-panel" id="chem3DPanel" hidden aria-label="Interactive idealized 3D molecular preview">
+            <div class="chem-3d-heading"><strong>Idealized 3D preview</strong><span>Drag to rotate · Shift-drag to pan · Wheel to zoom</span></div>
+            <canvas id="chem3DCanvas" width="720" height="560" aria-label="Interactive 3D molecule"></canvas>
+          </aside>
+        </div>
+        <div class="chem-editor-footer">'''
+)
+
+# Keep controls in the existing organized toolbar.
+replace_once(
+    '["Build · Atoms & bonds",[\'[data-chem-tool="atom"]\',\'[data-chem-tool="bond"]\',\'[data-chem-tool="fuse"]\',\'[data-chem-tool="hbond"]\',\'[data-chem-tool="delete"]\',"#chemRingTemplate","#chemInsertRing"]],\n      ["Display · Labels & chemistry",["#chemAtomCirclesToggle","#chemAtomLabelsToggle","#chemAtomNumbersToggle","#chemElement","#chemBondOrder","#chemChargeMinus","#chemChargePlus","#chemIupacButton"]],',
+    '["Build · Atoms & bonds",[\'[data-chem-tool="atom"]\',\'[data-chem-tool="bond"]\',\'[data-chem-tool="fuse"]\',\'[data-chem-tool="hbond"]\',\'[data-chem-tool="delete"]\',"#chemRingTemplate","#chemInsertRing","#chemSmartLayoutToggle","#chemTidy2D"]],\n      ["Display · Labels & chemistry",["#chemAtomCirclesToggle","#chemAtomLabelsToggle","#chemAtomNumbersToggle","#chemElement","#chemBondOrder","#chemChargeMinus","#chemChargePlus","#chemIupacButton","#chemIgnoreValence","#chem3DToggle"]],'
+)
+
+# 3D canvas initialization and non-modal close cleanup.
+replace_once(
+    '    svg=dialog.querySelector("#chemEditorSvg");status=dialog.querySelector("#chemEditorStatus");title=dialog.querySelector("#chemEditorTitle");\n',
+    '    svg=dialog.querySelector("#chemEditorSvg");status=dialog.querySelector("#chemEditorStatus");title=dialog.querySelector("#chemEditorTitle");\n'
+    '    setup3DPreview();\n'
+)
+replace_once(
+    '    dialog.querySelector("#chemEditorClose").addEventListener("click",()=>dialog.close());\n',
+    '    dialog.querySelector("#chemEditorClose").addEventListener("click",()=>dialog.close());\n'
+    '    dialog.addEventListener("close",()=>{document.body.classList.remove("chem-editor-open");threeDDrag=null;});\n'
+)
+
+# Wire new controls.
+replace_once(
+    '    dialog.querySelector("#chemIupacButton").addEventListener("click",showIupacName);\n',
+    '''    dialog.querySelector("#chemIupacButton").addEventListener("click",showIupacName);
+    dialog.querySelector("#chemIgnoreValence").addEventListener("click",ignoreSelectedValenceWarnings);
+    dialog.querySelector("#chemSmartLayoutToggle").addEventListener("click",e=>{
+      smartLayoutEnabled=!smartLayoutEnabled;
+      e.currentTarget.setAttribute("aria-pressed",String(smartLayoutEnabled));
+      e.currentTarget.textContent="Smart geometry: "+(smartLayoutEnabled?"on":"off");
+      status.textContent=smartLayoutEnabled?"Smart geometry is on. Newly attached atoms will use sensible bond angles.":"Smart geometry is off. New atoms will stay where you place them.";
+    });
+    dialog.querySelector("#chemTidy2D").addEventListener("click",()=>{
+      pushUndo();tidy2DGeometry();invalidateIupac();render();validate();
+      status.textContent="2D geometry tidied: bond lengths and close contacts were regularized.";
+    });
+    dialog.querySelector("#chem3DToggle").addEventListener("click",toggle3DPreview);
+'''
+)
+
+# Changing an element should re-check a previously ignored atom.
+replace_once(
+    '      if(selectedAtom){const a=atomById(selectedAtom);if(a){pushUndo();a.element=element;a.label=element;invalidateIupac();render();validate();}}\n',
+    '      if(selectedAtom){const a=atomById(selectedAtom);if(a){pushUndo();ignoredValenceWarnings.delete(a.id);a.element=element;a.label=element;invalidateIupac();render();validate();}}\n'
+)
+
+# Repeated Add bond promotes single -> double -> triple. Explicit Double/Triple still sets
+# the requested order. Connecting an isolated, already-drawn atom gets smart placement.
+replace_once(
+    '''          const existing=bondBetween(pendingAtom,id);
+          if(existing)existing.order=bondOrder;
+          else graph.bonds.push({id:"b"+bondSerial++,a:pendingAtom,b:id,order:bondOrder});
+          invalidateIupac();''',
+    '''          const firstId=pendingAtom,beforeFirst=attachmentNeighbors(firstId).length,beforeSecond=attachmentNeighbors(id).length;
+          const existing=bondBetween(firstId,id);
+          ignoredValenceWarnings.delete(firstId);ignoredValenceWarnings.delete(id);
+          if(existing){
+            const requested=Number(bondOrder||1),current=Number(existing.order||1);
+            existing.order=requested===1?Math.min(3,current+1):requested;
+            status.textContent=existing.order===current&&current===3?"That bond is already triple.":"Bond order is now "+existing.order+".";
+          }else{
+            if(smartLayoutEnabled&&beforeSecond===0&&beforeFirst>0){const moving=atomById(id),p=smartAttachmentPosition(firstId,moving);if(moving){moving.x=p.x;moving.y=p.y;}}
+            else if(smartLayoutEnabled&&beforeFirst===0&&beforeSecond>0){const moving=atomById(firstId),p=smartAttachmentPosition(id,moving);if(moving){moving.x=p.x;moving.y=p.y;}}
+            graph.bonds.push({id:"b"+bondSerial++,a:firstId,b:id,order:bondOrder});
+          }
+          invalidateIupac();'''
+)
+
+# Smart geometry can be toggled for the existing Add-bond-to-empty-canvas behavior.
+replace_once(
+    '      const p=smartAttachmentPosition(pendingAtom,point(e)),id="X"+atomSerial++;\n',
+    '      const raw=point(e),p=smartLayoutEnabled?smartAttachmentPosition(pendingAtom,raw):raw,id="X"+atomSerial++;\n'
+)
+
+# Reset ignored warnings when loading a new molecule/history state.
+replace_once(
+    '    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionZoom=1;selectionBox=null;lasso=null;\n',
+    '    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionZoom=1;selectionBox=null;lasso=null;ignoredValenceWarnings.clear();\n'
+)
+replace_once(
+    '    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionZoom=1;selectionBox=null;lasso=null;\n',
+    '    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionZoom=1;selectionBox=null;lasso=null;ignoredValenceWarnings.clear();\n'
+)
+
+# Atom-specific flashing class.
+replace_once(
+    '      g.setAttribute("class","chem-editor-atom"+(selectedAtoms.has(a.id)?" selected":"")+(pendingAtom===a.id?" pending":""));\n',
+    '      g.setAttribute("class","chem-editor-atom"+(selectedAtoms.has(a.id)?" selected":"")+(pendingAtom===a.id?" pending":"")+(isValenceWarning(a)?" valence-warning":""));\n'
+)
+
+# Keep live preview synchronized after every 2D render.
+replace_once(
+    '''    if(lasso&&lasso.points.length){
+      const path=document.createElementNS(NS,"polyline");path.setAttribute("class","chem-lasso-path");
+      const pts=lasso.points;path.setAttribute("points",[...pts,pts[0]].map(p=>p.x+","+p.y).join(" "));svg.append(path);
+    }
+  }''',
+    '''    if(lasso&&lasso.points.length){
+      const path=document.createElementNS(NS,"polyline");path.setAttribute("class","chem-lasso-path");
+      const pts=lasso.points;path.setAttribute("points",[...pts,pts[0]].map(p=>p.x+","+p.y).join(" "));svg.append(path);
+    }
+    syncValenceIgnoreButton();
+    if(threeDVisible)schedule3DRender();
+  }'''
+)
+
+# Stronger 2D geometry cleanup plus lightweight idealized 3D generation/rendering.
+replace_once(
+    '  function componentCentroid(ids){\n',
+    r'''  function tidy2DGeometry(){
+    if(graph.atoms.length<2)return;
+    const atoms=graph.atoms;
+    for(let iter=0;iter<70;iter++){
+      graph.bonds.forEach(b=>{
+        const a=atomById(b.a),c=atomById(b.b);if(!a||!c)return;
+        const dx=c.x-a.x,dy=c.y-a.y,d=Math.hypot(dx,dy)||1,target=Number(b.order||1)===1?68:Number(b.order||1)===2?64:60;
+        const pull=(d-target)*0.12,ux=dx/d,uy=dy/d;
+        a.x+=ux*pull*.5;a.y+=uy*pull*.5;c.x-=ux*pull*.5;c.y-=uy*pull*.5;
+      });
+      for(let i=0;i<atoms.length;i++)for(let j=i+1;j<atoms.length;j++){
+        if(bondBetween(atoms[i].id,atoms[j].id))continue;
+        const a=atoms[i],b=atoms[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;
+        if(d<48){const push=(48-d)*0.025,ux=dx/d,uy=dy/d;a.x-=ux*push;a.y-=uy*push;b.x+=ux*push;b.y+=uy*push;}
+      }
+    }
+    ensureCanvasContainsDrawing();
+  }
+
+  const ELEMENT_3D_COLORS={H:"#f4f4f4",C:"#8b9198",N:"#3050f8",O:"#ff3030",P:"#ff8c1a",S:"#ffd92f",F:"#66ff66",Cl:"#39d353",Br:"#a62929",I:"#8a4fb5"};
+  function graphSignature3D(){return JSON.stringify({atoms:graph.atoms.map(a=>[a.id,a.element,Math.round(a.x*10),Math.round(a.y*10)]),bonds:graph.bonds.map(b=>[b.a,b.b,b.order])});}
+  function adjacency(){
+    const m=new Map(graph.atoms.map(a=>[a.id,[]]));
+    graph.bonds.forEach(b=>{m.get(b.a)?.push({id:b.b,order:Number(b.order||1)});m.get(b.b)?.push({id:b.a,order:Number(b.order||1)});});
+    return m;
+  }
+  function findSixMemberRings(adj){
+    const rings=[],seen=new Set();
+    const walk=(start,current,path)=>{
+      if(path.length===6){
+        if((adj.get(current)||[]).some(n=>n.id===start)){
+          const key=[...path].sort().join("|");if(!seen.has(key)){seen.add(key);rings.push([...path]);}
+        }
+        return;
+      }
+      (adj.get(current)||[]).forEach(n=>{if(n.id!==start&&!path.includes(n.id))walk(start,n.id,[...path,n.id]);});
+    };
+    graph.atoms.filter(a=>a.element==="C").forEach(a=>walk(a.id,a.id,[a.id]));return rings;
+  }
+  function buildIdealized3D(){
+    if(!graph.atoms.length)return [];
+    const avgBond=graph.bonds.length?graph.bonds.reduce((s,b)=>{const a=atomById(b.a),c=atomById(b.b);return s+(a&&c?Math.hypot(c.x-a.x,c.y-a.y):0);},0)/graph.bonds.length:68;
+    const scale=1.45/Math.max(20,avgBond||68),cx=graph.atoms.reduce((s,a)=>s+a.x,0)/graph.atoms.length,cy=graph.atoms.reduce((s,a)=>s+a.y,0)/graph.atoms.length;
+    const coords=new Map(graph.atoms.map(a=>[a.id,{id:a.id,element:a.element,x:(a.x-cx)*scale,y:-(a.y-cy)*scale,z:0}]));
+    const adj=adjacency(),rings=findSixMemberRings(adj),ringAtoms=new Set();
+    rings.forEach(ids=>{
+      const pts=ids.map(id=>coords.get(id)).filter(Boolean);if(pts.length!==6)return;
+      const mx=pts.reduce((s,p)=>s+p.x,0)/6,my=pts.reduce((s,p)=>s+p.y,0)/6,r=1.40,first=pts[0],phase=Math.atan2(first.y-my,first.x-mx);
+      ids.forEach((id,i)=>{const p=coords.get(id);if(p){p.x=mx+Math.cos(phase+i*Math.PI/3)*r;p.y=my+Math.sin(phase+i*Math.PI/3)*r;p.z=0;ringAtoms.add(id);}});
+    });
+    graph.atoms.forEach((a,idx)=>{
+      const neighbors=adj.get(a.id)||[];if(ringAtoms.has(a.id))return;
+      if(neighbors.length>=4){
+        const p=coords.get(a.id);p.z=(idx%2?0.25:-0.25);
+        neighbors.forEach((n,j)=>{const q=coords.get(n.id);if(q&&!ringAtoms.has(n.id))q.z+=(j%2?0.55:-0.55);});
+      }
+    });
+    const arr=[...coords.values()],byId=new Map(arr.map(p=>[p.id,p]));
+    for(let iter=0;iter<90;iter++){
+      graph.bonds.forEach(b=>{
+        const a=byId.get(b.a),c=byId.get(b.b);if(!a||!c)return;
+        const dx=c.x-a.x,dy=c.y-a.y,dz=c.z-a.z,d=Math.hypot(dx,dy,dz)||1,target=Number(b.order||1)===1?1.50:Number(b.order||1)===2?1.34:1.20,pull=(d-target)*0.08,ux=dx/d,uy=dy/d,uz=dz/d,fa=ringAtoms.has(a.id)?0:.5,fc=ringAtoms.has(c.id)?0:.5;
+        a.x+=ux*pull*fa;a.y+=uy*pull*fa;a.z+=uz*pull*fa;c.x-=ux*pull*fc;c.y-=uy*pull*fc;c.z-=uz*pull*fc;
+      });
+      for(let i=0;i<arr.length;i++)for(let j=i+1;j<arr.length;j++){
+        const a=arr[i],b=arr[j];if(bondBetween(a.id,b.id))continue;
+        const dx=b.x-a.x,dy=b.y-a.y,dz=b.z-a.z,d=Math.hypot(dx,dy,dz)||.01;
+        if(d<1.15){const push=(1.15-d)*.012,ux=dx/d,uy=dy/d,uz=dz/d;if(!ringAtoms.has(a.id)){a.x-=ux*push;a.y-=uy*push;a.z-=uz*push;}if(!ringAtoms.has(b.id)){b.x+=ux*push;b.y+=uy*push;b.z+=uz*push;}}
+      }
+    }
+    return arr;
+  }
+  function rotate3DPoint(p){
+    const cy=Math.cos(threeDView.ry),sy=Math.sin(threeDView.ry),cx=Math.cos(threeDView.rx),sx=Math.sin(threeDView.rx),x1=p.x*cy+p.z*sy,z1=-p.x*sy+p.z*cy,y1=p.y*cx-z1*sx,z2=p.y*sx+z1*cx;
+    return {...p,x:x1,y:y1,z:z2};
+  }
+  function render3DPreview(force=false){
+    threeDFrame=0;if(!threeDVisible||!threeDCanvas)return;
+    const sig=graphSignature3D();if(force||sig!==threeDSignature){threeDCoords=buildIdealized3D();threeDSignature=sig;}
+    const canvas=threeDCanvas,rect=canvas.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1),w=Math.max(320,Math.round(rect.width||640)),h=Math.max(280,Math.round(rect.height||500));
+    if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
+    const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);ctx.fillStyle="#07111c";ctx.fillRect(0,0,w,h);
+    if(!threeDCoords.length){ctx.fillStyle="#9cabb8";ctx.font="14px Manrope";ctx.textAlign="center";ctx.fillText("Draw a molecule to preview it in 3D.",w/2,h/2);return;}
+    const pts=threeDCoords.map(rotate3DPoint),byId=new Map(pts.map(p=>[p.id,p])),maxR=Math.max(2,...pts.map(p=>Math.hypot(p.x,p.y))),s=Math.min(w,h)*0.34/maxR*threeDView.zoom,project=p=>({x:w/2+threeDView.panX+p.x*s,y:h/2+threeDView.panY-p.y*s,z:p.z});
+    const bondDraw=graph.bonds.map(b=>({b,a:byId.get(b.a),c:byId.get(b.b)})).filter(x=>x.a&&x.c).sort((u,v)=>(u.a.z+u.c.z)-(v.a.z+v.c.z));
+    bondDraw.forEach(({b,a,c})=>{
+      const p=project(a),q=project(c),dx=q.x-p.x,dy=q.y-p.y,len=Math.hypot(dx,dy)||1,ox=-dy/len*3.2,oy=dx/len*3.2,order=Math.max(1,Math.min(3,Number(b.order||1))),offsets=order===1?[0]:order===2?[-1,1]:[-1.5,0,1.5];
+      offsets.forEach(off=>{const grad=ctx.createLinearGradient(p.x,p.y,q.x,q.y);grad.addColorStop(0,ELEMENT_3D_COLORS[a.element]||"#aaaaaa");grad.addColorStop(1,ELEMENT_3D_COLORS[c.element]||"#aaaaaa");ctx.strokeStyle=grad;ctx.lineWidth=8;ctx.lineCap="round";ctx.beginPath();ctx.moveTo(p.x+ox*off,p.y+oy*off);ctx.lineTo(q.x+ox*off,q.y+oy*off);ctx.stroke();});
+    });
+    [...pts].sort((a,b)=>a.z-b.z).forEach(p=>{const q=project(p),r=p.element==="H"?6:9;ctx.beginPath();ctx.arc(q.x,q.y,r,0,Math.PI*2);ctx.fillStyle=ELEMENT_3D_COLORS[p.element]||"#aaaaaa";ctx.fill();ctx.strokeStyle="rgba(5,10,16,.8)";ctx.lineWidth=1.5;ctx.stroke();});
+  }
+  function schedule3DRender(force=false){
+    if(!threeDVisible)return;
+    if(force&&threeDFrame){cancelAnimationFrame(threeDFrame);threeDFrame=0;}
+    if(!threeDFrame)threeDFrame=requestAnimationFrame(()=>render3DPreview(force));
+  }
+  function toggle3DPreview(){
+    threeDVisible=!threeDVisible;if(threeDPanel)threeDPanel.hidden=!threeDVisible;
+    const button=dialog?.querySelector("#chem3DToggle");if(button){button.setAttribute("aria-pressed",String(threeDVisible));button.textContent=threeDVisible?"Hide 3D":"Show in 3D";}
+    dialog?.querySelector(".chem-editor-workspace")?.classList.toggle("with-3d",threeDVisible);if(threeDVisible)schedule3DRender(true);
+  }
+  function setup3DPreview(){
+    threeDPanel=dialog?.querySelector("#chem3DPanel");threeDCanvas=dialog?.querySelector("#chem3DCanvas");if(!threeDCanvas||threeDCanvas.dataset.ready==="1")return;threeDCanvas.dataset.ready="1";
+    threeDCanvas.addEventListener("contextmenu",e=>e.preventDefault());
+    threeDCanvas.addEventListener("pointerdown",e=>{threeDDrag={id:e.pointerId,x:e.clientX,y:e.clientY,pan:e.shiftKey||e.button===2};threeDCanvas.setPointerCapture?.(e.pointerId);});
+    threeDCanvas.addEventListener("pointermove",e=>{if(!threeDDrag||e.pointerId!==threeDDrag.id)return;const dx=e.clientX-threeDDrag.x,dy=e.clientY-threeDDrag.y;threeDDrag.x=e.clientX;threeDDrag.y=e.clientY;if(threeDDrag.pan){threeDView.panX+=dx;threeDView.panY+=dy;}else{threeDView.ry+=dx*.012;threeDView.rx+=dy*.012;}schedule3DRender();});
+    const up=e=>{if(threeDDrag&&e.pointerId===threeDDrag.id){threeDDrag=null;threeDCanvas.releasePointerCapture?.(e.pointerId);}};
+    threeDCanvas.addEventListener("pointerup",up);threeDCanvas.addEventListener("pointercancel",up);
+    threeDCanvas.addEventListener("wheel",e=>{e.preventDefault();threeDView.zoom=Math.max(.35,Math.min(4,threeDView.zoom*Math.exp(-e.deltaY*.001)));schedule3DRender();},{passive:false});
+  }
+
+  function componentCentroid(ids){
+'''
+)
+
+# New validation: only offending atoms flash; user can deliberately accept unusual valence.
+old_validate = '''    function validate(){
+    const sums={};graph.atoms.forEach(a=>sums[a.id]=0);
+    graph.bonds.forEach(b=>{sums[b.a]=(sums[b.a]||0)+Number(b.order||1);sums[b.b]=(sums[b.b]||0)+Number(b.order||1);});
+    const warnings=[];
+    graph.atoms.forEach(a=>{
+      const val=standardValence[a.element];
+      if(val&&sums[a.id]>val+Math.max(0,a.charge||0))warnings.push(a.id+" exceeds a simple valence check");
+    });
+    graph.hbonds.forEach(h=>{
+      const a=atomById(h.a),b=atomById(h.b);
+      if(a&&b&&!["N","O","S"].includes(a.element)&&!["N","O","S"].includes(b.element))warnings.push("An H-bond does not involve an N/O/S atom");
+    });
+    status.textContent=warnings.length?warnings.join(" · "):"Ready. Select / move supports box selection; lasso selects freeform groups. Multi-atom selections get resize and rotate handles. Add bond can place a new atom at a geometry-aware angle; Fuse rings merges two selected ring edges.";
+    status.classList.toggle("warning",warnings.length>0);
+    return warnings;
+  }'''
+new_validate = '''  function validate(){
+    const warnings=[];
+    graph.atoms.forEach(a=>{
+      const state=atomValenceState(a);
+      if(state.invalid&&!ignoredValenceWarnings.has(a.id))warnings.push((a.label||a.id)+" ("+a.element+") valence "+state.used+" > "+state.limit);
+      if(!state.invalid)ignoredValenceWarnings.delete(a.id);
+    });
+    graph.hbonds.forEach(h=>{
+      const a=atomById(h.a),b=atomById(h.b);
+      if(a&&b&&!["N","O","S"].includes(a.element)&&!["N","O","S"].includes(b.element))warnings.push("An H-bond does not involve an N/O/S atom");
+    });
+    const ignored=[...ignoredValenceWarnings].filter(id=>{const a=atomById(id);return a&&atomValenceState(a).invalid;}).length;
+    status.textContent=warnings.length?warnings.join(" · ")+". Correct the highlighted atom or select it and choose Ignore valence warning.":ignored?"Ready. "+ignored+" intentional valence warning"+(ignored===1?" is":"s are")+" being ignored.":"Ready. Add bond repeatedly to promote single → double → triple. Smart geometry is on by default; Show in 3D opens a live interactive preview.";
+    status.classList.toggle("warning",warnings.length>0);syncValenceIgnoreButton();
+    return warnings;
+  }'''
+replace_once(old_validate, new_validate)
+
+# Expose a defensive current-graph getter for future agent/API work without exposing mutable state.
+replace_once(
+    '  return {setup,openBase,openPair,openBlank,getBaseGraph:graphFromBase,getSavedBase:b=>savedBases[b]?clone(savedBases[b]):null,pairTemplate,\n',
+    '  return {setup,openBase,openPair,openBlank,getBaseGraph:graphFromBase,getCurrentGraph:()=>clone(graph),getSavedBase:b=>savedBases[b]?clone(savedBases[b]):null,pairTemplate,\n'
+)
+
+# The editor is no longer a modal overlay; it is a fixed workspace below the real site header.
+if 'dialog.showModal();' not in js:
+    raise SystemExit("Expected modal open calls")
+js = js.replace('dialog.showModal();', 'showEditorWindow();')
+
+css += r'''
+
+/* October 2026 molecular drawing workspace upgrades */
+body.chem-editor-open{overflow:hidden}
+body.chem-editor-open main{pointer-events:none;filter:brightness(.48);user-select:none}
+body.chem-editor-open .topbar{position:relative;z-index:1200;background:var(--ink)}
+.chem-editor-dialog[open]{
+  position:fixed;inset:82px auto auto 50%;transform:translateX(-50%);margin:0;
+  width:min(1420px,97vw);height:calc(100dvh - 94px);max-height:calc(100dvh - 94px);
+  overflow:auto;z-index:1100;box-shadow:0 24px 90px rgba(0,0,0,.65);background:#08111e;
+}
+.chem-editor-dialog::backdrop{display:none}
+.chem-editor-shell{min-height:100%}
+.chem-editor-workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;min-height:420px}
+.chem-editor-workspace.with-3d{grid-template-columns:minmax(0,1fr) minmax(360px,.9fr)}
+.chem-3d-panel{min-width:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#07111c;display:grid;grid-template-rows:auto minmax(0,1fr)}
+.chem-3d-panel[hidden]{display:none}
+.chem-3d-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:9px 11px;border-bottom:1px solid var(--line);background:#0a1421}
+.chem-3d-heading strong{font-size:.78rem;color:var(--cream)}
+.chem-3d-heading span{font-size:.67rem;color:var(--muted)}
+#chem3DCanvas{display:block;width:100%;height:min(58vh,600px);min-height:360px;touch-action:none;cursor:grab;background:#07111c}
+#chem3DCanvas:active{cursor:grabbing}
+.chem-editor-atom.valence-warning .chem-atom-circle{stroke:#ff5a67!important;fill:rgba(255,60,76,.10)!important;stroke-width:3!important;animation:chemValencePulse 1s ease-in-out infinite}
+.chem-editor-atom.valence-warning .chem-atom-label{fill:#ff6b75!important;filter:drop-shadow(0 0 7px rgba(255,75,90,.85))!important}
+@keyframes chemValencePulse{0%,100%{opacity:.48;filter:drop-shadow(0 0 2px rgba(255,70,80,.3))}50%{opacity:1;filter:drop-shadow(0 0 10px rgba(255,70,80,.9))}}
+#chemIgnoreValence:not(:disabled){border-color:#ff6b75;color:#ff9aa2}
+#chem3DToggle[aria-pressed="true"],#chemSmartLayoutToggle[aria-pressed="true"]{border-color:var(--mint);color:var(--mint);background:rgba(116,215,182,.08)}
+@media(max-width:900px){
+  .chem-editor-dialog[open]{inset:78px auto auto 50%;width:99vw;height:calc(100dvh - 84px);max-height:calc(100dvh - 84px)}
+  .chem-editor-workspace.with-3d{grid-template-columns:1fr}
+  #chemEditorSvg,#chem3DCanvas{height:44vh;min-height:300px}
+}
+'''
+
+js_path.write_text(js, encoding="utf-8")
+css_path.write_text(css, encoding="utf-8")
+print("Chemistry upgrade patch applied.")
