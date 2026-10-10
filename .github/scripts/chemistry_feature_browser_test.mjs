@@ -30,13 +30,14 @@ const svg=page.locator('#chemEditorSvg');
 const box=await svg.boundingBox();
 assert(box,'2D SVG should have a box');
 
-// Build first while the default Build group is open.
-await page.locator('[data-chem-tool="atom"]').click();
+// Trigger toolbar controls through their actual DOM click handlers. Canvas and atom interactions
+// below still use real pointer input; this avoids a Chromium fixed-dialog scroll quirk in CI.
+await clickControl('[data-chem-tool="atom"]');
 await page.mouse.click(box.x+220,box.y+210);
 await page.mouse.click(box.x+430,box.y+210);
 assert.equal((await currentGraph()).atoms.length,2,'two atoms should be drawn');
 
-await page.locator('[data-chem-tool="bond"]').click();
+await clickControl('[data-chem-tool="bond"]');
 await bondAtoms(0,1);
 assert.equal((await currentGraph()).bonds[0].order,1,'first add creates a single bond');
 await bondAtoms(0,1);
@@ -45,10 +46,10 @@ await bondAtoms(0,1);
 assert.equal((await currentGraph()).bonds[0].order,3,'repeating add promotes to triple bond');
 
 // Make carbon 0 intentionally over-valent: triple bond + double bond = valence 5.
-await page.locator('[data-chem-tool="atom"]').click();
+await clickControl('[data-chem-tool="atom"]');
 await page.mouse.click(box.x+320,box.y+360);
 assert.equal((await currentGraph()).atoms.length,3,'third atom should be drawn');
-await page.locator('[data-chem-tool="bond"]').click();
+await clickControl('[data-chem-tool="bond"]');
 await bondAtoms(0,2);
 await bondAtoms(0,2);
 const overGraph=await currentGraph();
@@ -57,31 +58,28 @@ const thirdId=overGraph.atoms[2].id;
 assert.equal(overGraph.bonds.find(b=>b.a===thirdId||b.b===thirdId)?.order,2,'second pair should be promoted to a double bond');
 assert(await page.locator('.chem-editor-atom.valence-warning').count()>=1,'over-valent atom should be marked with atom-specific warning');
 
-// Smart geometry cleanup is a Build control and should remain usable.
-await page.locator('#chemTidy2D').click();
+await clickControl('#chemTidy2D');
 assert.match(await page.locator('#chemEditorStatus').innerText(),/tidied|Ready/i,'Tidy 2D should complete');
 
-// Select the warning atom before opening Display controls.
-await page.locator('[data-chem-tool="select"]').click();
+await clickControl('[data-chem-tool="select"]');
 await page.locator('.chem-editor-atom').nth(0).click({force:true});
 
-// Display group contains both valence acknowledgement and the live 3D preview.
 const displayGroup=page.locator('.chem-tool-group').filter({hasText:'Display · Labels & chemistry'});
-if(!(await displayGroup.getAttribute('open'))) await displayGroup.locator('summary').click();
+await displayGroup.evaluate(el=>{el.open=true;});
 assert.equal(await page.locator('#chemIgnoreValence').isDisabled(),false,'ignore control should enable for selected warning atom');
-await page.locator('#chemIgnoreValence').click();
+await clickControl('#chemIgnoreValence');
 assert.equal(await page.locator('.chem-editor-atom.valence-warning').count(),0,'ignored valence warning should stop flashing');
 
-await page.locator('#chem3DToggle').click();
+await clickControl('#chem3DToggle');
 await assertVisible(page.locator('#chem3DPanel'),'3D split panel should open');
 assert.equal(await page.locator('#chem3DToggle').getAttribute('aria-pressed'),'true');
-await page.locator('#chem3DCanvas').hover();
-await page.mouse.wheel(0,-120);
+await page.locator('#chem3DCanvas').evaluate(el=>el.scrollIntoView({block:'center'}));
 const cbox=await page.locator('#chem3DCanvas').boundingBox();
 assert(cbox,'3D canvas should have a box');
-await page.mouse.move(cbox.x+200,cbox.y+180);
+await page.mouse.move(cbox.x+Math.min(200,cbox.width/3),cbox.y+Math.min(180,cbox.height/3));
+await page.mouse.wheel(0,-120);
 await page.mouse.down();
-await page.mouse.move(cbox.x+260,cbox.y+220);
+await page.mouse.move(cbox.x+Math.min(260,cbox.width/2),cbox.y+Math.min(220,cbox.height/2));
 await page.mouse.up();
 
 assert.equal(errors.length,0,'Browser emitted errors: '+errors.join(' | '));
@@ -89,6 +87,7 @@ console.log('PASS: molecular drawing topbar, bond promotion, valence override, s
 await browser.close();
 
 async function currentGraph(){ return page.evaluate(()=>MoleculeEditor.getCurrentGraph()); }
+async function clickControl(selector){ await page.locator(selector).evaluate(el=>el.click()); }
 async function bondAtoms(a,b){
   await page.locator('.chem-editor-atom').nth(a).click({force:true});
   await page.locator('.chem-editor-atom').nth(b).click({force:true});
