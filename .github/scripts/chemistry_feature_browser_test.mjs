@@ -33,9 +33,9 @@ assert(box,'2D SVG should have a box');
 assert(box.y < 1000 && box.y+box.height > 0,'2D SVG should be in the browser viewport');
 
 await clickControl('[data-chem-tool="atom"]');
-await clickSvgAt(.30,.42);
+await clickSvgAt(.30,.42,101);
 assert.equal((await currentGraph()).atoms.length,1,'first atom should be drawn');
-await clickSvgAt(.60,.42);
+await clickSvgAt(.60,.42,102);
 assert.equal((await currentGraph()).atoms.length,2,'second atom should be drawn');
 
 await clickControl('[data-chem-tool="bond"]');
@@ -47,7 +47,7 @@ await bondAtoms(0,1);
 assert.equal((await currentGraph()).bonds[0].order,3,'repeating add promotes to triple bond');
 
 await clickControl('[data-chem-tool="atom"]');
-await clickSvgAt(.45,.74);
+await clickSvgAt(.45,.74,103);
 assert.equal((await currentGraph()).atoms.length,3,'third atom should be drawn');
 await clickControl('[data-chem-tool="bond"]');
 await bondAtoms(0,2);
@@ -89,10 +89,13 @@ await browser.close();
 
 async function currentGraph(){ return page.evaluate(()=>MoleculeEditor.getCurrentGraph()); }
 async function clickControl(selector){ await page.locator(selector).evaluate(el=>el.click()); }
-async function clickSvgAt(fx,fy){
-  await svg.evaluate(el=>el.scrollIntoView({block:'center'}));
-  const b=await svg.boundingBox();assert(b,'SVG box missing');
-  await page.mouse.click(b.x+b.width*fx,b.y+b.height*fy);
+async function clickSvgAt(fx,fy,pointerId){
+  await svg.evaluate((el,{fx,fy,pointerId})=>{
+    const r=el.getBoundingClientRect();
+    const init={bubbles:true,cancelable:true,pointerId,button:0,buttons:1,clientX:r.left+r.width*fx,clientY:r.top+r.height*fy,pointerType:'mouse',isPrimary:true};
+    el.dispatchEvent(new PointerEvent('pointerdown',init));
+    el.dispatchEvent(new PointerEvent('pointerup',{...init,buttons:0}));
+  },{fx,fy,pointerId});
 }
 async function bondAtoms(a,b){
   const aa=page.locator('.chem-editor-atom').nth(a),bb=page.locator('.chem-editor-atom').nth(b);
