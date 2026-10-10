@@ -1,0 +1,37 @@
+name: Apply molecular drawing header fix
+
+on:
+  push:
+    branches: [chemistry-upgrade-20261009]
+    paths:
+      - .github/scripts/fix_chem_header_offset.py
+      - .github/workflows/chemistry-header-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chemistry-upgrade-20261009
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save linkedom
+      - name: Apply header spacing fix
+        run: python3 .github/scripts/fix_chem_header_offset.py
+      - name: Run chemistry checks
+        run: |
+          node --check chemistry-editor.js
+          node tests/chemistry-editor.cjs
+          node tests/chemistry.cjs
+      - name: Commit tested fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add chemistry-editor.js
+          git commit -m 'Keep molecular drawing below site navigation'
+          git push origin HEAD:chemistry-upgrade-20261009
