@@ -1,3 +1,4 @@
+// Dedicated end-to-end regression for the October 2026 molecular drawing upgrade.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 
@@ -63,8 +64,10 @@ await page.locator('#chemTidy2D').click();
 assert.match(await page.locator('#chemEditorStatus').innerText(),/tidied|Ready/i,'Tidy 2D should complete');
 await page.locator('#chem3DCanvas').hover();
 await page.mouse.wheel(0,-120);
-await page.mouse.move((await page.locator('#chem3DCanvas').boundingBox()).x+200,(await page.locator('#chem3DCanvas').boundingBox()).y+180);
-await page.mouse.down();await page.mouse.move((await page.locator('#chem3DCanvas').boundingBox()).x+260,(await page.locator('#chem3DCanvas').boundingBox()).y+220);await page.mouse.up();
+const cbox=await page.locator('#chem3DCanvas').boundingBox();
+assert(cbox,'3D canvas should have a box');
+await page.mouse.move(cbox.x+200,cbox.y+180);
+await page.mouse.down();await page.mouse.move(cbox.x+260,cbox.y+220);await page.mouse.up();
 
 assert.equal(errors.length,0,'Browser emitted errors: '+errors.join(' | '));
 console.log('PASS: molecular drawing topbar, bond promotion, valence override, smart tidy, and interactive 3D split preview.');
