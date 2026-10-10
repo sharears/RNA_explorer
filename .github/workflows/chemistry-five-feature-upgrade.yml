@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/chemistry-five-feature-upgrade.yml
       - .github/scripts/chemistry_upgrade.py
+      - .github/scripts/run_chemistry_upgrade.py
 
 permissions:
   contents: write
@@ -21,7 +22,7 @@ jobs:
         with:
           node-version: 22
       - name: Patch molecular drawing workspace
-        run: python3 .github/scripts/chemistry_upgrade.py
+        run: python3 .github/scripts/run_chemistry_upgrade.py
       - name: Syntax and chemistry regression tests
         run: |
           node --check chemistry-editor.js
