@@ -274,3 +274,13 @@ body.chem-editor-open .topbar{position:relative;z-index:1200;background:var(--in
 #chem3DStatus[data-state="busy"]{color:#f2c66d}
 #chem3DStatus[data-state="ready"]{color:var(--mint)}
 #chem3DStatus[data-state="warning"]{color:#efc178}
+
+/* Keep the 3D entry point unmistakably visible before the collapsible tool groups. */
+#chemEditorDialog .chem-editor-toolbar > #chem3DToggle{
+  order:-1000;
+  flex:0 0 auto;
+  position:sticky;
+  left:0;
+  z-index:2;
+  box-shadow:0 0 0 2px rgba(116,215,182,.18);
+}
