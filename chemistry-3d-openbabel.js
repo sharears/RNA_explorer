@@ -1,7 +1,10 @@
 (() => {
   "use strict";
 
-  const CDN_BASE = "https://cdn.jsdelivr.net/gh/partridgejiang/cheminfo-to-web@master/OpenBabel3/OpenBabel-js/bin/";
+  // Pin the OpenBabel WebAssembly build so geometry generation does not change
+  // underneath RNA Explorer when the upstream repository changes.
+  const OPENBABEL_REV = "4ccb195c2916e99905abf264bf6212f2b4f9a10d";
+  const CDN_BASE = `https://cdn.jsdelivr.net/gh/partridgejiang/cheminfo-to-web@${OPENBABEL_REV}/OpenBabel3/OpenBabel-js/bin/`;
   const SCRIPT_URL = CDN_BASE + "openbabel.js";
   let modulePromise = null;
 
@@ -10,6 +13,7 @@
     return new Promise((resolve, reject) => {
       const existing = document.querySelector('script[data-rna-openbabel="1"]');
       if (existing) {
+        if (typeof window.OpenBabelModule === "function") { resolve(); return; }
         existing.addEventListener("load", resolve, { once: true });
         existing.addEventListener("error", () => reject(new Error("OpenBabel JavaScript failed to load.")), { once: true });
         return;
@@ -86,10 +90,11 @@
     if (!atoms.length) throw new Error("Draw at least one atom before generating 3D geometry.");
     if (atoms.length > 999 || bonds.length > 999) throw new Error("This preview currently supports up to 999 atoms and 999 bonds.");
     const idToIndex = new Map(atoms.map((atom, i) => [atom.id, i + 1]));
+    const atomById = new Map(atoms.map(atom => [atom.id, atom]));
     const cx = atoms.reduce((sum, atom) => sum + Number(atom.x || 0), 0) / atoms.length;
     const cy = atoms.reduce((sum, atom) => sum + Number(atom.y || 0), 0) / atoms.length;
     const lengths = bonds.map(bond => {
-      const a = atoms.find(atom => atom.id === bond.a), b = atoms.find(atom => atom.id === bond.b);
+      const a = atomById.get(bond.a), b = atomById.get(bond.b);
       return a && b ? Math.hypot(Number(b.x || 0) - Number(a.x || 0), Number(b.y || 0) - Number(a.y || 0)) : 0;
     }).filter(value => value > 5);
     lengths.sort((a, b) => a - b);
@@ -147,51 +152,51 @@
     try { if (obj && typeof obj.delete === "function") obj.delete(); } catch (_) {}
   }
 
-  function findForceField(OB, name) {
+  function writeMol(OB, mol) {
+    let conv = null;
     try {
-      if (!OB?.OBForceField?.FindForceField) return null;
-      return OB.OBForceField.FindForceField(name);
-    } catch (_) {
-      try { return new OB.OBForceField.FindForceField(name); } catch (_) { return null; }
+      conv = new OB.ObConversionWrapper();
+      if (!conv.setOutFormat("chemical/x-mdl-molfile", "mol")) throw new Error("OpenBabel MOL output support is unavailable.");
+      return conv.writeString(mol, false);
+    } finally {
+      safeDelete(conv);
     }
   }
 
   async function generate(graph) {
     const OB = await getOpenBabel();
     const input = graphToMolBlock(graph);
-    let conv = null, mol = null;
+    if (typeof OB.OB3DGenWrapper !== "function") throw new Error("This OpenBabel build does not expose the 3D force-field generator.");
+
+    let generator = null;
     try {
-      conv = new OB.ObConversionWrapper();
-      if (!conv.setInFormat("", "mol")) throw new Error("OpenBabel MOL input support is unavailable.");
-      mol = new OB.OBMol();
-      if (!conv.readString(mol, input)) throw new Error("OpenBabel could not read the molecular drawing.");
-      const gen3d = OB?.OBOp?.FindType ? OB.OBOp.FindType("Gen3D") : null;
-      if (!gen3d || !gen3d.Do(mol, "")) throw new Error("OpenBabel Gen3D could not generate a conformer for this structure.");
-
-      let forceField = "OpenBabel Gen3D";
-      for (const name of ["MMFF94", "UFF"]) {
-        const ff = findForceField(OB, name);
-        if (!ff) continue;
-        let setup = false;
-        try { setup = Boolean(ff.Setup(mol)); } catch (_) { setup = false; }
-        if (!setup) continue;
+      generator = new OB.OB3DGenWrapper();
+      for (const forceField of ["MMFF94", "UFF"]) {
+        let mol = null;
         try {
-          if (typeof ff.ConjugateGradients === "function") ff.ConjugateGradients(300);
-          else if (typeof ff.SteepestDescent === "function") ff.SteepestDescent(300);
-          if (typeof ff.GetCoordinates === "function") ff.GetCoordinates(mol);
-        } catch (_) {}
-        forceField = name;
-        break;
+          // The OpenBabel wrapper performs Builder.Build, adds hydrogens before
+          // force-field setup, runs steepest descent + weighted rotor search,
+          // then writes the optimized coordinates back to the OBMol.
+          mol = generator.generate3DStructureFromMolData(input, forceField);
+          if (!mol) continue;
+          const output = writeMol(OB, mol);
+          const model = parseMolBlock(output, graph);
+          if (!model.atoms.length) continue;
+          return {
+            ...model,
+            forceField,
+            source: "OpenBabel WebAssembly",
+            hydrogensAdded: model.atoms.length > graph.atoms.length
+          };
+        } catch (error) {
+          if (forceField === "UFF") throw error;
+        } finally {
+          safeDelete(mol);
+        }
       }
-
-      if (!conv.setOutFormat("", "mol")) throw new Error("OpenBabel MOL output support is unavailable.");
-      const output = conv.writeString(mol, false);
-      const model = parseMolBlock(output, graph);
-      if (!model.atoms.length) throw new Error("No optimized atoms were returned.");
-      return { ...model, forceField, source: "OpenBabel WebAssembly", hydrogensAdded: model.atoms.length > graph.atoms.length };
+      throw new Error("Neither MMFF94 nor UFF could generate an optimized 3D conformer for this structure.");
     } finally {
-      safeDelete(mol);
-      safeDelete(conv);
+      safeDelete(generator);
     }
   }
 
@@ -200,6 +205,12 @@
     graphToMolBlock,
     parseMolBlock,
     preload: getOpenBabel,
-    getEngineInfo: () => ({ name: "OpenBabel WebAssembly", primary: "MMFF94", fallback: "UFF", cdn: CDN_BASE })
+    getEngineInfo: () => ({
+      name: "OpenBabel WebAssembly",
+      primary: "MMFF94",
+      fallback: "UFF",
+      revision: OPENBABEL_REV,
+      cdn: CDN_BASE
+    })
   };
 })();
