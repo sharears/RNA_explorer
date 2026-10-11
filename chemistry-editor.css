@@ -265,3 +265,12 @@ body.chem-editor-open .topbar{position:relative;z-index:1200;background:var(--in
   #chemEditorDialog.chem-editor-dialog[open]{top:70px!important;left:6px!important;right:6px!important;bottom:6px!important;inset-block-start:70px!important}
   #chemEditorDialog .chem-editor-workspace.with-3d{grid-template-columns:1fr!important}
 }
+
+
+/* Geometry-aware molecular 3D preview */
+.chem-3d-toggle-prominent{border-color:var(--mint)!important;color:var(--mint)!important;background:rgba(116,215,182,.08)!important;font-weight:700}
+.chem-3d-heading>div{display:grid;gap:2px;min-width:0}
+#chem3DStatus{font-size:.64rem;color:var(--muted);line-height:1.25}
+#chem3DStatus[data-state="busy"]{color:#f2c66d}
+#chem3DStatus[data-state="ready"]{color:var(--mint)}
+#chem3DStatus[data-state="warning"]{color:#efc178}

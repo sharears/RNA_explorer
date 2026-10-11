@@ -178,7 +178,7 @@ const MoleculeEditor = (() => {
   let graph={atoms:[],bonds:[],hbonds:[]},tool="select",element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,lasso=null,transformDrag=null,selectionZoom=1,pendingFuseBond=null,onSave=null;
   let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false,showAtomLabels=true,showAtomNumbers=false;
   let ignoredValenceWarnings=new Set(),smartLayoutEnabled=true,threeDVisible=false;
-  let threeDCanvas=null,threeDPanel=null,threeDFrame=0,threeDDrag=null,threeDCoords=[],threeDSignature="";
+  let threeDCanvas=null,threeDPanel=null,threeDFrame=0,threeDDrag=null,threeDCoords=[],threeDBonds=[],threeDSignature="",threeDPendingSignature="",threeDRequestSerial=0;
   const threeDView={rx:-0.38,ry:0.58,zoom:1,panX:0,panY:0};
   let textDefaults={...DEFAULT_TEXT_STYLE};
   let undoStack=[],redoStack=[];
@@ -218,13 +218,14 @@ const MoleculeEditor = (() => {
       ["History",["#chemUndoButton","#chemRedoButton"]],
       ["Select · Atoms & groups",['[data-chem-tool="select"]','[data-chem-tool="lasso"]',"#chemSelectAll"]],
       ["Build · Atoms & bonds",['[data-chem-tool="atom"]','[data-chem-tool="bond"]','[data-chem-tool="fuse"]','[data-chem-tool="hbond"]','[data-chem-tool="delete"]',"#chemRingTemplate","#chemInsertRing","#chemSmartLayoutToggle","#chemTidy2D"]],
-      ["Display · Labels & chemistry",["#chemAtomCirclesToggle","#chemAtomLabelsToggle","#chemAtomNumbersToggle","#chemElement","#chemBondOrder","#chemChargeMinus","#chemChargePlus","#chemIupacButton","#chemIgnoreValence","#chem3DToggle"]],
+      ["Display · Labels & chemistry",["#chemAtomCirclesToggle","#chemAtomLabelsToggle","#chemAtomNumbersToggle","#chemElement","#chemBondOrder","#chemChargeMinus","#chemChargePlus","#chemIupacButton","#chemIgnoreValence"]],
       ["View · Canvas",["#chemExpandCanvas","#chemFitCanvas"]]
     ];
     groups.forEach(([name,selectors],index)=>{
       const details=document.createElement("details");details.className="chem-tool-group";details.open=index<3;const summary=document.createElement("summary");summary.textContent=name;const body=document.createElement("div");body.className="chem-tool-group-body";details.append(summary,body);
       selectors.forEach(selector=>{let el=toolbar.querySelector(selector);if(el&&el.tagName==="SELECT")el=el.closest("label");if(el&&!body.contains(el))body.append(el);});toolbar.append(details);
     });
+    const show3d=toolbar.querySelector("#chem3DToggle");if(show3d){show3d.classList.add("chem-3d-toggle-prominent");show3d.title="Generate a geometry-optimized 3D conformer with MMFF94 and UFF fallback";}
     const text=dialog.querySelector(".chem-text-controls > strong");if(text)text.textContent="Display · Text";
   }
 
@@ -369,8 +370,8 @@ const MoleculeEditor = (() => {
           <div class="chem-editor-canvas-wrap">
             <svg id="chemEditorSvg" viewBox="0 0 820 470" aria-label="Editable molecular structure"></svg>
           </div>
-          <aside class="chem-3d-panel" id="chem3DPanel" hidden aria-label="Interactive idealized 3D molecular preview">
-            <div class="chem-3d-heading"><strong>Idealized 3D preview</strong><span>Drag to rotate · Shift-drag to pan · Wheel to zoom</span></div>
+          <aside class="chem-3d-panel" id="chem3DPanel" hidden aria-label="Interactive geometry-optimized 3D molecular preview">
+            <div class="chem-3d-heading"><div><strong>Geometry-optimized 3D</strong><span id="chem3DStatus" data-state="idle">MMFF94 → UFF fallback</span></div><span>Drag to rotate · Shift-drag to pan · Wheel to zoom</span></div>
             <canvas id="chem3DCanvas" width="720" height="560" aria-label="Interactive 3D molecule"></canvas>
           </aside>
         </div>
@@ -702,7 +703,7 @@ const MoleculeEditor = (() => {
   }
 
   const ELEMENT_3D_COLORS={H:"#f4f4f4",C:"#8b9198",N:"#3050f8",O:"#ff3030",P:"#ff8c1a",S:"#ffd92f",F:"#66ff66",Cl:"#39d353",Br:"#a62929",I:"#8a4fb5"};
-  function graphSignature3D(){return JSON.stringify({atoms:graph.atoms.map(a=>[a.id,a.element,Math.round(a.x*10),Math.round(a.y*10)]),bonds:graph.bonds.map(b=>[b.a,b.b,b.order])});}
+  function graphSignature3D(){return JSON.stringify({atoms:graph.atoms.map(a=>[a.id,a.element,Number(a.charge||0)]),bonds:graph.bonds.map(b=>[b.a,b.b,Number(b.order||1)])});}
   function adjacency(){
     const m=new Map(graph.atoms.map(a=>[a.id,[]]));
     graph.bonds.forEach(b=>{m.get(b.a)?.push({id:b.b,order:Number(b.order||1)});m.get(b.b)?.push({id:b.a,order:Number(b.order||1)});});
@@ -723,27 +724,27 @@ const MoleculeEditor = (() => {
   }
   function buildIdealized3D(){
     if(!graph.atoms.length)return [];
-    const avgBond=graph.bonds.length?graph.bonds.reduce((s,b)=>{const a=atomById(b.a),c=atomById(b.b);return s+(a&&c?Math.hypot(c.x-a.x,c.y-a.y):0);},0)/graph.bonds.length:68;
-    const scale=1.45/Math.max(20,avgBond||68),cx=graph.atoms.reduce((s,a)=>s+a.x,0)/graph.atoms.length,cy=graph.atoms.reduce((s,a)=>s+a.y,0)/graph.atoms.length;
+    const avgBond=graph.bonds.length?graph.bonds.reduce((sum,b)=>{const a=atomById(b.a),c=atomById(b.b);return sum+(a&&c?Math.hypot(c.x-a.x,c.y-a.y):0);},0)/graph.bonds.length:68;
+    const scale=1.45/Math.max(20,avgBond||68),cx=graph.atoms.reduce((sum,a)=>sum+a.x,0)/graph.atoms.length,cy=graph.atoms.reduce((sum,a)=>sum+a.y,0)/graph.atoms.length;
     const coords=new Map(graph.atoms.map(a=>[a.id,{id:a.id,element:a.element,x:(a.x-cx)*scale,y:-(a.y-cy)*scale,z:0}]));
     const adj=adjacency(),rings=findSixMemberRings(adj),ringAtoms=new Set();
     rings.forEach(ids=>{
       const pts=ids.map(id=>coords.get(id)).filter(Boolean);if(pts.length!==6)return;
-      const mx=pts.reduce((s,p)=>s+p.x,0)/6,my=pts.reduce((s,p)=>s+p.y,0)/6,r=1.40,first=pts[0],phase=Math.atan2(first.y-my,first.x-mx);
-      ids.forEach((id,i)=>{const p=coords.get(id);if(p){p.x=mx+Math.cos(phase+i*Math.PI/3)*r;p.y=my+Math.sin(phase+i*Math.PI/3)*r;p.z=0;ringAtoms.add(id);}});
+      const mx=pts.reduce((sum,q)=>sum+q.x,0)/6,my=pts.reduce((sum,q)=>sum+q.y,0)/6,r=1.40,phase=Math.atan2(pts[0].y-my,pts[0].x-mx);
+      ids.forEach((id,i)=>{const q=coords.get(id);if(q){q.x=mx+Math.cos(phase+i*Math.PI/3)*r;q.y=my+Math.sin(phase+i*Math.PI/3)*r;q.z=0;ringAtoms.add(id);}});
     });
     graph.atoms.forEach((a,idx)=>{
       const neighbors=adj.get(a.id)||[];if(ringAtoms.has(a.id))return;
       if(neighbors.length>=4){
-        const p=coords.get(a.id);p.z=(idx%2?0.25:-0.25);
-        neighbors.forEach((n,j)=>{const q=coords.get(n.id);if(q&&!ringAtoms.has(n.id))q.z+=(j%2?0.55:-0.55);});
+        const q=coords.get(a.id);q.z=(idx%2?.25:-.25);
+        neighbors.forEach((n,j)=>{const r=coords.get(n.id);if(r&&!ringAtoms.has(n.id))r.z+=(j%2?.55:-.55);});
       }
     });
-    const arr=[...coords.values()],byId=new Map(arr.map(p=>[p.id,p]));
+    const arr=[...coords.values()],byId=new Map(arr.map(q=>[q.id,q]));
     for(let iter=0;iter<90;iter++){
       graph.bonds.forEach(b=>{
         const a=byId.get(b.a),c=byId.get(b.b);if(!a||!c)return;
-        const dx=c.x-a.x,dy=c.y-a.y,dz=c.z-a.z,d=Math.hypot(dx,dy,dz)||1,target=Number(b.order||1)===1?1.50:Number(b.order||1)===2?1.34:1.20,pull=(d-target)*0.08,ux=dx/d,uy=dy/d,uz=dz/d,fa=ringAtoms.has(a.id)?0:.5,fc=ringAtoms.has(c.id)?0:.5;
+        const dx=c.x-a.x,dy=c.y-a.y,dz=c.z-a.z,d=Math.hypot(dx,dy,dz)||1,target=Number(b.order||1)===1?1.50:Number(b.order||1)===2?1.34:1.20,pull=(d-target)*.08,ux=dx/d,uy=dy/d,uz=dz/d,fa=ringAtoms.has(a.id)?0:.5,fc=ringAtoms.has(c.id)?0:.5;
         a.x+=ux*pull*fa;a.y+=uy*pull*fa;a.z+=uz*pull*fa;c.x-=ux*pull*fc;c.y-=uy*pull*fc;c.z-=uz*pull*fc;
       });
       for(let i=0;i<arr.length;i++)for(let j=i+1;j<arr.length;j++){
@@ -754,24 +755,57 @@ const MoleculeEditor = (() => {
     }
     return arr;
   }
+  function set3DStatus(text,state="idle"){
+    const node=dialog?.querySelector("#chem3DStatus");if(node){node.textContent=text;node.dataset.state=state;}
+  }
+  function fallback3DModel(){return {atoms:buildIdealized3D(),bonds:graph.bonds.map(b=>({...b}))};}
+  function requestGeometryOptimized3D(signature){
+    if(!threeDVisible||!signature||signature===threeDPendingSignature)return;
+    const request=++threeDRequestSerial,snapshot=clone(graph),fallback=fallback3DModel();
+    threeDCoords=fallback.atoms;threeDBonds=fallback.bonds;threeDPendingSignature=signature;
+    set3DStatus("Generating conformer · MMFF94 → UFF…","busy");
+    const engine=window.Chemistry3DForceField;
+    if(!engine?.generate){threeDSignature=signature;threeDPendingSignature="";set3DStatus("Force-field engine unavailable · rough preview","warning");return;}
+    engine.generate(snapshot).then(model=>{
+      if(request!==threeDRequestSerial||graphSignature3D()!==signature)return;
+      threeDCoords=Array.isArray(model.atoms)?model.atoms:fallback.atoms;
+      threeDBonds=Array.isArray(model.bonds)&&model.bonds.length?model.bonds:fallback.bonds;
+      threeDSignature=signature;threeDPendingSignature="";
+      set3DStatus((model.forceField||"Force field")+" optimized"+(model.hydrogensAdded?" · hydrogens added":""),"ready");
+      schedule3DRender();
+    }).catch(error=>{
+      if(request!==threeDRequestSerial||graphSignature3D()!==signature)return;
+      threeDCoords=fallback.atoms;threeDBonds=fallback.bonds;threeDSignature=signature;threeDPendingSignature="";
+      set3DStatus("Optimization unavailable · rough preview","warning");
+      console.warn("RNA Explorer 3D force-field optimization failed:",error);
+      schedule3DRender();
+    });
+  }
   function rotate3DPoint(p){
     const cy=Math.cos(threeDView.ry),sy=Math.sin(threeDView.ry),cx=Math.cos(threeDView.rx),sx=Math.sin(threeDView.rx),x1=p.x*cy+p.z*sy,z1=-p.x*sy+p.z*cy,y1=p.y*cx-z1*sx,z2=p.y*sx+z1*cx;
     return {...p,x:x1,y:y1,z:z2};
   }
   function render3DPreview(force=false){
     threeDFrame=0;if(!threeDVisible||!threeDCanvas)return;
-    const sig=graphSignature3D();if(force||sig!==threeDSignature){threeDCoords=buildIdealized3D();threeDSignature=sig;}
+    const sig=graphSignature3D();
+    if(!graph.atoms.length){threeDCoords=[];threeDBonds=[];threeDSignature=sig;threeDPendingSignature="";set3DStatus("Draw a molecule to generate 3D geometry.","idle");}
+    else if((force||sig!==threeDSignature)&&sig!==threeDPendingSignature)requestGeometryOptimized3D(sig);
     const canvas=threeDCanvas,rect=canvas.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1),w=Math.max(320,Math.round(rect.width||640)),h=Math.max(280,Math.round(rect.height||500));
     if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
     const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);ctx.fillStyle="#07111c";ctx.fillRect(0,0,w,h);
     if(!threeDCoords.length){ctx.fillStyle="#9cabb8";ctx.font="14px Manrope";ctx.textAlign="center";ctx.fillText("Draw a molecule to preview it in 3D.",w/2,h/2);return;}
-    const pts=threeDCoords.map(rotate3DPoint),byId=new Map(pts.map(p=>[p.id,p])),maxR=Math.max(2,...pts.map(p=>Math.hypot(p.x,p.y))),s=Math.min(w,h)*0.34/maxR*threeDView.zoom,project=p=>({x:w/2+threeDView.panX+p.x*s,y:h/2+threeDView.panY-p.y*s,z:p.z});
-    const bondDraw=graph.bonds.map(b=>({b,a:byId.get(b.a),c:byId.get(b.b)})).filter(x=>x.a&&x.c).sort((u,v)=>(u.a.z+u.c.z)-(v.a.z+v.c.z));
-    bondDraw.forEach(({b,a,c})=>{
-      const p=project(a),q=project(c),dx=q.x-p.x,dy=q.y-p.y,len=Math.hypot(dx,dy)||1,ox=-dy/len*3.2,oy=dx/len*3.2,order=Math.max(1,Math.min(3,Number(b.order||1))),offsets=order===1?[0]:order===2?[-1,1]:[-1.5,0,1.5];
-      offsets.forEach(off=>{const grad=ctx.createLinearGradient(p.x,p.y,q.x,q.y);grad.addColorStop(0,ELEMENT_3D_COLORS[a.element]||"#aaaaaa");grad.addColorStop(1,ELEMENT_3D_COLORS[c.element]||"#aaaaaa");ctx.strokeStyle=grad;ctx.lineWidth=8;ctx.lineCap="round";ctx.beginPath();ctx.moveTo(p.x+ox*off,p.y+oy*off);ctx.lineTo(q.x+ox*off,q.y+oy*off);ctx.stroke();});
+    const pts=threeDCoords.map(rotate3DPoint),byId=new Map(pts.map(q=>[q.id,q])),maxR=Math.max(2,...pts.map(q=>Math.hypot(q.x,q.y))),scale=Math.min(w,h)*.34/maxR*threeDView.zoom,project=q=>({x:w/2+threeDView.panX+q.x*scale,y:h/2+threeDView.panY-q.y*scale,z:q.z});
+    const draw=threeDBonds.map(b=>({b,a:byId.get(b.a),c:byId.get(b.b)})).filter(x=>x.a&&x.c).sort((u,v)=>(u.a.z+u.c.z)-(v.a.z+v.c.z));
+    draw.forEach(({b,a,c})=>{
+      const p=project(a),q=project(c),dx=q.x-p.x,dy=q.y-p.y,len=Math.hypot(dx,dy)||1,ox=-dy/len*3.5,oy=dx/len*3.5,order=Math.max(1,Math.min(3,Number(b.order||1))),offsets=order===1?[0]:order===2?[-1,1]:[-1.5,0,1.5],mx=(p.x+q.x)/2,my=(p.y+q.y)/2;
+      offsets.forEach(off=>{
+        const x1=p.x+ox*off,y1=p.y+oy*off,x2=q.x+ox*off,y2=q.y+oy*off,hx=mx+ox*off,hy=my+oy*off;
+        ctx.lineWidth=10;ctx.lineCap="round";
+        ctx.strokeStyle=ELEMENT_3D_COLORS[a.element]||"#aaa";ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(hx,hy);ctx.stroke();
+        ctx.strokeStyle=ELEMENT_3D_COLORS[c.element]||"#aaa";ctx.beginPath();ctx.moveTo(hx,hy);ctx.lineTo(x2,y2);ctx.stroke();
+      });
     });
-    [...pts].sort((a,b)=>a.z-b.z).forEach(p=>{const q=project(p),r=p.element==="H"?6:9;ctx.beginPath();ctx.arc(q.x,q.y,r,0,Math.PI*2);ctx.fillStyle=ELEMENT_3D_COLORS[p.element]||"#aaaaaa";ctx.fill();ctx.strokeStyle="rgba(5,10,16,.8)";ctx.lineWidth=1.5;ctx.stroke();});
+    [...pts].sort((a,b)=>a.z-b.z).forEach(q=>{const p=project(q),r=q.element==="H"?4.8:7.5;ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fillStyle=ELEMENT_3D_COLORS[q.element]||"#aaa";ctx.fill();ctx.strokeStyle="rgba(5,10,16,.82)";ctx.lineWidth=1.2;ctx.stroke();});
   }
   function schedule3DRender(force=false){
     if(!threeDVisible)return;
@@ -781,7 +815,8 @@ const MoleculeEditor = (() => {
   function toggle3DPreview(){
     threeDVisible=!threeDVisible;if(threeDPanel)threeDPanel.hidden=!threeDVisible;
     const button=dialog?.querySelector("#chem3DToggle");if(button){button.setAttribute("aria-pressed",String(threeDVisible));button.textContent=threeDVisible?"Hide 3D":"Show in 3D";}
-    dialog?.querySelector(".chem-editor-workspace")?.classList.toggle("with-3d",threeDVisible);if(threeDVisible)schedule3DRender(true);
+    dialog?.querySelector(".chem-editor-workspace")?.classList.toggle("with-3d",threeDVisible);
+    if(threeDVisible){threeDSignature="";threeDPendingSignature="";schedule3DRender(true);}else{threeDRequestSerial++;threeDPendingSignature="";}
   }
   function setup3DPreview(){
     threeDPanel=dialog?.querySelector("#chem3DPanel");threeDCanvas=dialog?.querySelector("#chem3DCanvas");if(!threeDCanvas||threeDCanvas.dataset.ready==="1")return;threeDCanvas.dataset.ready="1";
