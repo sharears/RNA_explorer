@@ -3,13 +3,14 @@ name: Geometry-aware 3D browser
 # Dedicated chemistry/geometry regression for the browser-only 3D engine.
 on:
   push:
-    branches: [geometry-aware-3d-20261010]
+    branches: [main]
     paths:
       - chemistry-3d-openbabel.js
       - chemistry-editor.js
       - chemistry-editor.css
       - index.html
       - tests/geometry-aware-3d-browser.mjs
+      - vendor/openchemlib/**
       - .github/workflows/geometry-aware-3d-browser.yml
   pull_request:
     paths:
@@ -18,6 +19,7 @@ on:
       - chemistry-editor.css
       - index.html
       - tests/geometry-aware-3d-browser.mjs
+      - vendor/openchemlib/**
       - .github/workflows/geometry-aware-3d-browser.yml
 
 concurrency:
@@ -43,7 +45,7 @@ jobs:
           python3 -m http.server 4173 >/tmp/rna-http.log 2>&1 &
           echo $! > /tmp/rna-http.pid
           sleep 2
-      - name: Verify MMFF94/UFF geometry and PyMOL-style 3D UI
+      - name: Verify MMFF94 geometry and PyMOL-style 3D UI
         run: node tests/geometry-aware-3d-browser.mjs
       - name: Upload diagnostics on failure
         if: failure()
