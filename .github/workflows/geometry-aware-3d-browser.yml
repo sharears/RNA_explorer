@@ -1,5 +1,6 @@
 name: Geometry-aware 3D browser
 
+# Dedicated chemistry/geometry regression for the browser-only 3D engine.
 on:
   push:
     branches: [geometry-aware-3d-20261010]
