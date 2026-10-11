@@ -1,0 +1,38 @@
+name: Patch geometry 3D CSP on feature branch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/patch-geometry-csp-runner.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: geometry-aware-3d-20261010
+          fetch-depth: 0
+      - name: Permit OpenBabel runtime code generation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          old="script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net;"
+          new="script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' https://cdn.jsdelivr.net;"
+          if old not in s:
+              raise SystemExit('CSP anchor not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+      - name: Commit CSP fix to feature branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "Allow OpenBabel runtime for geometry optimization"
+          git push origin HEAD:geometry-aware-3d-20261010
