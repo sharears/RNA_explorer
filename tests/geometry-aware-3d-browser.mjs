@@ -5,10 +5,12 @@ const BASE = process.env.RNA_EXPLORER_URL || 'http://127.0.0.1:4173';
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 980 } });
 const errors = [];
+const diagnostics = [];
 page.on('pageerror', error => errors.push('pageerror: ' + error.message));
 page.on('console', msg => {
   const text = msg.text();
   if (msg.type() === 'error' && !/favicon/i.test(text)) errors.push('console: ' + text);
+  if (msg.type() === 'warning' || /OpenBabel|force-field|WebAssembly|wasm/i.test(text)) diagnostics.push(`${msg.type()}: ${text}`);
 });
 
 function ringGraph(name, orders) {
@@ -62,6 +64,20 @@ try {
   await page.goto(`${BASE}/?page=drawing`, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForFunction(() => typeof MoleculeEditor !== 'undefined' && typeof Chemistry3DForceField !== 'undefined', null, { timeout: 10000 });
 
+  // First exercise the force-field adapter directly so failures report the actual
+  // OpenBabel exception instead of timing out behind the UI status message.
+  const probe = await page.evaluate(async graph => {
+    try {
+      const model = await Chemistry3DForceField.generate(graph);
+      return { ok: true, forceField: model.forceField, atomCount: model.atoms.length, bondCount: model.bonds.length, engine: Chemistry3DForceField.getEngineInfo() };
+    } catch (error) {
+      return { ok: false, message: String(error?.message || error), stack: String(error?.stack || ''), moduleType: typeof window.OpenBabelModule, engine: Chemistry3DForceField.getEngineInfo() };
+    }
+  }, graphs.cyclohexane);
+  console.log('OpenBabel probe:', JSON.stringify(probe));
+  assert.equal(probe.ok, true, `OpenBabel force-field probe failed: ${JSON.stringify(probe)}\n${diagnostics.join('\n')}`);
+  assert.match(probe.forceField, /^(MMFF94|UFF)$/);
+
   // Critical discoverability regression: Show in 3D must be visible in the normal UI,
   // without tests opening collapsed details on the user's behalf.
   await page.evaluate(() => MoleculeEditor.openBase('A'));
@@ -74,8 +90,13 @@ try {
   await show3d.click();
   await page.waitForSelector('#chem3DPanel:not([hidden])', { state: 'visible' });
   assert.match(await page.locator('#chem3DPanel').innerText(), /Geometry-optimized 3D/i, '3D panel is not labeled as geometry optimized.');
-  await page.waitForFunction(() => /optimized/i.test(document.querySelector('#chem3DStatus')?.textContent || ''), null, { timeout: 90000 });
+  await page.waitForFunction(() => {
+    const node = document.querySelector('#chem3DStatus');
+    return node && ['ready', 'warning'].includes(node.dataset.state || '');
+  }, null, { timeout: 60000 });
   const uiStatus = (await page.locator('#chem3DStatus').textContent()) || '';
+  const uiState = (await page.locator('#chem3DStatus').getAttribute('data-state')) || '';
+  assert.equal(uiState, 'ready', `3D UI force-field optimization failed: ${uiStatus}\n${diagnostics.join('\n')}`);
   assert.match(uiStatus, /(MMFF94|UFF) optimized/i, `UI did not report a successful force-field optimization: ${uiStatus}`);
 
   const results = await page.evaluate(async inputGraphs => {
@@ -103,13 +124,10 @@ try {
     model._stats = stats;
   }
 
-  // Benzene should be essentially planar after MMFF/UFF optimization.
   assert(results.benzene._stats.maxDeviation < 12, `benzene is not planar enough: ${JSON.stringify(results.benzene._stats)}`);
-  // Saturated/partly saturated six-membered rings must not be the old flat hexagons.
   assert(results.cyclohexane._stats.maxDeviation > 20, `cyclohexane remained too planar: ${JSON.stringify(results.cyclohexane._stats)}`);
   assert(results.cyclohexene._stats.maxDeviation > 12, `cyclohexene remained too planar: ${JSON.stringify(results.cyclohexene._stats)}`);
 
-  // Renderer implementation should retain PyMOL/CPK element-wise colors and thick sticks.
   const sourceChecks = await page.evaluate(() => ({
     engine: Chemistry3DForceField.getEngineInfo(),
     canvasVisible: document.querySelector('#chem3DCanvas')?.getBoundingClientRect().width > 250
