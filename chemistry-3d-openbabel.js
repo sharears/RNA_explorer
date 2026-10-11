@@ -29,44 +29,41 @@
     });
   }
 
+  function waitForBindings(mod, timeoutMs = 30000) {
+    return new Promise((resolve, reject) => {
+      const started = performance.now();
+      const check = () => {
+        if (mod && typeof mod.OB3DGenWrapper === "function" && typeof mod.ObConversionWrapper === "function") {
+          resolve(mod);
+          return;
+        }
+        if (performance.now() - started > timeoutMs) {
+          reject(new Error("OpenBabel bindings did not become ready in time."));
+          return;
+        }
+        setTimeout(check, 40);
+      };
+      check();
+    });
+  }
+
   function getOpenBabel() {
     if (modulePromise) return modulePromise;
     modulePromise = (async () => {
       await loadOpenBabelScript();
       if (typeof window.OpenBabelModule !== "function") throw new Error("OpenBabelModule is unavailable after loading the WebAssembly wrapper.");
-      return await new Promise((resolve, reject) => {
-        let settled = false;
-        const finish = value => { if (!settled) { settled = true; resolve(value); } };
-        const fail = error => { if (!settled) { settled = true; reject(error instanceof Error ? error : new Error(String(error))); } };
-        let mod;
-        try {
-          mod = window.OpenBabelModule({
-            locateFile: path => CDN_BASE + path,
-            onAbort: reason => fail(new Error("OpenBabel aborted: " + reason))
-          });
-        } catch (error) {
-          fail(error);
-          return;
-        }
-        if (mod && typeof mod.then === "function") {
-          mod.then(finish, fail);
-          return;
-        }
-        if (!mod) {
-          fail(new Error("OpenBabel did not create a module instance."));
-          return;
-        }
-        if (mod.calledRun || mod.runtimeInitialized) {
-          finish(mod);
-          return;
-        }
-        const prior = mod.onRuntimeInitialized;
-        mod.onRuntimeInitialized = () => {
-          try { if (typeof prior === "function") prior(); } catch (_) {}
-          finish(mod);
-        };
-        setTimeout(() => fail(new Error("OpenBabel initialization timed out.")), 45000);
-      });
+      let mod;
+      try {
+        mod = window.OpenBabelModule({
+          locateFile: path => CDN_BASE + path,
+          onAbort: reason => { throw new Error("OpenBabel aborted: " + reason); }
+        });
+      } catch (error) {
+        throw error instanceof Error ? error : new Error(String(error));
+      }
+      if (mod && typeof mod.then === "function") mod = await mod;
+      if (!mod) throw new Error("OpenBabel did not create a module instance.");
+      return await waitForBindings(mod);
     })().catch(error => {
       modulePromise = null;
       throw error;
