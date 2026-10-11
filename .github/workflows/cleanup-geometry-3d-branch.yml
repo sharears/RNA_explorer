@@ -1,0 +1,40 @@
+name: Clean geometry 3D feature branch
+
+on:
+  push:
+    branches: [geometry-aware-3d-20261010]
+    paths:
+      - .github/workflows/cleanup-geometry-3d-branch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: geometry-aware-3d-20261010
+      - name: Clean temporary files and names
+        run: |
+          mv chemistry-3d-openbabel.js chemistry-3d-forcefield.js
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ['index.html','.github/workflows/geometry-aware-3d-browser.yml']:
+              p=Path(name)
+              s=p.read_text()
+              s=s.replace('chemistry-3d-openbabel.js','chemistry-3d-forcefield.js')
+              s=s.replace('Verify MMFF94/UFF geometry and PyMOL-style 3D UI','Verify MMFF94 geometry and PyMOL-style 3D UI')
+              p.write_text(s)
+          PY
+          rm -f .github/workflows/vendor-openchemlib.yml
+          rm -f tools/apply_geometry_3d_patch.py
+          rm -f .github/workflows/cleanup-geometry-3d-branch.yml
+      - name: Commit cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Finalize MMFF94 browser 3D implementation"
+          git push origin HEAD:geometry-aware-3d-20261010
