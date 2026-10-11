@@ -1,75 +1,16 @@
 (() => {
   "use strict";
 
-  // Pin the OpenBabel WebAssembly build so geometry generation does not change
-  // underneath RNA Explorer when the upstream repository changes.
-  const OPENBABEL_REV = "4ccb195c2916e99905abf264bf6212f2b4f9a10d";
-  const CDN_BASE = `https://cdn.jsdelivr.net/gh/partridgejiang/cheminfo-to-web@${OPENBABEL_REV}/OpenBabel3/OpenBabel-js/bin/`;
-  const SCRIPT_URL = CDN_BASE + "openbabel.js";
-  let modulePromise = null;
+  // Browser-native geometry engine. OpenChemLib is vendored in the repository so
+  // RNA Explorer does not depend on a runtime CDN or unsafe-eval.
+  const OCL_VERSION = "9.25.1";
+  const MODULE_URL = new URL("./vendor/openchemlib/openchemlib.js", document.baseURI).href;
+  const RESOURCE_URL = new URL("./vendor/openchemlib/resources.json", document.baseURI).href;
+  let oclPromise = null;
 
-  function loadOpenBabelScript() {
-    if (typeof window.OpenBabelModule === "function") return Promise.resolve();
-    return new Promise((resolve, reject) => {
-      const existing = document.querySelector('script[data-rna-openbabel="1"]');
-      if (existing) {
-        if (typeof window.OpenBabelModule === "function") { resolve(); return; }
-        existing.addEventListener("load", resolve, { once: true });
-        existing.addEventListener("error", () => reject(new Error("OpenBabel JavaScript failed to load.")), { once: true });
-        return;
-      }
-      const script = document.createElement("script");
-      script.src = SCRIPT_URL;
-      script.async = true;
-      script.crossOrigin = "anonymous";
-      script.dataset.rnaOpenbabel = "1";
-      script.addEventListener("load", resolve, { once: true });
-      script.addEventListener("error", () => reject(new Error("OpenBabel JavaScript failed to load.")), { once: true });
-      document.head.append(script);
-    });
-  }
-
-  function waitForBindings(mod, timeoutMs = 30000) {
-    return new Promise((resolve, reject) => {
-      const started = performance.now();
-      const check = () => {
-        if (mod && typeof mod.OB3DGenWrapper === "function" && typeof mod.ObConversionWrapper === "function") {
-          resolve(mod);
-          return;
-        }
-        if (performance.now() - started > timeoutMs) {
-          reject(new Error("OpenBabel bindings did not become ready in time."));
-          return;
-        }
-        setTimeout(check, 40);
-      };
-      check();
-    });
-  }
-
-  function getOpenBabel() {
-    if (modulePromise) return modulePromise;
-    modulePromise = (async () => {
-      await loadOpenBabelScript();
-      if (typeof window.OpenBabelModule !== "function") throw new Error("OpenBabelModule is unavailable after loading the WebAssembly wrapper.");
-      let mod;
-      try {
-        mod = window.OpenBabelModule({
-          locateFile: path => CDN_BASE + path,
-          onAbort: reason => { throw new Error("OpenBabel aborted: " + reason); }
-        });
-      } catch (error) {
-        throw error instanceof Error ? error : new Error(String(error));
-      }
-      if (mod && typeof mod.then === "function") mod = await mod;
-      if (!mod) throw new Error("OpenBabel did not create a module instance.");
-      return await waitForBindings(mod);
-    })().catch(error => {
-      modulePromise = null;
-      throw error;
-    });
-    return modulePromise;
-  }
+  const ATOMIC_SYMBOL = {
+    1:"H",5:"B",6:"C",7:"N",8:"O",9:"F",14:"Si",15:"P",16:"S",17:"Cl",35:"Br",53:"I"
+  };
 
   function atomChargeRecords(graph) {
     const entries = graph.atoms.map((atom, i) => [i + 1, Number(atom.charge || 0)]).filter(([, charge]) => charge !== 0);
@@ -93,8 +34,7 @@
     const lengths = bonds.map(bond => {
       const a = atomById.get(bond.a), b = atomById.get(bond.b);
       return a && b ? Math.hypot(Number(b.x || 0) - Number(a.x || 0), Number(b.y || 0) - Number(a.y || 0)) : 0;
-    }).filter(value => value > 5);
-    lengths.sort((a, b) => a - b);
+    }).filter(value => value > 5).sort((a, b) => a - b);
     const median = lengths.length ? lengths[Math.floor(lengths.length / 2)] : 68;
     const scale = 1.45 / Math.max(20, median || 68);
     const lines = [
@@ -119,95 +59,89 @@
     return lines.join("\n");
   }
 
-  function parseMolBlock(block, originalGraph) {
-    const lines = String(block || "").replace(/\r/g, "").split("\n");
-    if (lines.length < 5) throw new Error("OpenBabel returned an invalid MOL block.");
-    const countsIndex = lines.findIndex(line => /V2000/.test(line));
-    if (countsIndex < 0) throw new Error("OpenBabel returned an unsupported MOL format.");
-    const counts = lines[countsIndex];
-    const atomCount = Number.parseInt(counts.slice(0, 3), 10), bondCount = Number.parseInt(counts.slice(3, 6), 10);
-    if (!Number.isFinite(atomCount) || atomCount < 1 || !Number.isFinite(bondCount)) throw new Error("OpenBabel MOL counts are invalid.");
+  async function getOpenChemLib() {
+    if (oclPromise) return oclPromise;
+    oclPromise = (async () => {
+      const OCL = await import(MODULE_URL);
+      if (!OCL?.Molecule || !OCL?.ConformerGenerator || !OCL?.ForceFieldMMFF94) {
+        throw new Error("The OpenChemLib 3D components are unavailable.");
+      }
+      if (OCL.Resources?.registerFromUrl) await OCL.Resources.registerFromUrl(RESOURCE_URL);
+      return OCL;
+    })().catch(error => {
+      oclPromise = null;
+      throw error;
+    });
+    return oclPromise;
+  }
+
+  function moleculeToModel(mol, originalGraph) {
     const originalIds = (originalGraph.atoms || []).map(atom => atom.id);
+    const atomCount = mol.getAllAtoms();
     const atoms = [];
     for (let i = 0; i < atomCount; i++) {
-      const line = lines[countsIndex + 1 + i] || "";
-      const x = Number.parseFloat(line.slice(0, 10)), y = Number.parseFloat(line.slice(10, 20)), z = Number.parseFloat(line.slice(20, 30));
-      const element = line.slice(31, 34).trim() || "C";
-      if (![x, y, z].every(Number.isFinite)) throw new Error("OpenBabel returned non-numeric 3D coordinates.");
-      atoms.push({ id: originalIds[i] || ("FF_H" + (i - originalIds.length + 1)), element, x, y, z });
+      const atomicNo = mol.getAtomicNo(i);
+      const element = ATOMIC_SYMBOL[atomicNo] || "X";
+      const x = Number(mol.getAtomX(i)), y = Number(mol.getAtomY(i)), z = Number(mol.getAtomZ(i));
+      if (![x, y, z].every(Number.isFinite)) throw new Error("OpenChemLib returned non-numeric 3D coordinates.");
+      atoms.push({ id: originalIds[i] || `FF_H${i - originalIds.length + 1}`, element, x, y, z });
     }
     const bonds = [];
-    for (let i = 0; i < bondCount; i++) {
-      const line = lines[countsIndex + 1 + atomCount + i] || "";
-      const ai = Number.parseInt(line.slice(0, 3), 10) - 1, bi = Number.parseInt(line.slice(3, 6), 10) - 1, order = Number.parseInt(line.slice(6, 9), 10) || 1;
-      if (atoms[ai] && atoms[bi]) bonds.push({ id: "ffb" + i, a: atoms[ai].id, b: atoms[bi].id, order: Math.max(1, Math.min(3, order)) });
+    for (let i = 0; i < mol.getAllBonds(); i++) {
+      const ai = mol.getBondAtom(0, i), bi = mol.getBondAtom(1, i);
+      const a = atoms[ai], b = atoms[bi];
+      if (!a || !b) continue;
+      const order = Math.max(1, Math.min(3, Number(mol.getBondOrder(i) || 1)));
+      bonds.push({ id: `ffb${i}`, a: a.id, b: b.id, order });
     }
     return { atoms, bonds };
   }
 
-  function safeDelete(obj) {
-    try { if (obj && typeof obj.delete === "function") obj.delete(); } catch (_) {}
-  }
-
-  function writeMol(OB, mol) {
-    let conv = null;
-    try {
-      conv = new OB.ObConversionWrapper();
-      if (!conv.setOutFormat("chemical/x-mdl-molfile", "mol")) throw new Error("OpenBabel MOL output support is unavailable.");
-      return conv.writeString(mol, false);
-    } finally {
-      safeDelete(conv);
-    }
-  }
-
   async function generate(graph) {
-    const OB = await getOpenBabel();
+    const OCL = await getOpenChemLib();
     const input = graphToMolBlock(graph);
-    if (typeof OB.OB3DGenWrapper !== "function") throw new Error("This OpenBabel build does not expose the 3D force-field generator.");
+    let mol = OCL.Molecule.fromMolfile(input);
+    if (!mol || !mol.getAllAtoms()) throw new Error("OpenChemLib could not parse this molecular graph.");
 
-    let generator = null;
+    // ConformerGenerator fills free valences with explicit hydrogens and creates
+    // chemistry-aware 3D coordinates, including puckered saturated rings.
+    const generator = new OCL.ConformerGenerator(0);
+    const conformed = generator.getOneConformerAsMolecule(mol);
+    if (conformed) mol = conformed;
+
+    // MMFF94 then relaxes bond lengths, angles and torsions. OpenChemLib's browser
+    // build currently exposes MMFF94 but not UFF, so unsupported structures are
+    // handled by RNA Explorer's existing rough-preview fallback rather than being
+    // mislabeled as UFF-optimized.
+    let forceField = null;
     try {
-      generator = new OB.OB3DGenWrapper();
-      for (const forceField of ["MMFF94", "UFF"]) {
-        let mol = null;
-        try {
-          // The OpenBabel wrapper performs Builder.Build, adds hydrogens before
-          // force-field setup, runs steepest descent + weighted rotor search,
-          // then writes the optimized coordinates back to the OBMol.
-          mol = generator.generate3DStructureFromMolData(input, forceField);
-          if (!mol) continue;
-          const output = writeMol(OB, mol);
-          const model = parseMolBlock(output, graph);
-          if (!model.atoms.length) continue;
-          return {
-            ...model,
-            forceField,
-            source: "OpenBabel WebAssembly",
-            hydrogensAdded: model.atoms.length > graph.atoms.length
-          };
-        } catch (error) {
-          if (forceField === "UFF") throw error;
-        } finally {
-          safeDelete(mol);
-        }
-      }
-      throw new Error("Neither MMFF94 nor UFF could generate an optimized 3D conformer for this structure.");
-    } finally {
-      safeDelete(generator);
+      const ff = new OCL.ForceFieldMMFF94(mol, "MMFF94");
+      ff.minimise({ maxIts: 1800, gradTol: 1e-4, funcTol: 1e-6 });
+      forceField = "MMFF94";
+    } catch (error) {
+      throw new Error("MMFF94 optimization is unavailable for this structure: " + (error?.message || error));
     }
+
+    const model = moleculeToModel(mol, graph);
+    if (!model.atoms.length) throw new Error("OpenChemLib did not return a 3D conformer.");
+    return {
+      ...model,
+      forceField,
+      source: "OpenChemLib",
+      hydrogensAdded: model.atoms.length > graph.atoms.length
+    };
   }
 
   window.Chemistry3DForceField = {
     generate,
     graphToMolBlock,
-    parseMolBlock,
-    preload: getOpenBabel,
+    preload: getOpenChemLib,
     getEngineInfo: () => ({
-      name: "OpenBabel WebAssembly",
+      name: "OpenChemLib",
+      version: OCL_VERSION,
       primary: "MMFF94",
-      fallback: "UFF",
-      revision: OPENBABEL_REV,
-      cdn: CDN_BASE
+      fallback: "RNA Explorer rough preview",
+      uffAvailable: false
     })
   };
 })();
