@@ -20,13 +20,17 @@ on:
       - tests/geometry-aware-3d-browser.mjs
       - .github/workflows/geometry-aware-3d-browser.yml
 
+concurrency:
+  group: geometry-aware-3d-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
