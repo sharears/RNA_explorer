@@ -225,7 +225,7 @@ const MoleculeEditor = (() => {
       const details=document.createElement("details");details.className="chem-tool-group";details.open=index<3;const summary=document.createElement("summary");summary.textContent=name;const body=document.createElement("div");body.className="chem-tool-group-body";details.append(summary,body);
       selectors.forEach(selector=>{let el=toolbar.querySelector(selector);if(el&&el.tagName==="SELECT")el=el.closest("label");if(el&&!body.contains(el))body.append(el);});toolbar.append(details);
     });
-    const show3d=toolbar.querySelector("#chem3DToggle");if(show3d){show3d.classList.add("chem-3d-toggle-prominent");show3d.title="Generate a geometry-optimized 3D conformer with MMFF94 and UFF fallback";}
+    const show3d=toolbar.querySelector("#chem3DToggle");if(show3d){show3d.classList.add("chem-3d-toggle-prominent");show3d.title="Generate a geometry-optimized 3D conformer with MMFF94";}
     const text=dialog.querySelector(".chem-text-controls > strong");if(text)text.textContent="Display · Text";
   }
 
@@ -371,7 +371,7 @@ const MoleculeEditor = (() => {
             <svg id="chemEditorSvg" viewBox="0 0 820 470" aria-label="Editable molecular structure"></svg>
           </div>
           <aside class="chem-3d-panel" id="chem3DPanel" hidden aria-label="Interactive geometry-optimized 3D molecular preview">
-            <div class="chem-3d-heading"><div><strong>Geometry-optimized 3D</strong><span id="chem3DStatus" data-state="idle">MMFF94 → UFF fallback</span></div><span>Drag to rotate · Shift-drag to pan · Wheel to zoom</span></div>
+            <div class="chem-3d-heading"><div><strong>Geometry-optimized 3D</strong><span id="chem3DStatus" data-state="idle">MMFF94 force-field optimization</span></div><span>Drag to rotate · Shift-drag to pan · Wheel to zoom</span></div>
             <canvas id="chem3DCanvas" width="720" height="560" aria-label="Interactive 3D molecule"></canvas>
           </aside>
         </div>
@@ -763,7 +763,7 @@ const MoleculeEditor = (() => {
     if(!threeDVisible||!signature||signature===threeDPendingSignature)return;
     const request=++threeDRequestSerial,snapshot=clone(graph),fallback=fallback3DModel();
     threeDCoords=fallback.atoms;threeDBonds=fallback.bonds;threeDPendingSignature=signature;
-    set3DStatus("Generating conformer · MMFF94 → UFF…","busy");
+    set3DStatus("Generating conformer · MMFF94…","busy");
     const engine=window.Chemistry3DForceField;
     if(!engine?.generate){threeDSignature=signature;threeDPendingSignature="";set3DStatus("Force-field engine unavailable · rough preview","warning");return;}
     engine.generate(snapshot).then(model=>{
