@@ -1,0 +1,48 @@
+name: Patch OpenChemLib 3D UI
+
+on:
+  push:
+    branches: [geometry-aware-3d-20261010]
+    paths:
+      - .github/workflows/patch-openchemlib-ui.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: geometry-aware-3d-20261010
+      - name: Update force-field labels and restore strict CSP
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('chemistry-editor.js')
+          s=p.read_text()
+          replacements={
+            'Generate a geometry-optimized 3D conformer with MMFF94 and UFF fallback':'Generate a geometry-optimized 3D conformer with MMFF94',
+            'MMFF94 → UFF fallback':'MMFF94 force-field optimization',
+            'Generating conformer · MMFF94 → UFF…':'Generating conformer · MMFF94…',
+          }
+          for old,new in replacements.items():
+            if old not in s:
+              raise SystemExit(f'missing chemistry-editor anchor: {old}')
+            s=s.replace(old,new)
+          p.write_text(s)
+
+          p=Path('index.html')
+          s=p.read_text()
+          s=s.replace("script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' https://cdn.jsdelivr.net;", "script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net;")
+          p.write_text(s)
+          PY
+          rm .github/workflows/patch-openchemlib-ui.yml
+      - name: Commit UI/CSP cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add chemistry-editor.js index.html .github/workflows/patch-openchemlib-ui.yml
+          git commit -m "Align 3D UI with OpenChemLib MMFF94 engine"
+          git push origin HEAD:geometry-aware-3d-20261010
