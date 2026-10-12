@@ -1,0 +1,37 @@
+name: Mobile Safari load
+
+on:
+  push:
+    branches: [mobile-safari-loading-20261011]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  webkit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps webkit
+      - name: Serve RNA Explorer
+        run: |
+          python3 -m http.server 4173 >/tmp/rna-http.log 2>&1 &
+          echo $! > /tmp/rna-http.pid
+          sleep 2
+      - name: Test iPhone WebKit loading
+        run: node tests/mobile-safari-load.mjs
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-safari-load-diagnostics
+          path: |
+            /tmp/mobile-safari-load.png
+            /tmp/rna-http.log
+          if-no-files-found: ignore
