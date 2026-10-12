@@ -1,0 +1,83 @@
+name: Molecular 3D controls and learning browser
+
+on:
+  push:
+    branches: [molecular-3d-interaction-learning-20261011, main]
+    paths:
+      - chemistry-editor.js
+      - chemistry-editor.css
+      - tertiary.js
+      - index.html
+      - tests/molecular-3d-controls-learning-style.mjs
+      - .github/workflows/molecular-3d-controls-learning-browser.yml
+  pull_request:
+    paths:
+      - chemistry-editor.js
+      - chemistry-editor.css
+      - tertiary.js
+      - index.html
+      - tests/molecular-3d-controls-learning-style.mjs
+      - .github/workflows/molecular-3d-controls-learning-browser.yml
+
+permissions:
+  contents: write
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Make pointer capture robust for synthetic and mobile pointer events
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('chemistry-editor.js')
+          s=p.read_text()
+          old='threeDPointers.set(e.pointerId,{x:e.clientX,y:e.clientY,type:e.pointerType||"mouse"});threeDCanvas.setPointerCapture?.(e.pointerId);'
+          new='threeDPointers.set(e.pointerId,{x:e.clientX,y:e.clientY,type:e.pointerType||"mouse"});try{threeDCanvas.setPointerCapture?.(e.pointerId);}catch(_error){}'
+          if old in s:
+              s=s.replace(old,new,1)
+          old2='threeDPointers.delete(e.pointerId);if(threeDDrag&&e.pointerId===threeDDrag.id)threeDDrag=null;threeDCanvas.releasePointerCapture?.(e.pointerId);'
+          new2='threeDPointers.delete(e.pointerId);if(threeDDrag&&e.pointerId===threeDDrag.id)threeDDrag=null;try{threeDCanvas.releasePointerCapture?.(e.pointerId);}catch(_error){}'
+          if old2 in s:
+              s=s.replace(old2,new2,1)
+          p.write_text(s)
+          PY
+      - name: Persist pointer-capture hardening on feature branch
+        if: github.ref == 'refs/heads/molecular-3d-interaction-learning-20261011'
+        run: |
+          if ! git diff --quiet -- chemistry-editor.js; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add chemistry-editor.js
+            git commit -m "Harden molecular 3D touch pointer capture"
+            git push origin HEAD:molecular-3d-interaction-learning-20261011
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - name: Syntax checks
+        run: |
+          node --check chemistry-editor.js
+          node --check tertiary.js
+      - name: Serve RNA Explorer
+        run: |
+          python3 -m http.server 4173 >/tmp/rna-http.log 2>&1 &
+          echo $! >/tmp/rna-http.pid
+          sleep 2
+      - name: Test 3D controls and Learning-mode defaults
+        run: node tests/molecular-3d-controls-learning-style.mjs
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: molecular-3d-controls-learning-diagnostics
+          path: |
+            /tmp/molecular-3d-controls-learning.png
+            /tmp/rna-http.log
+          if-no-files-found: ignore
