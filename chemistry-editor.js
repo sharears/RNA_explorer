@@ -410,7 +410,7 @@ const MoleculeEditor = (() => {
     svg=dialog.querySelector("#chemEditorSvg");status=dialog.querySelector("#chemEditorStatus");title=dialog.querySelector("#chemEditorTitle");
     setup3DPreview();
     dialog.querySelector("#chemEditorClose").addEventListener("click",()=>dialog.close());
-    dialog.addEventListener("close",()=>{document.body.classList.remove("chem-editor-open","chem-3d-expanded-open");threeDDrag=null;threeDPointers.clear();threeDPinch=null;threeDPanel?.classList.remove("chem-3d-expanded");});
+    dialog.addEventListener("close",()=>{document.body.classList.remove("chem-editor-open","chem-3d-expanded-open");dialog.classList.remove("chem-3d-dialog-expanded");threeDDrag=null;threeDPointers.clear();threeDPinch=null;threeDPanel?.classList.remove("chem-3d-expanded");});
     dialog.querySelector("#chemUndoButton").addEventListener("click",undo);
     dialog.querySelector("#chemRedoButton").addEventListener("click",redo);
     dialog.querySelector("#chemExpandCanvas").addEventListener("click",expandCanvas);
@@ -839,7 +839,9 @@ const MoleculeEditor = (() => {
       if(threeDPanel.requestFullscreen){await threeDPanel.requestFullscreen();return;}
     }catch(_error){}
     const expanded=!threeDPanel.classList.contains("chem-3d-expanded");
-    threeDPanel.classList.toggle("chem-3d-expanded",expanded);document.body.classList.toggle("chem-3d-expanded-open",expanded);
+    threeDPanel.classList.toggle("chem-3d-expanded",expanded);
+    dialog?.classList.toggle("chem-3d-dialog-expanded",expanded);
+    document.body.classList.toggle("chem-3d-expanded-open",expanded);
     const button=dialog?.querySelector("#chem3DFullscreen");if(button)button.textContent=expanded?"Exit full screen":"Full screen";
     requestAnimationFrame(()=>schedule3DRender(true));
   }
