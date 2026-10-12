@@ -178,8 +178,9 @@ const MoleculeEditor = (() => {
   let graph={atoms:[],bonds:[],hbonds:[]},tool="select",element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,lasso=null,transformDrag=null,selectionZoom=1,pendingFuseBond=null,onSave=null;
   let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false,showAtomLabels=true,showAtomNumbers=false;
   let ignoredValenceWarnings=new Set(),smartLayoutEnabled=true,threeDVisible=false;
-  let threeDCanvas=null,threeDPanel=null,threeDFrame=0,threeDDrag=null,threeDCoords=[],threeDBonds=[],threeDSignature="",threeDPendingSignature="",threeDRequestSerial=0;
-  const threeDView={rx:-0.38,ry:0.58,zoom:1,panX:0,panY:0};
+  let threeDCanvas=null,threeDPanel=null,threeDFrame=0,threeDDrag=null,threeDPointers=new Map(),threeDPinch=null,threeDCoords=[],threeDBonds=[],threeDSignature="",threeDPendingSignature="",threeDRequestSerial=0;
+  const DEFAULT_3D_VIEW={rx:-0.38,ry:0.58,zoom:1,panX:0,panY:0};
+  const threeDView={...DEFAULT_3D_VIEW};
   let textDefaults={...DEFAULT_TEXT_STYLE};
   let undoStack=[],redoStack=[];
   const HISTORY_LIMIT=80;
@@ -371,7 +372,17 @@ const MoleculeEditor = (() => {
             <svg id="chemEditorSvg" viewBox="0 0 820 470" aria-label="Editable molecular structure"></svg>
           </div>
           <aside class="chem-3d-panel" id="chem3DPanel" hidden aria-label="Interactive geometry-optimized 3D molecular preview">
-            <div class="chem-3d-heading"><div><strong>Geometry-optimized 3D</strong><span id="chem3DStatus" data-state="idle">MMFF94 force-field optimization</span></div><span>Drag to rotate · Shift-drag to pan · Wheel to zoom</span></div>
+            <div class="chem-3d-heading">
+              <div class="chem-3d-title"><strong>Geometry-optimized 3D</strong><span id="chem3DStatus" data-state="idle">MMFF94 force-field optimization</span></div>
+              <div class="chem-3d-view-controls" role="toolbar" aria-label="3D molecular view controls">
+                <button type="button" id="chem3DZoomOut" aria-label="Zoom out">−</button>
+                <button type="button" id="chem3DZoomIn" aria-label="Zoom in">+</button>
+                <button type="button" id="chem3DResetView">Reset view</button>
+                <button type="button" id="chem3DCenter">Center</button>
+                <button type="button" id="chem3DFullscreen">Full screen</button>
+              </div>
+              <span class="chem-3d-help">Left drag: rotate · Ctrl/⌘ + drag or middle/right drag: pan · Wheel: zoom · Touch: drag to rotate; two fingers pan / pinch</span>
+            </div>
             <canvas id="chem3DCanvas" width="720" height="560" aria-label="Interactive 3D molecule"></canvas>
           </aside>
         </div>
@@ -399,7 +410,7 @@ const MoleculeEditor = (() => {
     svg=dialog.querySelector("#chemEditorSvg");status=dialog.querySelector("#chemEditorStatus");title=dialog.querySelector("#chemEditorTitle");
     setup3DPreview();
     dialog.querySelector("#chemEditorClose").addEventListener("click",()=>dialog.close());
-    dialog.addEventListener("close",()=>{document.body.classList.remove("chem-editor-open");threeDDrag=null;});
+    dialog.addEventListener("close",()=>{document.body.classList.remove("chem-editor-open","chem-3d-expanded-open");dialog.classList.remove("chem-3d-dialog-expanded");threeDDrag=null;threeDPointers.clear();threeDPinch=null;threeDPanel?.classList.remove("chem-3d-expanded");});
     dialog.querySelector("#chemUndoButton").addEventListener("click",undo);
     dialog.querySelector("#chemRedoButton").addEventListener("click",redo);
     dialog.querySelector("#chemExpandCanvas").addEventListener("click",expandCanvas);
@@ -818,14 +829,54 @@ const MoleculeEditor = (() => {
     dialog?.querySelector(".chem-editor-workspace")?.classList.toggle("with-3d",threeDVisible);
     if(threeDVisible){threeDSignature="";threeDPendingSignature="";schedule3DRender(true);}else{threeDRequestSerial++;threeDPendingSignature="";}
   }
+  function reset3DView(){Object.assign(threeDView,DEFAULT_3D_VIEW);schedule3DRender();}
+  function center3DView(){threeDView.panX=0;threeDView.panY=0;schedule3DRender();}
+  function zoom3DView(factor){threeDView.zoom=Math.max(.35,Math.min(4,threeDView.zoom*factor));schedule3DRender();}
+  async function toggle3DFullscreen(){
+    if(!threeDPanel)return;
+    try{
+      if(document.fullscreenElement===threeDPanel&&document.exitFullscreen){await document.exitFullscreen();return;}
+      if(threeDPanel.requestFullscreen){await threeDPanel.requestFullscreen();return;}
+    }catch(_error){}
+    const expanded=!threeDPanel.classList.contains("chem-3d-expanded");
+    threeDPanel.classList.toggle("chem-3d-expanded",expanded);
+    dialog?.classList.toggle("chem-3d-dialog-expanded",expanded);
+    document.body.classList.toggle("chem-3d-expanded-open",expanded);
+    const button=dialog?.querySelector("#chem3DFullscreen");if(button)button.textContent=expanded?"Exit full screen":"Full screen";
+    requestAnimationFrame(()=>schedule3DRender(true));
+  }
   function setup3DPreview(){
     threeDPanel=dialog?.querySelector("#chem3DPanel");threeDCanvas=dialog?.querySelector("#chem3DCanvas");if(!threeDCanvas||threeDCanvas.dataset.ready==="1")return;threeDCanvas.dataset.ready="1";
+    const touchSnapshot=()=>[...threeDPointers.entries()].filter(([,p])=>p.type==="touch");
+    const beginPinch=()=>{const pts=touchSnapshot();if(pts.length<2){threeDPinch=null;return;}const a=pts[0][1],b=pts[1][1],mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};threeDPinch={distance:Math.max(1,Math.hypot(b.x-a.x,b.y-a.y)),midX:mid.x,midY:mid.y,zoom:threeDView.zoom};};
     threeDCanvas.addEventListener("contextmenu",e=>e.preventDefault());
-    threeDCanvas.addEventListener("pointerdown",e=>{threeDDrag={id:e.pointerId,x:e.clientX,y:e.clientY,pan:e.shiftKey||e.button===2};threeDCanvas.setPointerCapture?.(e.pointerId);});
-    threeDCanvas.addEventListener("pointermove",e=>{if(!threeDDrag||e.pointerId!==threeDDrag.id)return;const dx=e.clientX-threeDDrag.x,dy=e.clientY-threeDDrag.y;threeDDrag.x=e.clientX;threeDDrag.y=e.clientY;if(threeDDrag.pan){threeDView.panX+=dx;threeDView.panY+=dy;}else{threeDView.ry+=dx*.012;threeDView.rx+=dy*.012;}schedule3DRender();});
-    const up=e=>{if(threeDDrag&&e.pointerId===threeDDrag.id){threeDDrag=null;threeDCanvas.releasePointerCapture?.(e.pointerId);}};
+    threeDCanvas.addEventListener("pointerdown",e=>{
+      threeDPointers.set(e.pointerId,{x:e.clientX,y:e.clientY,type:e.pointerType||"mouse"});try{threeDCanvas.setPointerCapture?.(e.pointerId);}catch(_error){}
+      if(e.pointerType==="touch"){const pts=touchSnapshot();if(pts.length>=2){beginPinch();threeDDrag=null;}else threeDDrag={id:e.pointerId,x:e.clientX,y:e.clientY,pan:false,type:"touch"};return;}
+      threeDDrag={id:e.pointerId,x:e.clientX,y:e.clientY,pan:e.ctrlKey||e.metaKey||e.shiftKey||e.button===1||e.button===2,type:e.pointerType||"mouse"};
+    });
+    threeDCanvas.addEventListener("pointermove",e=>{
+      if(threeDPointers.has(e.pointerId))threeDPointers.set(e.pointerId,{x:e.clientX,y:e.clientY,type:e.pointerType||threeDPointers.get(e.pointerId).type});
+      const touches=touchSnapshot();
+      if(e.pointerType==="touch"&&touches.length>=2){
+        const a=touches[0][1],b=touches[1][1],distance=Math.max(1,Math.hypot(b.x-a.x,b.y-a.y)),midX=(a.x+b.x)/2,midY=(a.y+b.y)/2;if(!threeDPinch)beginPinch();
+        if(threeDPinch){threeDView.zoom=Math.max(.35,Math.min(4,threeDPinch.zoom*(distance/threeDPinch.distance)));threeDView.panX+=midX-threeDPinch.midX;threeDView.panY+=midY-threeDPinch.midY;threeDPinch.midX=midX;threeDPinch.midY=midY;}schedule3DRender();return;
+      }
+      if(!threeDDrag||e.pointerId!==threeDDrag.id)return;const dx=e.clientX-threeDDrag.x,dy=e.clientY-threeDDrag.y;threeDDrag.x=e.clientX;threeDDrag.y=e.clientY;if(threeDDrag.pan){threeDView.panX+=dx;threeDView.panY+=dy;}else{threeDView.ry+=dx*.012;threeDView.rx+=dy*.012;}schedule3DRender();
+    });
+    const up=e=>{
+      threeDPointers.delete(e.pointerId);if(threeDDrag&&e.pointerId===threeDDrag.id)threeDDrag=null;try{threeDCanvas.releasePointerCapture?.(e.pointerId);}catch(_error){}
+      const touches=touchSnapshot();if(touches.length>=2)beginPinch();else{threeDPinch=null;if(touches.length===1){const [id,p]=touches[0];threeDDrag={id,x:p.x,y:p.y,pan:false,type:"touch"};}}
+    };
     threeDCanvas.addEventListener("pointerup",up);threeDCanvas.addEventListener("pointercancel",up);
-    threeDCanvas.addEventListener("wheel",e=>{e.preventDefault();threeDView.zoom=Math.max(.35,Math.min(4,threeDView.zoom*Math.exp(-e.deltaY*.001)));schedule3DRender();},{passive:false});
+    threeDCanvas.addEventListener("wheel",e=>{e.preventDefault();zoom3DView(Math.exp(-e.deltaY*.001));},{passive:false});
+    dialog?.querySelector("#chem3DZoomIn")?.addEventListener("click",()=>zoom3DView(1.25));
+    dialog?.querySelector("#chem3DZoomOut")?.addEventListener("click",()=>zoom3DView(.8));
+    dialog?.querySelector("#chem3DResetView")?.addEventListener("click",reset3DView);
+    dialog?.querySelector("#chem3DCenter")?.addEventListener("click",center3DView);
+    dialog?.querySelector("#chem3DFullscreen")?.addEventListener("click",toggle3DFullscreen);
+    document.addEventListener("fullscreenchange",()=>{const button=dialog?.querySelector("#chem3DFullscreen");if(button)button.textContent=document.fullscreenElement===threeDPanel?"Exit full screen":"Full screen";if(threeDVisible)requestAnimationFrame(()=>schedule3DRender(true));});
+    window.addEventListener("resize",()=>{if(threeDVisible)schedule3DRender(true);});
   }
 
   function componentCentroid(ids){
@@ -1176,5 +1227,6 @@ const MoleculeEditor = (() => {
 
   return {setup,openBase,openPair,openBlank,getBaseGraph:graphFromBase,getCurrentGraph:()=>clone(graph),getSavedBase:b=>savedBases[b]?clone(savedBases[b]):null,pairTemplate,
     getSessionSnapshot,restoreSessionSnapshot,
+    get3DDiagnostics:()=>({visible:threeDVisible,view:{...threeDView},fullscreen:document.fullscreenElement===threeDPanel||Boolean(threeDPanel?.classList.contains("chem-3d-expanded")),atomCount:threeDCoords.length}),
     validateGraph:g=>{const old=graph;graph=clone(g);const w=validate();graph=old;return w;}};
 })();
