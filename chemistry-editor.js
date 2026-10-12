@@ -849,7 +849,7 @@ const MoleculeEditor = (() => {
     const beginPinch=()=>{const pts=touchSnapshot();if(pts.length<2){threeDPinch=null;return;}const a=pts[0][1],b=pts[1][1],mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};threeDPinch={distance:Math.max(1,Math.hypot(b.x-a.x,b.y-a.y)),midX:mid.x,midY:mid.y,zoom:threeDView.zoom};};
     threeDCanvas.addEventListener("contextmenu",e=>e.preventDefault());
     threeDCanvas.addEventListener("pointerdown",e=>{
-      threeDPointers.set(e.pointerId,{x:e.clientX,y:e.clientY,type:e.pointerType||"mouse"});threeDCanvas.setPointerCapture?.(e.pointerId);
+      threeDPointers.set(e.pointerId,{x:e.clientX,y:e.clientY,type:e.pointerType||"mouse"});try{threeDCanvas.setPointerCapture?.(e.pointerId);}catch(_error){}
       if(e.pointerType==="touch"){const pts=touchSnapshot();if(pts.length>=2){beginPinch();threeDDrag=null;}else threeDDrag={id:e.pointerId,x:e.clientX,y:e.clientY,pan:false,type:"touch"};return;}
       threeDDrag={id:e.pointerId,x:e.clientX,y:e.clientY,pan:e.ctrlKey||e.metaKey||e.shiftKey||e.button===1||e.button===2,type:e.pointerType||"mouse"};
     });
@@ -863,7 +863,7 @@ const MoleculeEditor = (() => {
       if(!threeDDrag||e.pointerId!==threeDDrag.id)return;const dx=e.clientX-threeDDrag.x,dy=e.clientY-threeDDrag.y;threeDDrag.x=e.clientX;threeDDrag.y=e.clientY;if(threeDDrag.pan){threeDView.panX+=dx;threeDView.panY+=dy;}else{threeDView.ry+=dx*.012;threeDView.rx+=dy*.012;}schedule3DRender();
     });
     const up=e=>{
-      threeDPointers.delete(e.pointerId);if(threeDDrag&&e.pointerId===threeDDrag.id)threeDDrag=null;threeDCanvas.releasePointerCapture?.(e.pointerId);
+      threeDPointers.delete(e.pointerId);if(threeDDrag&&e.pointerId===threeDDrag.id)threeDDrag=null;try{threeDCanvas.releasePointerCapture?.(e.pointerId);}catch(_error){}
       const touches=touchSnapshot();if(touches.length>=2)beginPinch();else{threeDPinch=null;if(touches.length===1){const [id,p]=touches[0];threeDDrag={id,x:p.x,y:p.y,pan:false,type:"touch"};}}
     };
     threeDCanvas.addEventListener("pointerup",up);threeDCanvas.addEventListener("pointercancel",up);
