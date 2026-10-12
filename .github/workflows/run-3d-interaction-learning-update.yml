@@ -1,0 +1,32 @@
+name: Run 3D interaction learning update
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/run-3d-interaction-learning-update.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: molecular-3d-interaction-learning-20261011
+          fetch-depth: 0
+      - name: Apply patch
+        run: python3 .github/scripts/apply_3d_interaction_learning.py
+      - name: Syntax checks
+        run: |
+          node --check chemistry-editor.js
+          node --check tertiary.js
+      - name: Commit feature changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add chemistry-editor.js chemistry-editor.css tertiary.js index.html
+          git commit -m "Align molecular 3D interaction and learning stick view"
+          git push origin HEAD:molecular-3d-interaction-learning-20261011
