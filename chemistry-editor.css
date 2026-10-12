@@ -284,3 +284,22 @@ body.chem-editor-open .topbar{position:relative;z-index:1200;background:var(--in
   z-index:2;
   box-shadow:0 0 0 2px rgba(116,215,182,.18);
 }
+
+
+/* Match Molecular Drawing 3D navigation to the Tertiary workspace. */
+.chem-3d-heading{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:7px 12px}
+.chem-3d-title{display:grid;gap:2px;min-width:0}
+.chem-3d-view-controls{display:flex!important;flex-wrap:wrap;justify-content:flex-end;gap:6px;align-items:center}
+.chem-3d-view-controls button{border:1px solid var(--line);background:var(--ink-soft);color:var(--text);border-radius:7px;padding:6px 9px;cursor:pointer;font:inherit;font-size:.72rem}
+.chem-3d-view-controls button:hover,.chem-3d-view-controls button:focus-visible{border-color:var(--mint);color:var(--mint)}
+.chem-3d-help{grid-column:1/-1;font-size:.67rem;color:var(--muted);line-height:1.35}
+.chem-3d-panel:fullscreen,.chem-3d-panel.chem-3d-expanded{width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;border:0!important;border-radius:0!important;background:#07111c!important;z-index:3000!important}
+.chem-3d-panel.chem-3d-expanded{position:fixed!important;inset:0!important}
+.chem-3d-panel:fullscreen #chem3DCanvas,.chem-3d-panel.chem-3d-expanded #chem3DCanvas{height:calc(100vh - 92px)!important;min-height:0!important}
+body.chem-3d-expanded-open{overflow:hidden!important}
+@media(max-width:900px){
+  .chem-3d-heading{grid-template-columns:1fr}
+  .chem-3d-view-controls{justify-content:flex-start}
+  .chem-3d-help{grid-column:1}
+  .chem-3d-view-controls button{min-height:36px}
+}

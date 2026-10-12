@@ -597,16 +597,15 @@ const TertiaryExplorer = (() => {
   function applyResidueRepresentation(r,i){
     const sel=selectorForResidue(r);
     if(guidedLearningActive()){
-      // In Guided Journey, mute the complete molecule so the requested feature is unmistakable.
-      model.setStyle(sel,{stick:{radius:.08,color:"#435363",opacity:.16}});
+      // Keep the complete molecule in faint element-colored sticks while the requested feature is emphasized.
+      model.setStyle(sel,{stick:{radius:.09,colorscheme:"Jmol",opacity:.18}});
       return;
     }
     const journeyOverview=document.body?.dataset?.pageMode==="journey";
     const elementMode=state.colorMode==="element",color=residueColor(i,r);
     if(journeyOverview){
-      // Cleaner overview: smooth-looking backbone sticks plus thin base lines.
-      model.setStyle(sel,{line:{linewidth:1.4,color,opacity:.72}});
-      model.addStyle({...sel,atom:BACKBONE_ATOMS},{stick:{radius:.11,color:"#9cabb8",opacity:.9}});
+      // Learning mode defaults to a familiar PyMOL-style stick representation colored by element.
+      model.setStyle(sel,{stick:{radius:.14,colorscheme:"Jmol",opacity:1}});
       return;
     }
     if(state.representation==="backbone"){
@@ -1762,7 +1761,7 @@ const TertiaryExplorer = (() => {
   function setup(config){
     if(setupDone)return;setupDone=true;
     state.defaultSequence=config.sequence;state.defaultStructure=config.structure;state.secondarySequence=config.sequence;state.structure=config.structure;state.colors=config.colors;state.names=config.names;state.onSelect=config.onSelect;
-    const journeyRequested=document.body?.dataset?.pageMode==="journey"||/[?&]page=journey(?:&|$)/.test(String(window.location?.search||""));if(journeyRequested){state.showIndices=false;state.showSelectedLabel=false;state.representation="backbone";}
+    const journeyRequested=document.body?.dataset?.pageMode==="journey"||/[?&]page=journey(?:&|$)/.test(String(window.location?.search||""));if(journeyRequested){state.showIndices=false;state.showSelectedLabel=false;state.representation="sticks";state.colorMode="element";}
     const parsed=parseStructure(state.structure,state.secondarySequence.length);pairs=parsed.pairs;partner=parsed.partner;
     setupControls();setupToolbar();setupLearningPanel();
     $("followButton")?.addEventListener("click",()=>{const n=activeResidues().length;if(n<2)return;let next=state.selected;while(next===state.selected)next=Math.floor(Math.random()*n);chooseResidue(next);});
