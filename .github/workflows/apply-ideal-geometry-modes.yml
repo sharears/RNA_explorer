@@ -1,0 +1,34 @@
+name: Apply ideal geometry modes
+
+on:
+  push:
+    branches: [ideal-geometry-modes-20261012]
+    paths:
+      - .github/scripts/apply_ideal_geometry_modes.py
+      - .github/workflows/apply-ideal-geometry-modes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ideal-geometry-modes-20261012
+          fetch-depth: 0
+      - name: Apply editor and cache-version updates
+        run: python3 .github/scripts/apply_ideal_geometry_modes.py
+      - name: Syntax checks
+        run: |
+          node --check chemistry-editor.js
+          node --check chemistry-3d-openbabel.js
+      - name: Commit generated updates
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add chemistry-editor.js chemistry-editor.css index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Add ideal geometry modes for molecular drawing"
+          git push origin HEAD:ideal-geometry-modes-20261012
