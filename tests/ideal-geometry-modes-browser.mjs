@@ -106,7 +106,7 @@ try{
   await page.locator('#chem3DOptimizeMode').click();
   assert.equal(await page.locator('#chem3DOptimizeMode').getAttribute('aria-pressed'),'true');
   assert.equal((await page.evaluate(()=>MoleculeEditor.get3DDiagnostics())).mode,'optimized');
-  await page.waitForFunction(()=>document.querySelector('#chem3DStatus')?.dataset.state==='ready',null,{timeout:30000});
+  await page.waitForFunction(()=>/MMFF94 energy-minimized/i.test(document.querySelector('#chem3DStatus')?.textContent||''),null,{timeout:30000});
   assert.match(await page.locator('#chem3DStatus').innerText(),/MMFF94 energy-minimized/i);
 
   assert.equal(errors.length,0,`Browser errors:\n${errors.join('\n')}`);
