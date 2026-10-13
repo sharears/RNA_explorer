@@ -309,3 +309,12 @@ body.chem-3d-expanded-open{overflow:hidden!important}
   .chem-3d-help{grid-column:1}
   .chem-3d-view-controls button{min-height:36px}
 }
+
+
+/* Ideal-vs-minimized molecular geometry controls */
+.chem-3d-mode-controls{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
+.chem-3d-mode-controls button{border:1px solid var(--line);background:#091321;color:var(--muted);border-radius:999px;padding:6px 10px;cursor:pointer;font:inherit;font-size:.72rem}
+.chem-3d-mode-controls button[aria-pressed="true"]{border-color:var(--mint);background:rgba(116,215,182,.12);color:var(--mint);font-weight:700}
+#chem3DStatus[data-state="ready"]{color:var(--mint)}
+#chem3DStatus[data-state="warning"]{color:#efc178}
+@media(max-width:720px){.chem-3d-mode-controls{grid-column:1/-1;justify-content:flex-start}.chem-3d-mode-controls button{flex:1 1 auto}}

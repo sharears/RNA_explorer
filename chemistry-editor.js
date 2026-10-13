@@ -177,7 +177,7 @@ const MoleculeEditor = (() => {
   let dialog=null,svg=null,status=null,title=null,mode="base",base="A",leftBase="G",rightBase="C";
   let graph={atoms:[],bonds:[],hbonds:[]},tool="select",element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,lasso=null,transformDrag=null,selectionZoom=1,pendingFuseBond=null,onSave=null;
   let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false,showAtomLabels=true,showAtomNumbers=false;
-  let ignoredValenceWarnings=new Set(),smartLayoutEnabled=true,threeDVisible=false;
+  let ignoredValenceWarnings=new Set(),smartLayoutEnabled=true,threeDVisible=false,threeDMode="ideal";
   let threeDCanvas=null,threeDPanel=null,threeDFrame=0,threeDDrag=null,threeDPointers=new Map(),threeDPinch=null,threeDCoords=[],threeDBonds=[],threeDSignature="",threeDPendingSignature="",threeDRequestSerial=0;
   const DEFAULT_3D_VIEW={rx:-0.38,ry:0.58,zoom:1,panX:0,panY:0};
   const threeDView={...DEFAULT_3D_VIEW};
@@ -226,7 +226,7 @@ const MoleculeEditor = (() => {
       const details=document.createElement("details");details.className="chem-tool-group";details.open=index<3;const summary=document.createElement("summary");summary.textContent=name;const body=document.createElement("div");body.className="chem-tool-group-body";details.append(summary,body);
       selectors.forEach(selector=>{let el=toolbar.querySelector(selector);if(el&&el.tagName==="SELECT")el=el.closest("label");if(el&&!body.contains(el))body.append(el);});toolbar.append(details);
     });
-    const show3d=toolbar.querySelector("#chem3DToggle");if(show3d){show3d.classList.add("chem-3d-toggle-prominent");show3d.title="Generate a geometry-optimized 3D conformer with MMFF94";}
+    const show3d=toolbar.querySelector("#chem3DToggle");if(show3d){show3d.classList.add("chem-3d-toggle-prominent");show3d.title="Open the 3D view. Ideal geometry is shown by default; MMFF94 minimization is optional.";}
     const text=dialog.querySelector(".chem-text-controls > strong");if(text)text.textContent="Display · Text";
   }
 
@@ -341,7 +341,7 @@ const MoleculeEditor = (() => {
           <button type="button" id="chemChargeMinus">Charge −</button><button type="button" id="chemChargePlus">Charge +</button>
           <button type="button" id="chemIupacButton">IUPAC name</button>
           <button type="button" id="chemSmartLayoutToggle" aria-pressed="true">Smart geometry: on</button>
-          <button type="button" id="chemTidy2D">Tidy 2D</button>
+          <button type="button" id="chemTidy2D" title="Regenerate clean whole-molecule 2D coordinates with OpenChemLib">Ideal 2D</button>
           <button type="button" id="chemIgnoreValence" disabled>Ignore valence warning</button>
           <button type="button" id="chem3DToggle" aria-pressed="false">Show in 3D</button>
         </div>
@@ -371,9 +371,13 @@ const MoleculeEditor = (() => {
           <div class="chem-editor-canvas-wrap">
             <svg id="chemEditorSvg" viewBox="0 0 820 470" aria-label="Editable molecular structure"></svg>
           </div>
-          <aside class="chem-3d-panel" id="chem3DPanel" hidden aria-label="Interactive geometry-optimized 3D molecular preview">
+          <aside class="chem-3d-panel" id="chem3DPanel" hidden aria-label="Interactive 3D molecular preview">
             <div class="chem-3d-heading">
-              <div class="chem-3d-title"><strong>Geometry-optimized 3D</strong><span id="chem3DStatus" data-state="idle">MMFF94 force-field optimization</span></div>
+              <div class="chem-3d-title"><strong id="chem3DModeTitle">Ideal 3D geometry</strong><span id="chem3DStatus" data-state="idle">Ideal conformer · drawing arrangement preserved</span></div>
+              <div class="chem-3d-mode-controls" role="group" aria-label="3D geometry mode">
+                <button type="button" id="chem3DIdealMode" aria-pressed="true">Ideal 3D</button>
+                <button type="button" id="chem3DOptimizeMode" aria-pressed="false">Energy minimize</button>
+              </div>
               <div class="chem-3d-view-controls" role="toolbar" aria-label="3D molecular view controls">
                 <button type="button" id="chem3DZoomOut" aria-label="Zoom out">−</button>
                 <button type="button" id="chem3DZoomIn" aria-label="Zoom in">+</button>
@@ -448,9 +452,8 @@ const MoleculeEditor = (() => {
       e.currentTarget.textContent="Smart geometry: "+(smartLayoutEnabled?"on":"off");
       status.textContent=smartLayoutEnabled?"Smart geometry is on. Newly attached atoms will use sensible bond angles.":"Smart geometry is off. New atoms will stay where you place them.";
     });
-    dialog.querySelector("#chemTidy2D").addEventListener("click",()=>{
-      pushUndo();tidy2DGeometry();invalidateIupac();render();validate();
-      status.textContent="2D geometry tidied: bond lengths and close contacts were regularized.";
+    dialog.querySelector("#chemTidy2D").addEventListener("click",async()=>{
+      pushUndo();await idealize2DGeometry();
     });
     dialog.querySelector("#chem3DToggle").addEventListener("click",toggle3DPreview);
     dialog.querySelector("#chemTextBold").addEventListener("click",e=>toggleTextStyleButton(e.currentTarget));
@@ -712,6 +715,24 @@ const MoleculeEditor = (() => {
     }
     ensureCanvasContainsDrawing();
   }
+  async function idealize2DGeometry(){
+    if(graph.atoms.length<2){status.textContent="Add at least two connected atoms before generating ideal 2D coordinates.";return;}
+    const engine=window.Chemistry3DForceField,snapshot=clone(graph),signature=graphSignature3D();
+    status.textContent="Generating ideal 2D coordinates with OpenChemLib…";
+    if(!engine?.generate2D){tidy2DGeometry();invalidateIupac();render();validate();status.textContent="OpenChemLib 2D layout is unavailable. A basic geometry cleanup was applied instead.";return;}
+    try{
+      const result=await engine.generate2D(snapshot);
+      if(graphSignature3D()!==signature){status.textContent="The drawing changed while Ideal 2D was running, so the generated layout was not applied.";return;}
+      const coords=new Map((result.coordinates||[]).map(q=>[q.id,q]));
+      graph.atoms.forEach(atom=>{const q=coords.get(atom.id);if(q&&Number.isFinite(q.x)&&Number.isFinite(q.y)){atom.x=q.x;atom.y=q.y;}});
+      ensureCanvasContainsDrawing();fitCanvasToDrawing(false);invalidateIupac();render();validate();
+      status.textContent="Ideal 2D applied with OpenChemLib: standard bond geometry and clean whole-molecule layout; separate fragments keep their relative placement.";
+    }catch(error){
+      tidy2DGeometry();invalidateIupac();render();validate();
+      status.textContent="OpenChemLib could not generate this 2D layout. A basic geometry cleanup was applied instead.";
+      console.warn("RNA Explorer ideal 2D generation failed:",error);
+    }
+  }
 
   const ELEMENT_3D_COLORS={H:"#f4f4f4",C:"#8b9198",N:"#3050f8",O:"#ff3030",P:"#ff8c1a",S:"#ffd92f",F:"#66ff66",Cl:"#39d353",Br:"#a62929",I:"#8a4fb5"};
   function graphSignature3D(){return JSON.stringify({atoms:graph.atoms.map(a=>[a.id,a.element,Number(a.charge||0)]),bonds:graph.bonds.map(b=>[b.a,b.b,Number(b.order||1)])});}
@@ -770,25 +791,38 @@ const MoleculeEditor = (() => {
     const node=dialog?.querySelector("#chem3DStatus");if(node){node.textContent=text;node.dataset.state=state;}
   }
   function fallback3DModel(){return {atoms:buildIdealized3D(),bonds:graph.bonds.map(b=>({...b}))};}
-  function requestGeometryOptimized3D(signature){
+  function sync3DModeControls(){
+    const ideal=dialog?.querySelector("#chem3DIdealMode"),optimized=dialog?.querySelector("#chem3DOptimizeMode"),titleNode=dialog?.querySelector("#chem3DModeTitle");
+    if(ideal)ideal.setAttribute("aria-pressed",String(threeDMode==="ideal"));
+    if(optimized)optimized.setAttribute("aria-pressed",String(threeDMode==="optimized"));
+    if(titleNode)titleNode.textContent=threeDMode==="optimized"?"Energy-minimized 3D":"Ideal 3D geometry";
+  }
+  function set3DMode(mode){
+    const next=mode==="optimized"?"optimized":"ideal";if(threeDMode===next&&threeDSignature)return;
+    threeDMode=next;threeDSignature="";threeDPendingSignature="";threeDRequestSerial++;sync3DModeControls();
+    if(threeDVisible)schedule3DRender(true);
+  }
+  function request3DModel(signature){
     if(!threeDVisible||!signature||signature===threeDPendingSignature)return;
-    const request=++threeDRequestSerial,snapshot=clone(graph),fallback=fallback3DModel();
+    const request=++threeDRequestSerial,snapshot=clone(graph),fallback=fallback3DModel(),modeAtRequest=threeDMode;
     threeDCoords=fallback.atoms;threeDBonds=fallback.bonds;threeDPendingSignature=signature;
-    set3DStatus("Generating conformer · MMFF94…","busy");
+    set3DStatus(modeAtRequest==="optimized"?"Energy minimizing with MMFF94…":"Generating ideal chemistry-aware conformer…","busy");
     const engine=window.Chemistry3DForceField;
-    if(!engine?.generate){threeDSignature=signature;threeDPendingSignature="";set3DStatus("Force-field engine unavailable · rough preview","warning");return;}
-    engine.generate(snapshot).then(model=>{
-      if(request!==threeDRequestSerial||graphSignature3D()!==signature)return;
+    const generate=modeAtRequest==="optimized"?(engine?.generateOptimized||engine?.generate):engine?.generateIdeal;
+    if(!generate){threeDSignature=signature;threeDPendingSignature="";set3DStatus("Geometry engine unavailable · rough preview","warning");return;}
+    generate.call(engine,snapshot).then(model=>{
+      if(request!==threeDRequestSerial||graphSignature3D()!==signature||threeDMode!==modeAtRequest)return;
       threeDCoords=Array.isArray(model.atoms)?model.atoms:fallback.atoms;
       threeDBonds=Array.isArray(model.bonds)&&model.bonds.length?model.bonds:fallback.bonds;
       threeDSignature=signature;threeDPendingSignature="";
-      set3DStatus((model.forceField||"Force field")+" optimized"+(model.hydrogensAdded?" · hydrogens added":""),"ready");
+      if(modeAtRequest==="optimized")set3DStatus("MMFF94 energy-minimized"+(model.componentCount>1?" per molecule · pair placement preserved":"")+(model.hydrogensAdded?" · H added":""),"ready");
+      else set3DStatus("Ideal conformer · standard chemistry geometry · drawing arrangement preserved"+(model.hydrogensAdded?" · H added":""),"ready");
       schedule3DRender();
     }).catch(error=>{
-      if(request!==threeDRequestSerial||graphSignature3D()!==signature)return;
+      if(request!==threeDRequestSerial||graphSignature3D()!==signature||threeDMode!==modeAtRequest)return;
       threeDCoords=fallback.atoms;threeDBonds=fallback.bonds;threeDSignature=signature;threeDPendingSignature="";
-      set3DStatus("Optimization unavailable · rough preview","warning");
-      console.warn("RNA Explorer 3D force-field optimization failed:",error);
+      set3DStatus((modeAtRequest==="optimized"?"MMFF94 minimization":"Ideal conformer generation")+" unavailable · rough preview","warning");
+      console.warn("RNA Explorer 3D geometry generation failed:",error);
       schedule3DRender();
     });
   }
@@ -800,7 +834,7 @@ const MoleculeEditor = (() => {
     threeDFrame=0;if(!threeDVisible||!threeDCanvas)return;
     const sig=graphSignature3D();
     if(!graph.atoms.length){threeDCoords=[];threeDBonds=[];threeDSignature=sig;threeDPendingSignature="";set3DStatus("Draw a molecule to generate 3D geometry.","idle");}
-    else if((force||sig!==threeDSignature)&&sig!==threeDPendingSignature)requestGeometryOptimized3D(sig);
+    else if((force||sig!==threeDSignature)&&sig!==threeDPendingSignature)request3DModel(sig);
     const canvas=threeDCanvas,rect=canvas.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1),w=Math.max(320,Math.round(rect.width||640)),h=Math.max(280,Math.round(rect.height||500));
     if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
     const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);ctx.fillStyle="#07111c";ctx.fillRect(0,0,w,h);
@@ -827,7 +861,7 @@ const MoleculeEditor = (() => {
     threeDVisible=!threeDVisible;if(threeDPanel)threeDPanel.hidden=!threeDVisible;
     const button=dialog?.querySelector("#chem3DToggle");if(button){button.setAttribute("aria-pressed",String(threeDVisible));button.textContent=threeDVisible?"Hide 3D":"Show in 3D";}
     dialog?.querySelector(".chem-editor-workspace")?.classList.toggle("with-3d",threeDVisible);
-    if(threeDVisible){threeDSignature="";threeDPendingSignature="";schedule3DRender(true);}else{threeDRequestSerial++;threeDPendingSignature="";}
+    if(threeDVisible){threeDMode="ideal";threeDSignature="";threeDPendingSignature="";sync3DModeControls();schedule3DRender(true);}else{threeDRequestSerial++;threeDPendingSignature="";}
   }
   function reset3DView(){Object.assign(threeDView,DEFAULT_3D_VIEW);schedule3DRender();}
   function center3DView(){threeDView.panX=0;threeDView.panY=0;schedule3DRender();}
@@ -870,6 +904,8 @@ const MoleculeEditor = (() => {
     };
     threeDCanvas.addEventListener("pointerup",up);threeDCanvas.addEventListener("pointercancel",up);
     threeDCanvas.addEventListener("wheel",e=>{e.preventDefault();zoom3DView(Math.exp(-e.deltaY*.001));},{passive:false});
+    dialog?.querySelector("#chem3DIdealMode")?.addEventListener("click",()=>set3DMode("ideal"));
+    dialog?.querySelector("#chem3DOptimizeMode")?.addEventListener("click",()=>set3DMode("optimized"));
     dialog?.querySelector("#chem3DZoomIn")?.addEventListener("click",()=>zoom3DView(1.25));
     dialog?.querySelector("#chem3DZoomOut")?.addEventListener("click",()=>zoom3DView(.8));
     dialog?.querySelector("#chem3DResetView")?.addEventListener("click",reset3DView);
@@ -1168,7 +1204,7 @@ const MoleculeEditor = (() => {
       if(a&&b&&!["N","O","S"].includes(a.element)&&!["N","O","S"].includes(b.element))warnings.push("An H-bond does not involve an N/O/S atom");
     });
     const ignored=[...ignoredValenceWarnings].filter(id=>{const a=atomById(id);return a&&atomValenceState(a).invalid;}).length;
-    status.textContent=warnings.length?warnings.join(" · ")+". Correct the highlighted atom or select it and choose Ignore valence warning.":ignored?"Ready. "+ignored+" intentional valence warning"+(ignored===1?" is":"s are")+" being ignored.":"Ready. Add bond repeatedly to promote single → double → triple. Smart geometry is on by default; Show in 3D opens a live interactive preview.";
+    status.textContent=warnings.length?warnings.join(" · ")+". Correct the highlighted atom or select it and choose Ignore valence warning.":ignored?"Ready. "+ignored+" intentional valence warning"+(ignored===1?" is":"s are")+" being ignored.":"Ready. Ideal 2D generates clean textbook-style coordinates. Show in 3D opens Ideal 3D by default; MMFF94 energy minimization is optional.";
     status.classList.toggle("warning",warnings.length>0);syncValenceIgnoreButton();
     return warnings;
   }
@@ -1227,6 +1263,7 @@ const MoleculeEditor = (() => {
 
   return {setup,openBase,openPair,openBlank,getBaseGraph:graphFromBase,getCurrentGraph:()=>clone(graph),getSavedBase:b=>savedBases[b]?clone(savedBases[b]):null,pairTemplate,
     getSessionSnapshot,restoreSessionSnapshot,
-    get3DDiagnostics:()=>({visible:threeDVisible,view:{...threeDView},fullscreen:document.fullscreenElement===threeDPanel||Boolean(threeDPanel?.classList.contains("chem-3d-expanded")),atomCount:threeDCoords.length}),
+    get3DDiagnostics:()=>({visible:threeDVisible,mode:threeDMode,view:{...threeDView},fullscreen:document.fullscreenElement===threeDPanel||Boolean(threeDPanel?.classList.contains("chem-3d-expanded")),atomCount:threeDCoords.length}),
+    idealize2D:idealize2DGeometry,
     validateGraph:g=>{const old=graph;graph=clone(g);const w=validate();graph=old;return w;}};
 })();
