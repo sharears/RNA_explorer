@@ -11,9 +11,10 @@
   const ATOMIC_SYMBOL = {
     1:"H",5:"B",6:"C",7:"N",8:"O",9:"F",14:"Si",15:"P",16:"S",17:"Cl",35:"Br",53:"I"
   };
+  const IDEAL_HBOND_DISTANCE = 2.90;
 
   function atomChargeRecords(graph) {
-    const entries = graph.atoms.map((atom, i) => [i + 1, Number(atom.charge || 0)]).filter(([, charge]) => charge !== 0);
+    const entries = (graph.atoms || []).map((atom, i) => [i + 1, Number(atom.charge || 0)]).filter(([, charge]) => charge !== 0);
     const lines = [];
     for (let i = 0; i < entries.length; i += 8) {
       const chunk = entries.slice(i, i + 8);
@@ -103,7 +104,7 @@
     return {
       atoms: (graph.atoms || []).filter(atom => keep.has(atom.id)).map(atom => ({...atom})),
       bonds: (graph.bonds || []).filter(bond => keep.has(bond.a) && keep.has(bond.b)).map(bond => ({...bond})),
-      hbonds: []
+      hbonds: (graph.hbonds || []).filter(bond => keep.has(bond.a) && keep.has(bond.b)).map(bond => ({...bond}))
     };
   }
 
@@ -158,7 +159,6 @@
   }
 
   function align3DToDrawing(model, componentGraph, fullGraph) {
-    const originalById = new Map((componentGraph.atoms || []).map(atom => [atom.id, atom]));
     const generatedById = new Map(model.atoms.map(atom => [atom.id, atom]));
     const metrics = drawingMetrics(fullGraph);
     const mapped = (componentGraph.atoms || []).filter(atom => generatedById.has(atom.id));
@@ -177,7 +177,7 @@
       if(d>bestDistance){bestDistance=d;first=mapped[i];second=mapped[j];}
     }
     const gA=generatedById.get(first.id),gB=generatedById.get(second.id),tA=targetFor(first),tB=targetFor(second);
-    let g1=vnorm(vsub(gB,gA)),t1=vnorm(vsub(tB,tA));
+    const g1=vnorm(vsub(gB,gA)),t1=vnorm(vsub(tB,tA));
     let third=null,bestPerp=-1;
     mapped.forEach(atom=>{
       if(atom.id===first.id||atom.id===second.id)return;
@@ -237,6 +237,70 @@
     return componentGraph.atoms.map(atom=>({id:atom.id,...(candidates[0].coords.get(atom.id)||{x:atom.x,y:atom.y})}));
   }
 
+  function componentMap(components) {
+    const map=new Map();
+    components.forEach((ids,index)=>ids.forEach(id=>map.set(id,index)));
+    return map;
+  }
+
+  function translateComponent(atoms, componentIds, delta) {
+    const keep=new Set(componentIds);
+    atoms.forEach(atom=>{
+      if(!keep.has(atom.id))return;
+      atom.x+=delta.x;atom.y+=delta.y;atom.z+=delta.z||0;
+    });
+  }
+
+  // Explicit dotted H-bonds in the drawing are interaction constraints.  We keep
+  // each covalent component's internally generated geometry, preserve its drawn
+  // orientation, then gently translate disconnected components so the explicit
+  // donor/acceptor contacts sit at a chemically sensible heavy-atom distance.
+  // This is an educational idealization, not a full intermolecular optimization.
+  function satisfyExplicitInteractions(atoms, graph, components) {
+    const hbonds=(graph.hbonds||[]).filter(h=>h&&h.a&&h.b);
+    if(!hbonds.length||components.length<2)return;
+    const compByAtom=componentMap(components);
+    const drawingById=new Map((graph.atoms||[]).map(a=>[a.id,a]));
+    const anchor=0;
+    for(let iteration=0;iteration<10;iteration++){
+      const byId=new Map(atoms.map(a=>[a.id,a]));
+      const corrections=components.map(()=>({x:0,y:0,z:0,n:0}));
+      hbonds.forEach(h=>{
+        const ci=compByAtom.get(h.a),cj=compByAtom.get(h.b);if(ci===undefined||cj===undefined||ci===cj)return;
+        const a=byId.get(h.a),b=byId.get(h.b);if(!a||!b)return;
+        const da=drawingById.get(h.a),db=drawingById.get(h.b);
+        let direction;
+        if(da&&db){direction=vnorm({x:Number(db.x||0)-Number(da.x||0),y:-(Number(db.y||0)-Number(da.y||0)),z:0});}
+        else direction=vnorm(vsub(b,a));
+        const desired=vmul(direction,IDEAL_HBOND_DISTANCE),actual=vsub(b,a),error=vsub(desired,actual);
+        if(ci!==anchor){corrections[ci].x-=error.x*.5;corrections[ci].y-=error.y*.5;corrections[ci].z-=error.z*.5;corrections[ci].n++;}
+        if(cj!==anchor){corrections[cj].x+=error.x*.5;corrections[cj].y+=error.y*.5;corrections[cj].z+=error.z*.5;corrections[cj].n++;}
+      });
+      let moved=false;
+      corrections.forEach((c,index)=>{
+        if(!c.n||index===anchor)return;
+        const delta={x:(c.x/c.n)*.72,y:(c.y/c.n)*.72,z:(c.z/c.n)*.72};
+        if(Math.hypot(delta.x,delta.y,delta.z)>.002)moved=true;
+        translateComponent(atoms,components[index],delta);
+      });
+      if(!moved)break;
+    }
+  }
+
+  function interactionRecords(graph, atoms) {
+    const byId=new Map(atoms.map(a=>[a.id,a]));
+    return (graph.hbonds||[]).map((h,index)=>{
+      const a=byId.get(h.a),b=byId.get(h.b);
+      if(!a||!b)return null;
+      return {
+        id:h.id||`h${index+1}`,
+        a:h.a,b:h.b,
+        distance:Math.hypot(b.x-a.x,b.y-a.y,b.z-a.z),
+        explicit:true
+      };
+    }).filter(Boolean);
+  }
+
   async function conformComponent(componentGraph, OCL, optimize, index, fullGraph) {
     if(componentGraph.atoms.length===1){
       const metrics=drawingMetrics(fullGraph),a=componentGraph.atoms[0];
@@ -271,13 +335,17 @@
       }
       atoms.push(...model.atoms);bonds.push(...model.bonds);
     }
+    satisfyExplicitInteractions(atoms,graph,components);
+    const hbonds=interactionRecords(graph,atoms);
     return {
-      atoms,bonds,
+      atoms,bonds,hbonds,
       forceField:optimize?"MMFF94":null,
       source:"OpenChemLib",
       geometryMode:optimize?"optimized":"ideal",
       componentCount:components.length,
       relativePlacementPreserved:true,
+      interactionLayoutPreserved:true,
+      interactionConstraint:hbonds.length?`explicit H-bonds normalized near ${IDEAL_HBOND_DISTANCE.toFixed(1)} Å`:null,
       hydrogensAdded:atoms.length>(graph.atoms||[]).length
     };
   }
@@ -312,12 +380,27 @@
     getEngineInfo:()=>({
       name:"OpenChemLib",
       version:OCL_VERSION,
-      primary3D:"ideal conformer",
-      optionalOptimization:"MMFF94",
+      primary3D:"drawing-faithful ideal conformer",
+      optionalOptimization:"MMFF94 per covalent component; explicit interaction layout retained",
       twoD:"inventCoordinates",
-      disconnectedComponents:"optimized independently; relative drawing placement preserved",
+      disconnectedComponents:"generated independently, aligned to the drawing, then positioned by explicit H-bond constraints",
+      explicitInteractions:`shown and placed near ${IDEAL_HBOND_DISTANCE.toFixed(1)} Å`,
       fallback:"RNA Explorer rough preview",
       uffAvailable:false
     })
   };
+
+  // Load the enhanced molecular-drawing 3D viewer after the rest of the classic
+  // scripts have initialized. Keeping this as a separate file makes the viewer
+  // replaceable without coupling it to the geometry engine.
+  function loadEnhancedViewer(){
+    if(document.querySelector('script[data-rna-chem-3d-viewer="1"]'))return;
+    const script=document.createElement("script");
+    script.src=new URL("./chemistry-3d-viewer.js?v=1",document.baseURI).href;
+    script.dataset.rnaChem3dViewer="1";
+    script.defer=true;
+    document.head.appendChild(script);
+  }
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",loadEnhancedViewer,{once:true});
+  else setTimeout(loadEnhancedViewer,0);
 })();
