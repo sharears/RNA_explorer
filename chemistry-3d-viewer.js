@@ -119,7 +119,7 @@
 
   function updateHelpText(){
     const help=panel?.querySelector(".chem-3d-help");
-    if(help)help.textContent="Left drag: rotate · Right drag: pan · Mouse wheel: zoom · Touch: drag to rotate, pinch to zoom";
+    if(help)help.textContent="Left drag: rotate · Middle drag or Ctrl/⌘ + drag: pan · Right drag or wheel: zoom · Touch: drag to rotate; pinch to zoom";
   }
 
   async function renderCurrent(force=false){
