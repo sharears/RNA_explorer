@@ -1,0 +1,54 @@
+name: Ideal geometry modes browser
+
+on:
+  push:
+    branches: [main, ideal-geometry-modes-20261012]
+    paths:
+      - chemistry-3d-openbabel.js
+      - chemistry-editor.js
+      - chemistry-editor.css
+      - index.html
+      - tests/ideal-geometry-modes-browser.mjs
+      - .github/workflows/ideal-geometry-modes-browser.yml
+  pull_request:
+    paths:
+      - chemistry-3d-openbabel.js
+      - chemistry-editor.js
+      - chemistry-editor.css
+      - index.html
+      - tests/ideal-geometry-modes-browser.mjs
+      - .github/workflows/ideal-geometry-modes-browser.yml
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - name: Syntax checks
+        run: |
+          node --check chemistry-editor.js
+          node --check chemistry-3d-openbabel.js
+          node --check tests/ideal-geometry-modes-browser.mjs
+      - name: Serve RNA Explorer
+        run: |
+          python3 -m http.server 4173 >/tmp/rna-http.log 2>&1 &
+          sleep 2
+      - name: Test Ideal 2D and 3D geometry modes
+        run: node tests/ideal-geometry-modes-browser.mjs
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ideal-geometry-modes-diagnostics
+          path: |
+            /tmp/ideal-geometry-modes.png
+            /tmp/rna-http.log
+          if-no-files-found: ignore

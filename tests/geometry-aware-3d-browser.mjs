@@ -57,11 +57,11 @@ function heavyRingStats(model) {
   return { torsions, deviations, distances, maxDeviation: Math.max(...deviations), zRange: Math.max(...ring.map(a => a.z)) - Math.min(...ring.map(a => a.z)) };
 }
 
-async function generate(name, graph) {
+async function generateOptimized(name, graph) {
   const started = Date.now();
   const result = await page.evaluate(async input => {
     try {
-      const model = await Chemistry3DForceField.generate(input);
+      const model = await Chemistry3DForceField.generateOptimized(input);
       return { ok: true, model };
     } catch (error) {
       return { ok: false, message: String(error?.message || error), stack: String(error?.stack || ''), engine: Chemistry3DForceField.getEngineInfo() };
@@ -79,16 +79,19 @@ try {
 
   const engine = await page.evaluate(() => Chemistry3DForceField.getEngineInfo());
   assert.equal(engine.name, 'OpenChemLib');
-  assert.equal(engine.primary, 'MMFF94');
+  assert.equal(engine.primary3D, 'ideal conformer');
+  assert.equal(engine.optionalOptimization, 'MMFF94');
   assert.equal(engine.uffAvailable, false);
 
-  const benzene = await generate('benzene', graphs.benzene);
-  const cyclohexene = await generate('cyclohexene', graphs.cyclohexene);
-  const cyclohexane = await generate('cyclohexane', graphs.cyclohexane);
+  // MMFF94 remains explicitly available as the optional minimized mode.
+  const benzene = await generateOptimized('benzene', graphs.benzene);
+  const cyclohexene = await generateOptimized('cyclohexene', graphs.cyclohexene);
+  const cyclohexane = await generateOptimized('cyclohexane', graphs.cyclohexane);
 
   for (const [name, model] of Object.entries({ benzene, cyclohexene, cyclohexane })) {
     assert.equal(model.forceField, 'MMFF94', `${name}: unexpected force field ${model.forceField}`);
     assert.equal(model.source, 'OpenChemLib', `${name}: wrong 3D engine source`);
+    assert.equal(model.geometryMode, 'optimized', `${name}: optimized mode marker missing`);
     assert(model.atoms.length >= 6, `${name}: optimized structure has too few atoms`);
     assert(model.bonds.length >= 6, `${name}: optimized structure has too few bonds`);
     const stats = heavyRingStats(model);
@@ -96,14 +99,13 @@ try {
     model._stats = stats;
   }
 
-  // Directly cover the reported failure: aromatic benzene stays planar while
-  // partially/saturated six-membered rings pucker in 3D.
+  // Directly cover the reported geometry problem: aromatic benzene stays planar while
+  // partially/saturated six-membered rings pucker in optimized 3D.
   assert(benzene._stats.maxDeviation < 12, `benzene is not planar enough: ${JSON.stringify(benzene._stats)}`);
   assert(cyclohexene._stats.maxDeviation > 12 && cyclohexene._stats.zRange > 0.2, `cyclohexene remained too planar: ${JSON.stringify(cyclohexene._stats)}`);
   assert(cyclohexane._stats.maxDeviation > 20 && cyclohexane._stats.zRange > 0.4, `cyclohexane remained too planar: ${JSON.stringify(cyclohexane._stats)}`);
 
-  // Verify the control is visible in the normal UI and the actual viewer reaches
-  // an MMFF94 result instead of merely testing the engine in isolation.
+  // Verify the normal UI opens in Ideal 3D first, then can explicitly switch to MMFF94.
   await page.evaluate(() => MoleculeEditor.openBase('A'));
   await page.waitForSelector('#chemEditorDialog[open]', { state: 'visible' });
   const show3d = page.locator('#chem3DToggle');
@@ -111,10 +113,14 @@ try {
   assert.equal(await show3d.evaluate(el => Boolean(el.closest('details'))), false, 'Show in 3D is buried in a collapsible details section.');
   await show3d.click();
   await page.waitForSelector('#chem3DPanel:not([hidden])', { state: 'visible' });
-  assert.match(await page.locator('#chem3DPanel').innerText(), /Geometry-optimized 3D/i);
-  await page.waitForFunction(() => /MMFF94 optimized/.test(document.querySelector('#chem3DStatus')?.textContent || ''), null, { timeout: 30000 });
+  assert.match(await page.locator('#chem3DPanel').innerText(), /Ideal 3D geometry/i);
+  assert.equal(await page.locator('#chem3DIdealMode').getAttribute('aria-pressed'), 'true');
+  await page.waitForFunction(() => /Ideal conformer/.test(document.querySelector('#chem3DStatus')?.textContent || ''), null, { timeout: 30000 });
+  await page.locator('#chem3DOptimizeMode').click();
+  await page.waitForFunction(() => /MMFF94 energy-minimized/.test(document.querySelector('#chem3DStatus')?.textContent || ''), null, { timeout: 30000 });
+  assert.equal(await page.locator('#chem3DOptimizeMode').getAttribute('aria-pressed'), 'true');
 
-  // PyMOL-like stick rendering: thick half-bonds are colored by element. For
+  // PyMOL-like stick rendering stays element-colored in either geometry mode. For
   // adenine we expect carbon gray, nitrogen blue and generated hydrogen white.
   const colorCounts = await page.locator('#chem3DCanvas').evaluate(canvas => {
     const ctx = canvas.getContext('2d'), data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
