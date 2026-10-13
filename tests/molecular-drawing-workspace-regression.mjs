@@ -96,18 +96,21 @@ try {
   assert.equal(await ignoreButton.isDisabled(), false, 'Ignore valence warning did not enable for the highlighted atom');
   await ignoreButton.click();
 
-  // Smart geometry and Tidy 2D are present and functional.
+  // Smart geometry and whole-molecule Ideal 2D are present and functional.
   const smart = page.locator('#chemSmartLayoutToggle');
   assert.equal(await smart.getAttribute('aria-pressed'), 'true', 'Smart geometry is not enabled by default');
+  assert.match(await page.locator('#chemTidy2D').innerText(), /Ideal 2D/i, 'Ideal 2D control is missing');
   await page.locator('#chemTidy2D').click();
-  assert.match(await page.locator('#chemEditorStatus').innerText(), /tidied/i, 'Tidy 2D did not run');
+  await page.waitForFunction(() => /Ideal 2D applied|basic geometry cleanup/i.test(document.querySelector('#chemEditorStatus')?.textContent || ''), null, { timeout: 20000 });
+  assert.match(await page.locator('#chemEditorStatus').innerText(), /Ideal 2D applied with OpenChemLib/i, 'Ideal 2D did not run through OpenChemLib');
 
-  // 3D must be opt-in, then become an interactive split view.
+  // 3D must be opt-in, default to Ideal 3D, then become an interactive split view.
   assert.equal(await page.locator('#chem3DPanel').isVisible(), false, '3D panel was visible before Show in 3D');
   await page.locator('#chem3DToggle').click();
   await page.waitForFunction(() => !document.querySelector('#chem3DPanel')?.hidden);
   assert.equal(await page.locator('#chem3DPanel').isVisible(), true, '3D panel did not open');
   assert.equal(await page.locator('.chem-editor-workspace').evaluate(el => el.classList.contains('with-3d')), true, '3D split class was not enabled');
+  assert.equal(await page.locator('#chem3DIdealMode').getAttribute('aria-pressed'), 'true', '3D did not default to Ideal mode');
   const canvas = page.locator('#chem3DCanvas');
   const box = await canvas.boundingBox();
   assert(box && box.width > 250 && box.height > 250, '3D canvas is not usable');
