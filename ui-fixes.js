@@ -199,11 +199,20 @@
     document.body.appendChild(script);
   }
 
+  function loadTertiaryEnhancements() {
+    if (document.querySelector('script[data-rna-tertiary-enhancements="true"]')) return;
+    const script = document.createElement("script");
+    script.src = "tertiary-enhancements.js?v=20261014-1";
+    script.dataset.rnaTertiaryEnhancements = "true";
+    document.body.appendChild(script);
+  }
+
   function initializeUiFixes() {
     setupUtilityMenuHover();
     syncLearningAdvancedControls();
     setupHomeCoverArtwork();
     loadWorkspaceTools();
+    loadTertiaryEnhancements();
 
     const observer = new MutationObserver(() => {
       syncLearningAdvancedControls();
