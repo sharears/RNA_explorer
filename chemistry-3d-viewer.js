@@ -124,6 +124,19 @@
       const sorted=distances.slice().sort((a,b)=>a-b),median=sorted[Math.floor(sorted.length/2)],max=sorted[sorted.length-1];
       if(median>0&&max>Math.max(2.35,median*1.7))invalid=true;
     }
+    // Validate every generated covalent bond too, including bonds to hydrogens
+    // that were added by the conformer generator. This catches the failure mode
+    // where the heavy-atom base is fine but one or more generated atoms are
+    // placed far away, producing the long sticks seen in paired-base previews.
+    if(!invalid){
+      const generatedById=new Map((model.atoms||[]).map(a=>[a.id,a]));
+      for(const bond of model.bonds||[]){
+        const a=generatedById.get(bond.a),b=generatedById.get(bond.b);
+        if(!a||!b){invalid=true;break;}
+        const d=Math.hypot(Number(b.x)-Number(a.x),Number(b.y)-Number(a.y),Number(b.z)-Number(a.z));
+        if(!Number.isFinite(d)||d<.45||d>2.75){invalid=true;break;}
+      }
+    }
     if(!invalid)return model;
     console.warn("RNA Explorer: generated covalent geometry contained an implausibly long/short bond; using a drawing-faithful rigid fallback for this preview.");
     const fallback=drawingFallbackModel(graph);
