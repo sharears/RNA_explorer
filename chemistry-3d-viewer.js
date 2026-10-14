@@ -8,6 +8,7 @@
   };
   const BACKGROUND="#07111c";
   const HBOND_COLOR="#f2c66d";
+  const TARGET_HBOND_DISTANCE=2.90;
   let loaderPromise=null;
   let viewer=null,host=null,panel=null,legacyCanvas=null,statusNode=null;
   let mode="ideal",lastSignature="",lastTopology="",requestSerial=0,initialView=null,ready=false;
@@ -49,6 +50,86 @@
       b:(graph.bonds||[]).map(b=>[b.a,b.b,Number(b.order||1)]),
       h:(graph.hbonds||[]).map(h=>[h.a,h.b])
     });
+  }
+
+  function graphComponents(graph){
+    const ids=(graph.atoms||[]).map(a=>a.id),adj=new Map(ids.map(id=>[id,[]]));
+    (graph.bonds||[]).forEach(b=>{if(adj.has(b.a)&&adj.has(b.b)){adj.get(b.a).push(b.b);adj.get(b.b).push(b.a);}});
+    const seen=new Set(),components=[];
+    ids.forEach(id=>{
+      if(seen.has(id))return;
+      const stack=[id],component=[];seen.add(id);
+      while(stack.length){const current=stack.pop();component.push(current);(adj.get(current)||[]).forEach(next=>{if(!seen.has(next)){seen.add(next);stack.push(next);}});}
+      components.push(component);
+    });
+    return components;
+  }
+
+  function drawingFallbackModel(graph){
+    const atoms=graph.atoms||[],byId=new Map(atoms.map(a=>[a.id,a]));
+    const lengths=(graph.bonds||[]).map(b=>{
+      const a=byId.get(b.a),c=byId.get(b.b);return a&&c?Math.hypot(Number(c.x||0)-Number(a.x||0),Number(c.y||0)-Number(a.y||0)):0;
+    }).filter(v=>v>5).sort((a,b)=>a-b);
+    const median=lengths.length?lengths[Math.floor(lengths.length/2)]:68;
+    const scale=1.45/Math.max(20,median||68);
+    const cx=atoms.length?atoms.reduce((s,a)=>s+Number(a.x||0),0)/atoms.length:0;
+    const cy=atoms.length?atoms.reduce((s,a)=>s+Number(a.y||0),0)/atoms.length:0;
+    const model={
+      atoms:atoms.map(a=>({id:a.id,element:a.element||"C",x:(Number(a.x||0)-cx)*scale,y:-(Number(a.y||0)-cy)*scale,z:0})),
+      bonds:(graph.bonds||[]).map((b,i)=>({id:b.id||`b${i}`,a:b.a,b:b.b,order:Number(b.order||1)})),
+      hbonds:(graph.hbonds||[]).map((h,i)=>({id:h.id||`h${i}`,a:h.a,b:h.b,explicit:true})),
+      repairedFromDrawing:true
+    };
+    normalizeFallbackInteractions(model,graph);
+    return model;
+  }
+
+  function normalizeFallbackInteractions(model,graph){
+    const hbonds=(graph.hbonds||[]).filter(h=>h?.a&&h?.b);if(!hbonds.length)return;
+    const components=graphComponents(graph);if(components.length<2)return;
+    const componentByAtom=new Map();components.forEach((ids,i)=>ids.forEach(id=>componentByAtom.set(id,i)));
+    const componentSets=components.map(ids=>new Set(ids));
+    const translate=(index,dx,dy,dz)=>model.atoms.forEach(atom=>{if(componentSets[index].has(atom.id)){atom.x+=dx;atom.y+=dy;atom.z+=dz;}});
+    const anchor=0;
+    for(let iteration=0;iteration<8;iteration++){
+      const byId=new Map(model.atoms.map(a=>[a.id,a])),corrections=components.map(()=>({x:0,y:0,z:0,n:0}));
+      hbonds.forEach(h=>{
+        const ci=componentByAtom.get(h.a),cj=componentByAtom.get(h.b);if(ci===undefined||cj===undefined||ci===cj)return;
+        const a=byId.get(h.a),b=byId.get(h.b);if(!a||!b)return;
+        const dx=b.x-a.x,dy=b.y-a.y,dz=b.z-a.z,d=Math.hypot(dx,dy,dz);if(!Number.isFinite(d)||d<1e-6)return;
+        const change=TARGET_HBOND_DISTANCE-d,ux=dx/d,uy=dy/d,uz=dz/d;
+        if(ci!==anchor){corrections[ci].x-=ux*change*.5;corrections[ci].y-=uy*change*.5;corrections[ci].z-=uz*change*.5;corrections[ci].n++;}
+        if(cj!==anchor){corrections[cj].x+=ux*change*.5;corrections[cj].y+=uy*change*.5;corrections[cj].z+=uz*change*.5;corrections[cj].n++;}
+      });
+      let moved=false;
+      corrections.forEach((c,index)=>{if(!c.n||index===anchor)return;const dx=c.x/c.n*.7,dy=c.y/c.n*.7,dz=c.z/c.n*.7;if(Math.hypot(dx,dy,dz)>.002)moved=true;translate(index,dx,dy,dz);});
+      if(!moved)break;
+    }
+    const byId=new Map(model.atoms.map(a=>[a.id,a]));
+    model.hbonds=model.hbonds.map(h=>{const a=byId.get(h.a),b=byId.get(h.b);return {...h,distance:a&&b?Math.hypot(b.x-a.x,b.y-a.y,b.z-a.z):null};});
+  }
+
+  function sanitizeGeneratedModel(model,graph){
+    if(!model?.atoms?.length)return drawingFallbackModel(graph);
+    const byId=new Map(model.atoms.map(a=>[a.id,a]));
+    const distances=[];let invalid=false;
+    for(const bond of graph.bonds||[]){
+      const a=byId.get(bond.a),b=byId.get(bond.b);
+      if(!a||!b){invalid=true;break;}
+      const d=Math.hypot(Number(b.x)-Number(a.x),Number(b.y)-Number(a.y),Number(b.z)-Number(a.z));
+      if(!Number.isFinite(d)||d<.65||d>2.65){invalid=true;break;}
+      distances.push(d);
+    }
+    if(!invalid&&distances.length){
+      const sorted=distances.slice().sort((a,b)=>a-b),median=sorted[Math.floor(sorted.length/2)],max=sorted[sorted.length-1];
+      if(median>0&&max>Math.max(2.35,median*1.7))invalid=true;
+    }
+    if(!invalid)return model;
+    console.warn("RNA Explorer: generated covalent geometry contained an implausibly long/short bond; using a drawing-faithful rigid fallback for this preview.");
+    const fallback=drawingFallbackModel(graph);
+    fallback.forceField=model.forceField||null;
+    fallback.geometryMode=model.geometryMode||null;
+    return fallback;
   }
 
   function chargeRecords(model,graph,idToIndex){
@@ -137,8 +218,9 @@
     const generate=mode==="optimized"?(engine?.generateOptimized||engine?.generate):engine?.generateIdeal;
     if(!generate){setStatus("3D geometry engine unavailable.","warning");return;}
     try{
-      const model=await generate.call(engine,graph);
+      const generated=await generate.call(engine,graph);
       if(request!==requestSerial)return;
+      const model=sanitizeGeneratedModel(generated,graph);
       const sdf=modelToSDF(model,graph);if(!sdf)throw new Error("No atoms were generated.");
       const preserveView=topology===lastTopology&&initialView;
       const prior=preserveView&&viewer.getView?viewer.getView():null;
@@ -155,10 +237,11 @@
       viewer.render();
       lastSignature=key;lastTopology=topology;
       const interactionCount=(model.hbonds||graph.hbonds||[]).length;
+      const repairNote=model.repairedFromDrawing?" · rigid drawing-faithful repair":"";
       if(mode==="optimized"){
-        setStatus("MMFF94-minimized covalent components · drawn interaction layout retained"+(interactionCount?` · ${interactionCount} explicit H-bond${interactionCount===1?"":"s"}`:"")+" · PyMOL-style sticks","ready");
+        setStatus("MMFF94-minimized covalent components · drawn interaction layout retained"+repairNote+(interactionCount?` · ${interactionCount} explicit H-bond${interactionCount===1?"":"s"}`:"")+" · PyMOL-style sticks","ready");
       }else{
-        setStatus("Ideal 3D · drawing arrangement preserved"+(interactionCount?` · ${interactionCount} explicit H-bond${interactionCount===1?"":"s"}`:"")+" · PyMOL-style sticks","ready");
+        setStatus("Ideal 3D · drawing arrangement preserved"+repairNote+(interactionCount?` · ${interactionCount} explicit H-bond${interactionCount===1?"":"s"}`:"")+" · PyMOL-style sticks","ready");
       }
     }catch(error){
       if(request!==requestSerial)return;
