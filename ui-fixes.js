@@ -206,12 +206,21 @@
     document.body.appendChild(script);
   }
 
+  function loadChemistryMeasurements() {
+    if (document.querySelector('script[data-rna-chemistry-measurements="true"]')) return;
+    const script = document.createElement("script");
+    script.src = "chemistry-3d-measurements.js?v=20261014-1";
+    script.dataset.rnaChemistryMeasurements = "true";
+    document.body.appendChild(script);
+  }
+
   function initializeUiFixes() {
     setupUtilityMenuHover();
     syncLearningAdvancedControls();
     setupHomeCoverArtwork();
     loadWorkspaceTools();
     loadTertiaryEnhancements();
+    loadChemistryMeasurements();
 
     const observer = new MutationObserver(() => {
       syncLearningAdvancedControls();
