@@ -129,7 +129,6 @@
       image.setAttribute("src", desiredSource);
     }
 
-    // Inline fail-safe: keep the artwork visible even if an older stylesheet is cached.
     image.style.setProperty("display", "block", "important");
     image.style.setProperty("opacity", "1", "important");
     image.style.setProperty("visibility", "visible", "important");
@@ -202,7 +201,7 @@
   function loadTertiaryEnhancements() {
     if (document.querySelector('script[data-rna-tertiary-enhancements="true"]')) return;
     const script = document.createElement("script");
-    script.src = "tertiary-enhancements.js?v=20261014-1";
+    script.src = "tertiary-enhancements-v2.js?v=20261014-2";
     script.dataset.rnaTertiaryEnhancements = "true";
     document.body.appendChild(script);
   }
