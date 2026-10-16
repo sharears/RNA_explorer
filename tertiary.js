@@ -604,7 +604,7 @@ const TertiaryExplorer = (() => {
     const journeyOverview=document.body?.dataset?.pageMode==="journey";
     const elementMode=state.colorMode==="element",color=residueColor(i,r);
     if(journeyOverview){
-      // Learning mode defaults to a familiar PyMOL-style stick representation colored by element.
+      // Learning mode defaults to a familiar element-colored stick representation.
       model.setStyle(sel,{stick:{radius:.14,colorscheme:"Jmol",opacity:1}});
       return;
     }
@@ -1509,7 +1509,7 @@ const TertiaryExplorer = (() => {
       '<p id="teMappingStatus" class="te-mapping-status" role="status"></p></details>'+
       '<section id="teContextPanel" class="te-context-panel" aria-live="polite"></section>'+
       '<details open><summary>Display</summary>'+
-      '<label>Representation<select id="teRepresentation"><option value="sticks">PyMOL-style sticks</option><option value="ballstick">Ball &amp; stick</option><option value="wire">Wire</option><option value="spheres">Spheres</option><option value="backbone">RNA backbone</option><option value="cartoon">Cartoon</option></select></label>'+
+      '<label>Representation<select id="teRepresentation"><option value="sticks">Sticks</option><option value="ballstick">Ball &amp; stick</option><option value="wire">Wire</option><option value="spheres">Spheres</option><option value="backbone">RNA backbone</option><option value="cartoon">Cartoon</option></select></label>'+
       '<label>Color by<select id="teColorMode"><option value="nucleotide">Nucleotide / residue type</option><option value="chain">Chain</option><option value="element">Element</option><option value="uniform">Uniform custom color</option><option value="region">Secondary element</option><option value="metadata" disabled>Residue information</option></select></label>'+
       '<label>Uniform color<input id="teUniformColor" type="color" value="#74d7b6"></label>'+
       '<label>Background color<input id="teBackgroundColor" type="color" value="#07111c"></label>'+

@@ -209,8 +209,16 @@
   function loadChemistryMeasurements() {
     if (document.querySelector('script[data-rna-chemistry-measurements="true"]')) return;
     const script = document.createElement("script");
-    script.src = "chemistry-3d-measurements.js?v=20261014-1";
+    script.src = "chemistry-3d-measurements.js?v=20261015-2";
     script.dataset.rnaChemistryMeasurements = "true";
+    document.body.appendChild(script);
+  }
+
+  function loadOct15Updates() {
+    if (document.querySelector('script[data-rna-oct15-updates="true"]')) return;
+    const script = document.createElement("script");
+    script.src = "oct15-ui-updates.js?v=20261015-2";
+    script.dataset.rnaOct15Updates = "true";
     document.body.appendChild(script);
   }
 
@@ -221,6 +229,7 @@
     loadWorkspaceTools();
     loadTertiaryEnhancements();
     loadChemistryMeasurements();
+    loadOct15Updates();
 
     const observer = new MutationObserver(() => {
       syncLearningAdvancedControls();

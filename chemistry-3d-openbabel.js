@@ -396,7 +396,7 @@
   function loadEnhancedViewer(){
     if(document.querySelector('script[data-rna-chem-3d-viewer="1"]'))return;
     const script=document.createElement("script");
-    script.src=new URL("./chemistry-3d-viewer.js?v=1",document.baseURI).href;
+    script.src=new URL("./chemistry-3d-viewer.js?v=2",document.baseURI).href;
     script.dataset.rnaChem3dViewer="1";
     script.defer=true;
     document.head.appendChild(script);

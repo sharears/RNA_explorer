@@ -252,9 +252,9 @@
       const interactionCount=(model.hbonds||graph.hbonds||[]).length;
       const repairNote=model.repairedFromDrawing?" · rigid drawing-faithful repair":"";
       if(mode==="optimized"){
-        setStatus("MMFF94-minimized covalent components · drawn interaction layout retained"+repairNote+(interactionCount?` · ${interactionCount} explicit H-bond${interactionCount===1?"":"s"}`:"")+" · PyMOL-style sticks","ready");
+        setStatus("MMFF94-minimized covalent components · drawn interaction layout retained"+repairNote+(interactionCount?` · ${interactionCount} explicit H-bond${interactionCount===1?"":"s"}`:"")+" · element-colored sticks","ready");
       }else{
-        setStatus("Ideal 3D · drawing arrangement preserved"+repairNote+(interactionCount?` · ${interactionCount} explicit H-bond${interactionCount===1?"":"s"}`:"")+" · PyMOL-style sticks","ready");
+        setStatus("Ideal 3D · drawing arrangement preserved"+repairNote+(interactionCount?` · ${interactionCount} explicit H-bond${interactionCount===1?"":"s"}`:"")+" · element-colored sticks","ready");
       }
     }catch(error){
       if(request!==requestSerial)return;
@@ -307,7 +307,7 @@
     }catch(error){
       console.warn("RNA Explorer could not start 3Dmol.js for molecular drawing:",error);
       legacyCanvas.style.display="";host.remove();panel.dataset.enhanced3dReady="0";
-      setStatus("PyMOL-style viewer unavailable · using the built-in preview","warning");
+      setStatus("Interactive molecular viewer unavailable · using the built-in preview","warning");
     }
   }
 
