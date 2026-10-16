@@ -11,6 +11,7 @@ async function openDrawing(page) {
   await page.waitForSelector('#chemEditorDialog[open]', { timeout: 10000 });
   await page.waitForSelector('#chemInspectPanelV2', { timeout: 15000 });
   await page.waitForSelector('#chemEditorDialog .chem-tool-group[data-oct15="inspect"]', { timeout: 15000 });
+  await page.waitForSelector('#chemEditorDialog .chem-tool-group[data-oct15="inspect"] #chemInspectPanelV2', { timeout: 5000 });
 }
 
 async function openGroup(page, key) {
@@ -47,8 +48,6 @@ try {
   for (const expected of ['History','Build & Edit','Select','Display','Inspect','View','Export']) {
     assert(categories.includes(expected), `Missing Molecular Drawing category: ${expected}`);
   }
-  assert(await desktop.locator('#chemEditorDialog .chem-tool-group[data-oct15="inspect"] #chemInspectPanelV2').count() === 1,
-    'Inspect molecule controls are not grouped under Inspect.');
   assert(!/PyMOL/i.test(await desktop.locator('body').innerText()), 'User-facing PyMOL wording remains on the Molecular Drawing page.');
 
   await openGroup(desktop, 'inspect');
