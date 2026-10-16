@@ -62,7 +62,11 @@
     };
     const move=(node,k)=>{const body=g[k].querySelector(".chem-tool-group-body");if(node&&body&&node.parentElement!==body)body.append(node);};
     move(d.querySelector("#chemPairControls"),"build"); move(d.querySelector(".chem-text-controls"),"display"); move(d.querySelector("#chem3DToggle"),"view"); move(d.querySelector("#chemInspectPanelV2"),"inspect"); move(d.querySelector(".chem-editor-export"),"export");
-    ["history","build","select","display","inspect","view","export"].forEach(k=>tb.append(g[k]));
+    const ordered=["history","build","select","display","inspect","view","export"].map(k=>g[k]);
+    ordered.forEach((node,index)=>{
+      const current=[...tb.children].filter(el=>el.matches?.("details.chem-tool-group"));
+      if(current[index]!==node)tb.insertBefore(node,current[index]||null);
+    });
     if(!tb.dataset.oct15Open){tb.dataset.oct15Open="1";Object.entries(g).forEach(([k,v])=>v.open=!mobile()&&["build","select"].includes(k));}
     document.querySelectorAll('.rna-tool-tabs button[data-rna-tab="analyze"]').forEach(b=>b.textContent="Inspect");
     const h=d.querySelector(".chem-3d-heading"); if(h&&!h.querySelector(".chem-3d-compact")){
