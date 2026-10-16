@@ -20,25 +20,35 @@ async function openGroup(page, key) {
   return group;
 }
 
-async function scanFor3DSelection(page, useTouch = false) {
-  const host = page.locator('#chem3DMolViewer');
-  await host.scrollIntoViewIfNeeded();
-  const box = await host.boundingBox();
-  assert(box && box.width > 200 && box.height > 200, 'Interactive molecular 3D viewer is not large enough to select atoms.');
-
-  const fractions = [.50,.42,.58,.34,.66,.26,.74,.18,.82];
-  for (const fy of fractions) {
-    for (const fx of fractions) {
-      const x = box.x + box.width * fx;
-      const y = box.y + box.height * fy;
-      if (useTouch) await page.touchscreen.tap(x, y);
-      else await page.mouse.click(x, y);
-      await page.waitForTimeout(110);
-      const count = await page.locator('#chemEditorSvg .chem-inspect-selected').count();
-      if (count > 0) return count;
-    }
-  }
-  return 0;
+async function clickRenderedAtom(page, useTouch = false) {
+  await page.locator('#chem3DMolViewer').scrollIntoViewIfNeeded();
+  await page.waitForTimeout(200);
+  const point = await page.evaluate(() => {
+    const host = document.querySelector('#chem3DMolViewer');
+    const canvas = host?.querySelector('canvas');
+    const viewer = canvas?._3dmol_viewer;
+    if (!viewer) return null;
+    let model = null;
+    try {
+      const models = viewer.getModels?.();
+      model = Array.isArray(models) && models.length ? models[0] : viewer.getModel?.();
+    } catch (_error) {}
+    if (!model) return null;
+    let atoms = [];
+    try { atoms = model.selectedAtoms?.({ clickable:true }) || []; } catch (_error) {}
+    if (!atoms.length) return null;
+    const graph = typeof MoleculeEditor !== 'undefined' ? MoleculeEditor.getCurrentGraph?.() : null;
+    const editableCount = graph?.atoms?.length || atoms.length;
+    const atom = atoms.find(a => Number.isInteger(a.index) && a.index < editableCount) || atoms[0];
+    const p = viewer.modelToScreen?.(atom);
+    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
+    return { x:p.x-window.scrollX, y:p.y-window.scrollY };
+  });
+  assert(point && Number.isFinite(point.x) && Number.isFinite(point.y), 'Could not project a clickable molecular atom to the screen.');
+  if (useTouch) await page.touchscreen.tap(point.x, point.y);
+  else await page.mouse.click(point.x, point.y);
+  await page.waitForTimeout(180);
+  return page.locator('#chemEditorSvg .chem-inspect-selected').count();
 }
 
 const desktop = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
@@ -57,9 +67,10 @@ try {
   await desktop.click('#chem3DToggle');
   await desktop.waitForSelector('#chem3DMolViewer canvas', { state: 'visible', timeout: 30000 });
   await desktop.waitForFunction(() => document.querySelector('#chem3DMolViewer canvas')?._3dmol_viewer, null, { timeout: 15000 });
+  await desktop.waitForTimeout(500);
   assert.equal(await desktop.evaluate(() => !!window.$3Dmol?.GLViewer?.prototype?.addLabel?.__oct15), true,
     'Readable inspection-label patch is not active.');
-  assert((await scanFor3DSelection(desktop, false)) > 0, 'Desktop 3D atom selection did not select an atom.');
+  assert((await clickRenderedAtom(desktop, false)) > 0, 'Desktop 3D atom selection did not select an atom.');
 } finally {
   await desktop.close();
 }
@@ -78,7 +89,8 @@ try {
   await mobilePage.click('#chem3DToggle');
   await mobilePage.waitForSelector('#chem3DMolViewer canvas', { state: 'visible', timeout: 30000 });
   await mobilePage.waitForFunction(() => document.querySelector('#chem3DMolViewer')?.dataset.oct15Tap === '1', null, { timeout: 15000 });
-  assert((await scanFor3DSelection(mobilePage, true)) > 0, 'Mobile touch tap in the 3D molecular viewer did not select an atom.');
+  await mobilePage.waitForTimeout(500);
+  assert((await clickRenderedAtom(mobilePage, true)) > 0, 'Mobile touch tap in the 3D molecular viewer did not select an atom.');
 } finally {
   await mobilePage.close();
   await mobileContext.close();
