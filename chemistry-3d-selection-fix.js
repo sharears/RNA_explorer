@@ -83,22 +83,17 @@
     const group = [...document.querySelectorAll("#chemEditorSvg [data-atom-id]")]
       .find(el => el.dataset.atomId === id);
     if (!group) return false;
+    const before = selectionSignature();
     try {
-      const event = new PointerEvent("pointerdown", {
+      group.dispatchEvent(new PointerEvent("pointerdown", {
         bubbles:true, cancelable:true, pointerType:"mouse", button:0, buttons:1,
         clientX:0, clientY:0
-      });
-      group.dispatchEvent(event);
-      return true;
+      }));
     } catch (_error) {
-      try {
-        const event = new MouseEvent("mousedown", { bubbles:true, cancelable:true, button:0, buttons:1 });
-        group.dispatchEvent(event);
-        return selectionSignature().includes(String(id));
-      } catch (_error2) {
-        return false;
-      }
+      try { group.dispatchEvent(new MouseEvent("mousedown", { bubbles:true, cancelable:true, button:0, buttons:1 })); }
+      catch (_error2) { return false; }
     }
+    return selectionSignature() !== before;
   }
 
   function fallbackPick(host, clientX, clientY, originalEvent, pointerType) {
@@ -109,14 +104,11 @@
     const atom = nearestEditableAtom(viewer, model, clientX, clientY, pointerType);
     if (!atom) return false;
 
-    // Use the same selection path as the 2D editor so 2D highlighting, pick order,
-    // measurement calculation and the 3D highlight remain synchronized.
     if (selectThroughShared2DPath(atom)) {
       try { viewer.render?.(); } catch (_error) {}
       return true;
     }
 
-    // Last-resort compatibility path for viewers whose atom callback is available.
     if (typeof atom.callback === "function") {
       try {
         atom.callback(atom, viewer, originalEvent, host, [{ clickable:atom, distance:0 }]);
@@ -127,10 +119,18 @@
     return false;
   }
 
+  function scheduleFallback(host, x, y, event, type, before, delay=55) {
+    setTimeout(() => {
+      if (!activeSelectionMode() || selectionSignature() !== before) return;
+      fallbackPick(host, x, y, event, type);
+    }, delay);
+  }
+
   function bind(host) {
     if (!host || host.dataset.reliableInspectPick === "1") return;
     host.dataset.reliableInspectPick = "1";
     const pointers = new Map();
+    let lastPointerFallbackAt = 0;
 
     host.addEventListener("pointerdown", event => {
       if (!activeSelectionMode()) return;
@@ -160,17 +160,29 @@
       if (!entry) return;
       pointers.delete(event.pointerId);
       if (entry.moved || entry.multi || !activeSelectionMode()) return;
-      const before = entry.before;
-      setTimeout(() => {
-        // Prefer 3Dmol's native click selection. If it did not change the shared
-        // selection, use a larger screen-space target—especially useful on phones.
-        if (selectionSignature() !== before) return;
-        fallbackPick(host, entry.x, entry.y, event, entry.type);
-      }, 70);
+      lastPointerFallbackAt = performance.now();
+      scheduleFallback(host, entry.x, entry.y, event, entry.type, entry.before, 65);
     };
 
     host.addEventListener("pointerup", finish, true);
     host.addEventListener("pointercancel", event => pointers.delete(event.pointerId), true);
+
+    // Some browser/3Dmol combinations consume pointerup before its atom callback,
+    // while still emitting a normal click. Keep a click fallback for desktop.
+    host.addEventListener("click", event => {
+      if (!activeSelectionMode() || event.button !== 0) return;
+      if (performance.now() - lastPointerFallbackAt < 140) return;
+      const before = selectionSignature();
+      scheduleFallback(host, event.clientX, event.clientY, event, "mouse", before, 35);
+    }, true);
+
+    // iOS/Safari can be more reliable with touchend than synthetic click after a tap.
+    host.addEventListener("touchend", event => {
+      if (!activeSelectionMode() || event.touches?.length || event.changedTouches?.length !== 1) return;
+      if (performance.now() - lastPointerFallbackAt < 140) return;
+      const touch = event.changedTouches[0], before = selectionSignature();
+      scheduleFallback(host, touch.clientX, touch.clientY, event, "touch", before, 35);
+    }, {capture:true,passive:true});
   }
 
   function refresh() {
