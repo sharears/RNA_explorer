@@ -45,7 +45,7 @@ assert(secondary.includes("restoreWorkspaceSnapshot")&&secondary.includes("pairC
 
 const tertiary = read("tertiary.js");
 [
-  "PyMOL-style sticks",
+  "Sticks",
   "Ball &amp; stick",
   "RNA backbone",
   "Molecular surface",
@@ -109,6 +109,7 @@ const tertiary = read("tertiary.js");
   "Derived from 3D coordinates",
   "followPairExternal"
 ].forEach(text => assert(tertiary.includes(text), "Missing tertiary feature: " + text));
+assert(!tertiary.includes("PyMOL-style sticks"), "User-facing PyMOL-style stick wording should stay removed");
 
 const tertiaryApi = new Function(tertiary + "\nreturn TertiaryExplorer;")();
 assert.strictEqual(tertiaryApi.normalizeBase("PSU"), "U", "Pseudouridine normalizes to U");
