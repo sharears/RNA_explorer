@@ -6,7 +6,7 @@
   function loadTertiarySvgExportFix() {
     if (document.querySelector('script[data-rna-tertiary-svg-export-fix="true"]')) return;
     const svgFix = document.createElement("script");
-    svgFix.src = "tertiary-svg-export-fix.js?v=20261016-1";
+    svgFix.src = "tertiary-svg-export-fix.js?v=20261016-2";
     svgFix.dataset.rnaTertiarySvgExportFix = "true";
     document.body.appendChild(svgFix);
   }
