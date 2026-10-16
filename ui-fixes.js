@@ -217,7 +217,7 @@
   function loadOct15Updates() {
     if (document.querySelector('script[data-rna-oct15-updates="true"]')) return;
     const script = document.createElement("script");
-    script.src = "oct15-ui-updates.js?v=20261015-2";
+    script.src = "oct15-ui-updates.js?v=20261015-3";
     script.dataset.rnaOct15Updates = "true";
     document.body.appendChild(script);
   }
