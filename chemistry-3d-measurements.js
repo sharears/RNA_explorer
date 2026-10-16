@@ -6,7 +6,7 @@
   function loadSelectionFix() {
     if (document.querySelector('script[data-rna-chem-3d-selection-fix="true"]')) return;
     const fix = document.createElement("script");
-    fix.src = "chemistry-3d-selection-fix.js?v=20261015-1";
+    fix.src = "chemistry-3d-selection-fix.js?v=20261015-2";
     fix.dataset.rnaChem3dSelectionFix = "true";
     document.body.appendChild(fix);
   }
