@@ -38,7 +38,7 @@ jobs:
             fs.writeFileSync(p,s);
           }
 
-          // Remove user-facing PyMOL branding from the source, not only at runtime.
+          // Remove user-facing PyMOL branding while leaving internal identifiers alone.
           {
             const p='tertiary.js';
             let s=fs.readFileSync(p,'utf8');
@@ -49,7 +49,6 @@ jobs:
           {
             const p='chemistry-3d-viewer.js';
             let s=fs.readFileSync(p,'utf8');
-            s=s.replaceAll('applyPyMolStickStyle','applyElementStickStyle');
             s=s.replaceAll('PyMOL-style sticks','element-colored sticks');
             s=s.replaceAll('PyMOL-style viewer unavailable','Interactive molecular viewer unavailable');
             fs.writeFileSync(p,s);
@@ -73,19 +72,23 @@ jobs:
             fs.writeFileSync(p,s);
           }
           NODE
-      - name: Validate JavaScript
-        run: |
-          node --check ui-fixes.js
-          node --check oct15-ui-updates.js
-          node --check chemistry-3d-measurements.js
-          node --check chemistry-3d-viewer.js
-          node --check chemistry-3d-openbabel.js
-          node --check tertiary.js
+      - name: Validate ui-fixes
+        run: node --check ui-fixes.js
+      - name: Validate October add-on
+        run: node --check oct15-ui-updates.js
+      - name: Validate measurement loader
+        run: node --check chemistry-3d-measurements.js
+      - name: Validate molecular 3D viewer
+        run: node --check chemistry-3d-viewer.js
+      - name: Validate geometry loader
+        run: node --check chemistry-3d-openbabel.js
+      - name: Validate tertiary workspace
+        run: node --check tertiary.js
       - name: Commit activated updates
         run: |
           if git diff --quiet; then exit 0; fi
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "4189822+github-actions[bot]@users.noreply.github.com"
           git add index.html ui-fixes.js tertiary.js chemistry-3d-viewer.js chemistry-3d-openbabel.js
           git commit -m "Activate mobile inspection and chain information updates"
           git push
