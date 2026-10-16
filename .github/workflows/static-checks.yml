@@ -23,13 +23,22 @@ jobs:
       - run: node tests/chemistry.cjs
       - run: node tests/security.cjs
       - run: node tests/secondary-v7.cjs
-      - name: Browser smoke test · tertiary workspace
+      - name: Serve RNA Explorer for browser checks
         run: |
-          python3 -m http.server 4173 --directory dist > /tmp/rna-explorer-http.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill $SERVER_PID' EXIT
-          node tests/homepage-browser.mjs
-          node tests/secondary-browser.mjs
-          node tests/tertiary-browser.mjs
-          node tests/tertiary-learning-browser.mjs
-          node tests/guided-structure-transitions-browser.mjs
+          nohup python3 -m http.server 4173 --directory dist > /tmp/rna-explorer-http.log 2>&1 &
+          echo $! > /tmp/rna-explorer-http.pid
+          sleep 2
+      - name: Browser smoke · homepage
+        run: node tests/homepage-browser.mjs
+      - name: Browser smoke · secondary workspace
+        run: node tests/secondary-browser.mjs
+      - name: Browser smoke · tertiary workspace
+        run: node tests/tertiary-browser.mjs
+      - name: Browser smoke · tertiary learning
+        run: node tests/tertiary-learning-browser.mjs
+      - name: Browser smoke · guided transitions
+        run: node tests/guided-structure-transitions-browser.mjs
+      - name: Stop local server
+        if: always()
+        run: |
+          if [ -f /tmp/rna-explorer-http.pid ]; then kill "$(cat /tmp/rna-explorer-http.pid)" || true; fi
