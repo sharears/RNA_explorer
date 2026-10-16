@@ -11,7 +11,7 @@ async function openDrawing(page) {
   await page.waitForSelector('#chemEditorDialog[open]', { timeout: 10000 });
   await page.waitForSelector('#chemInspectPanelV2', { timeout: 15000 });
   await page.waitForSelector('#chemEditorDialog .chem-tool-group[data-oct15="inspect"]', { timeout: 15000 });
-  await page.waitForSelector('#chemEditorDialog .chem-tool-group[data-oct15="inspect"] #chemInspectPanelV2', { timeout: 5000 });
+  await page.waitForSelector('#chemEditorDialog .chem-tool-group[data-oct15="inspect"] #chemInspectPanelV2', { state: 'attached', timeout: 5000 });
 }
 
 async function openGroup(page, key) {
