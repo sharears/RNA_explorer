@@ -70,7 +70,7 @@ const mobilePage = await mobileContext.newPage();
 try {
   await openDrawing(mobilePage);
   const openStates = await mobilePage.locator('#chemEditorDialog .chem-tool-group[data-oct15]').evaluateAll(groups => groups.map(g => g.open));
-  assert(openStates.length >= 7 && openStates.every(Boolean === false), 'Molecular Drawing categories should start collapsed on mobile.');
+  assert(openStates.length >= 7 && openStates.every(state => state === false), 'Molecular Drawing categories should start collapsed on mobile.');
 
   await openGroup(mobilePage, 'inspect');
   await mobilePage.selectOption('#chemInspectPropertyV2', 'hybridization');
@@ -102,8 +102,13 @@ try {
   const chainCount = await chainBoxes.count();
   assert(chainCount >= 1, 'No chain choices were detected.');
   if (chainCount > 1) {
-    for (let i = 1; i < chainCount; i++) await chainBoxes.nth(i).uncheck();
-    await chainBoxes.nth(0).check();
+    const firstChain = await chainBoxes.nth(0).getAttribute('data-chain');
+    await tertiary.locator('#teChainChoicesV3 input[data-chain]').evaluateAll((boxes, keep) => {
+      boxes.forEach(box => {
+        const shouldCheck = String(box.dataset.chain ?? '') === keep;
+        if (box.checked !== shouldCheck) box.click();
+      });
+    }, firstChain);
   }
 
   await tertiary.waitForFunction(() => {
