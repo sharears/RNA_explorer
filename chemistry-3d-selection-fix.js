@@ -4,7 +4,6 @@
   window.__rnaExplorerChem3DSelectionFix = true;
 
   const $ = id => document.getElementById(id);
-  let poll = null;
 
   function activeSelectionMode() {
     const property = $("chemInspectPropertyV2")?.value;
@@ -36,30 +35,26 @@
     catch (_error) { return null; }
   }
 
-  function editableAtomLimit() {
-    try {
-      return Number(MoleculeEditor?.getCurrentGraph?.()?.atoms?.length || 0);
-    } catch (_error) {
-      return 0;
-    }
+  function graphAtoms() {
+    try { return MoleculeEditor?.getCurrentGraph?.()?.atoms || []; }
+    catch (_error) { return []; }
   }
 
-  function nearestClickableAtom(viewer, model, clientX, clientY, pointerType) {
-    if (!viewer || !model || typeof viewer.modelToScreen !== "function") return null;
-    let atoms = [];
-    try { atoms = model.selectedAtoms?.({ clickable:true }) || []; }
-    catch (_error) { return null; }
-    if (!atoms.length) return null;
+  function editableIndex(atom, limit) {
+    let index = Number.isInteger(atom?.index) ? atom.index : -1;
+    if (index < 0 && Number.isFinite(Number(atom?.serial))) index = Number(atom.serial) - 1;
+    return Number.isInteger(index) && index >= 0 && index < limit ? index : -1;
+  }
 
-    const editableLimit = editableAtomLimit();
-    let candidates = atoms.filter(atom => typeof atom?.callback === "function");
-    if (editableLimit > 0) {
-      const editable = candidates.filter(atom => {
-        const index = Number.isInteger(atom.index) ? atom.index : Number(atom.serial) - 1;
-        return Number.isInteger(index) && index >= 0 && index < editableLimit;
-      });
-      if (editable.length) candidates = editable;
-    }
+  function nearestEditableAtom(viewer, model, clientX, clientY, pointerType) {
+    if (!viewer || !model || typeof viewer.modelToScreen !== "function") return null;
+    const drawn = graphAtoms();
+    if (!drawn.length) return null;
+
+    let atoms = [];
+    try { atoms = model.selectedAtoms?.({}) || []; }
+    catch (_error) { return null; }
+    const candidates = atoms.filter(atom => editableIndex(atom, drawn.length) >= 0);
     if (!candidates.length) return null;
 
     let points;
@@ -69,9 +64,8 @@
 
     const pageX = Number(clientX) + window.scrollX;
     const pageY = Number(clientY) + window.scrollY;
-    const threshold = pointerType === "touch" ? 34 : 20;
+    const threshold = pointerType === "touch" ? 36 : 22;
     let best = null;
-
     for (let i = 0; i < candidates.length; i++) {
       const point = points[i];
       if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
@@ -81,20 +75,56 @@
     return best && best.distance <= threshold ? best.atom : null;
   }
 
-  function fallbackPick(host, clientX, clientY, event, pointerType) {
+  function selectThroughShared2DPath(atom) {
+    const drawn = graphAtoms();
+    const index = editableIndex(atom, drawn.length);
+    const id = index >= 0 ? drawn[index]?.id : null;
+    if (!id) return false;
+    const group = [...document.querySelectorAll("#chemEditorSvg [data-atom-id]")]
+      .find(el => el.dataset.atomId === id);
+    if (!group) return false;
+    try {
+      const event = new PointerEvent("pointerdown", {
+        bubbles:true, cancelable:true, pointerType:"mouse", button:0, buttons:1,
+        clientX:0, clientY:0
+      });
+      group.dispatchEvent(event);
+      return true;
+    } catch (_error) {
+      try {
+        const event = new MouseEvent("mousedown", { bubbles:true, cancelable:true, button:0, buttons:1 });
+        group.dispatchEvent(event);
+        return selectionSignature().includes(String(id));
+      } catch (_error2) {
+        return false;
+      }
+    }
+  }
+
+  function fallbackPick(host, clientX, clientY, originalEvent, pointerType) {
     if (!activeSelectionMode()) return false;
     const viewer = viewerForHost(host);
     const model = modelForViewer(viewer);
     if (!viewer || !model) return false;
-    const atom = nearestClickableAtom(viewer, model, clientX, clientY, pointerType);
-    if (!atom || typeof atom.callback !== "function") return false;
-    try {
-      atom.callback(atom, viewer, event, host, [{ clickable:atom, distance:0 }]);
-      viewer.render?.();
+    const atom = nearestEditableAtom(viewer, model, clientX, clientY, pointerType);
+    if (!atom) return false;
+
+    // Use the same selection path as the 2D editor so 2D highlighting, pick order,
+    // measurement calculation and the 3D highlight remain synchronized.
+    if (selectThroughShared2DPath(atom)) {
+      try { viewer.render?.(); } catch (_error) {}
       return true;
-    } catch (_error) {
-      return false;
     }
+
+    // Last-resort compatibility path for viewers whose atom callback is available.
+    if (typeof atom.callback === "function") {
+      try {
+        atom.callback(atom, viewer, originalEvent, host, [{ clickable:atom, distance:0 }]);
+        viewer.render?.();
+        return true;
+      } catch (_error) {}
+    }
+    return false;
   }
 
   function bind(host) {
@@ -132,8 +162,8 @@
       if (entry.moved || entry.multi || !activeSelectionMode()) return;
       const before = entry.before;
       setTimeout(() => {
-        // Prefer 3Dmol's native click selection. Only use the larger, screen-space
-        // target when the native handler did not change the shared 2D/3D selection.
+        // Prefer 3Dmol's native click selection. If it did not change the shared
+        // selection, use a larger screen-space target—especially useful on phones.
         if (selectionSignature() !== before) return;
         fallbackPick(host, entry.x, entry.y, event, entry.type);
       }, 70);
@@ -150,7 +180,7 @@
 
   function initialize() {
     refresh();
-    poll = setInterval(refresh, 250);
+    setInterval(refresh, 250);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialize, { once:true });
