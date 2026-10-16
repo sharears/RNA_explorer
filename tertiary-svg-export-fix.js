@@ -4,6 +4,8 @@
   window.__rnaExplorerTertiarySvgExportFix = true;
 
   const XLINK = "http://www.w3.org/1999/xlink";
+  const SVG_LABEL = "SVG (self-contained raster)";
+  const SVG_NOTE = "The 3D viewer is WebGL. SVG export contains the rendered view as a self-contained embedded raster image and includes SVG 1.1 compatibility markup for Illustrator.";
 
   function makeIllustratorCompatible(svgText) {
     const text = String(svgText || "");
@@ -66,10 +68,11 @@
   function updateExportCopy() {
     const format = document.getElementById("teImageFormat");
     const option = format?.querySelector('option[value="svg"]');
-    if (option) option.textContent = "SVG (self-contained raster)";
     const panel = document.getElementById("teImageExportOptions");
     const note = panel?.querySelector(".te-tool-note");
-    if (note) note.textContent = "The 3D viewer is WebGL. SVG export contains the rendered view as a self-contained embedded raster image and includes SVG 1.1 compatibility markup for Illustrator.";
+    if (option && option.textContent !== SVG_LABEL) option.textContent = SVG_LABEL;
+    if (note && note.textContent !== SVG_NOTE) note.textContent = SVG_NOTE;
+    return Boolean(option && note);
   }
 
   let attempts = 0;
@@ -81,7 +84,12 @@
     if (attempts > 120) clearInterval(timer);
   }, 250);
   patchExportTools();
-  updateExportCopy();
 
-  new MutationObserver(updateExportCopy).observe(document.body, { childList:true, subtree:true });
+  if (!updateExportCopy() && document.body) {
+    const observer = new MutationObserver(() => {
+      if (updateExportCopy()) observer.disconnect();
+    });
+    observer.observe(document.body, { childList:true, subtree:true });
+    setTimeout(() => observer.disconnect(), 30000);
+  }
 })();
