@@ -3,7 +3,16 @@
   if (window.__rnaExplorerChemInspectV2Loader) return;
   window.__rnaExplorerChemInspectV2Loader = true;
 
+  function loadTertiarySvgExportFix() {
+    if (document.querySelector('script[data-rna-tertiary-svg-export-fix="true"]')) return;
+    const svgFix = document.createElement("script");
+    svgFix.src = "tertiary-svg-export-fix.js?v=20261016-1";
+    svgFix.dataset.rnaTertiarySvgExportFix = "true";
+    document.body.appendChild(svgFix);
+  }
+
   function loadSelectionFix() {
+    loadTertiarySvgExportFix();
     if (document.querySelector('script[data-rna-chem-3d-selection-fix="true"]')) return;
     const fix = document.createElement("script");
     fix.src = "chemistry-3d-selection-fix.js?v=20261015-3";
