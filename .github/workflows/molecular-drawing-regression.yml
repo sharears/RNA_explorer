@@ -5,18 +5,36 @@ on:
     paths:
       - chemistry-editor.css
       - chemistry-editor.js
+      - chemistry-inspect-v2.js
+      - chemistry-3d-measurements.js
+      - chemistry-3d-openbabel.js
+      - chemistry-3d-viewer.js
+      - oct15-ui-updates.js
+      - tertiary.js
+      - tertiary-enhancements-v2.js
+      - ui-fixes.js
       - export-tools.js
       - index.html
       - tests/molecular-drawing-workspace-regression.mjs
+      - tests/oct15-updates-browser.mjs
       - .github/workflows/molecular-drawing-regression.yml
   push:
     branches: [main]
     paths:
       - chemistry-editor.css
       - chemistry-editor.js
+      - chemistry-inspect-v2.js
+      - chemistry-3d-measurements.js
+      - chemistry-3d-openbabel.js
+      - chemistry-3d-viewer.js
+      - oct15-ui-updates.js
+      - tertiary.js
+      - tertiary-enhancements-v2.js
+      - ui-fixes.js
       - export-tools.js
       - index.html
       - tests/molecular-drawing-workspace-regression.mjs
+      - tests/oct15-updates-browser.mjs
       - .github/workflows/molecular-drawing-regression.yml
 
 permissions:
@@ -37,8 +55,10 @@ jobs:
           python3 -m http.server 4173 >/tmp/rna-http.log 2>&1 &
           echo $! > /tmp/rna-http.pid
           sleep 2
-      - name: Test Molecular Drawing workspace and five requested features
+      - name: Test Molecular Drawing workspace and core editor behavior
         run: node tests/molecular-drawing-workspace-regression.mjs
+      - name: Test mobile inspection, compact controls, neutral wording, and chain information
+        run: node tests/oct15-updates-browser.mjs
       - name: Upload diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
