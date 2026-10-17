@@ -209,7 +209,7 @@
   function loadChemistryMeasurements() {
     if (document.querySelector('script[data-rna-chemistry-measurements="true"]')) return;
     const script = document.createElement("script");
-    script.src = "chemistry-3d-measurements.js?v=20261016-2";
+    script.src = "chemistry-3d-measurements.js?v=20261016-3";
     script.dataset.rnaChemistryMeasurements = "true";
     document.body.appendChild(script);
   }
