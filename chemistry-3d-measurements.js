@@ -3,16 +3,29 @@
   if (window.__rnaExplorerChemInspectV2Loader) return;
   window.__rnaExplorerChemInspectV2Loader = true;
 
-  function loadTertiarySvgExportFix() {
-    if (document.querySelector('script[data-rna-tertiary-svg-export-fix="true"]')) return;
+  function loadTertiarySvgExportFixIfReady() {
+    if (document.querySelector('script[data-rna-tertiary-svg-export-fix="true"]')) return true;
+    if (!document.getElementById("teImageFormat")) return false;
+
     const svgFix = document.createElement("script");
-    svgFix.src = "tertiary-svg-export-fix.js?v=20261016-2";
+    svgFix.src = "tertiary-svg-export-fix.js?v=20261016-3";
     svgFix.dataset.rnaTertiarySvgExportFix = "true";
     document.body.appendChild(svgFix);
+    return true;
+  }
+
+  function watchForTertiaryExportControls() {
+    if (loadTertiarySvgExportFixIfReady() || !document.body) return;
+
+    const observer = new MutationObserver(() => {
+      if (loadTertiarySvgExportFixIfReady()) observer.disconnect();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    setTimeout(() => observer.disconnect(), 30000);
   }
 
   function loadSelectionFix() {
-    loadTertiarySvgExportFix();
+    watchForTertiaryExportControls();
     if (document.querySelector('script[data-rna-chem-3d-selection-fix="true"]')) return;
     const fix = document.createElement("script");
     fix.src = "chemistry-3d-selection-fix.js?v=20261015-3";
