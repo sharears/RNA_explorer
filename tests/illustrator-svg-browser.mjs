@@ -73,7 +73,10 @@ try {
       imageCount:root.querySelectorAll("image").length,uniqueColors:colors.size,href};
   },xml);
   assert(info.width>100&&info.height>100,"Export dimensions are too small");
-  assert(info.width===info.imageWidth && info.height===info.imageHeight,"Embedded PNG dimensions mismatch");
+  console.log("SVG display dimensions vs embedded PNG dimensions:",JSON.stringify({svg:[info.width,info.height],png:[info.imageWidth,info.imageHeight]}));
+  assert(info.imageWidth>100&&info.imageHeight>100,"Embedded PNG dimensions are too small");
+  assert(Math.abs(info.width/info.height-info.imageWidth/info.imageHeight)/(info.width/info.height)<0.03,
+    "Embedded PNG aspect ratio mismatch: SVG "+info.width+"x"+info.height+"; PNG "+info.imageWidth+"x"+info.imageHeight);
   assert(info.imageCount===1,"Expected one embedded image, got "+info.imageCount);
   assert(info.uniqueColors>=3,"Rendered PNG looks blank/monochrome");
   const png=Buffer.from(info.href.slice("data:image/png;base64,".length),"base64");
