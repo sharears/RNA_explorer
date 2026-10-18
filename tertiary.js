@@ -1583,6 +1583,16 @@ const TertiaryExplorer = (() => {
     $("teSaveView").addEventListener("click",saveView);
     box.querySelectorAll("[data-te-region]").forEach(b=>b.addEventListener("click",()=>{const r=b.dataset.teRegion;if(r==="full")resetView();else if(r==="elbow")focus([...regionIndices("D arm"),...regionIndices("T arm")]);else focus(regionIndices(r));}));
   }
+  // The WebGL viewer produces PNG pixels, not SVG vector paths. SVG 1.1
+  // xlink:href keeps the PNG embedded and readable by Adobe Illustrator.
+  function buildEmbeddedRasterSvg(dataUrl,width,height){
+    if(!Number.isSafeInteger(width)||!Number.isSafeInteger(height)||width<1||height<1)throw new Error("Invalid SVG export dimensions.");
+    if(typeof dataUrl!=="string"||!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(dataUrl))throw new Error("3D snapshot is not an embedded PNG.");
+    return '<?xml version="1.0" encoding="UTF-8"?>\n'+
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="'+width+'" height="'+height+'" viewBox="0 0 '+width+' '+height+'">'+
+      '<image x="0" y="0" width="'+width+'" height="'+height+'" xlink:href="'+dataUrl+'"/>'+
+      '</svg>';
+  }
   async function exportViewerImage(format,scale,background){
     if(!viewer)throw new Error("3D viewer is not ready.");
     const status=$("teExportStatus"),viewport=$("tertiaryViewport"),view=viewer.getView?viewer.getView():null;
@@ -1596,7 +1606,7 @@ const TertiaryExplorer = (() => {
       const dataUrl=viewer.pngURI(),base="rna-tertiary-"+(state.currentFileName.replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase()||"structure");
       if(format==="pdf")await ExportTools.exportRasterPdf(dataUrl,width,height,base);
       else if(format==="svg"){
-        const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'" viewBox="0 0 '+width+' '+height+'"><image href="'+dataUrl+'" width="'+width+'" height="'+height+'"/></svg>';
+        const svg=buildEmbeddedRasterSvg(dataUrl,width,height);
         ExportTools.downloadText(svg,base+".svg","image/svg+xml;charset=utf-8");
       } else {const response=await fetch(dataUrl);ExportTools.downloadBlob(await response.blob(),base+".png");}
       if(status)status.textContent=(format==="pdf"?"PDF":format==="svg"?"SVG":"PNG")+" exported · "+width+" × "+height+".";
@@ -1776,7 +1786,7 @@ const TertiaryExplorer = (() => {
     render();
   }
 
-  return {setup,render,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,getWorkspaceSnapshot,restoreWorkspaceSnapshot,showLearningFeature,clearLearningFeature,showLinkedRegion,clearLinkedRegion,createDistanceMeasurementFromAtomIndices,
+  return {setup,render,buildEmbeddedRasterSvg,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,getWorkspaceSnapshot,restoreWorkspaceSnapshot,showLearningFeature,clearLearningFeature,showLinkedRegion,clearLinkedRegion,createDistanceMeasurementFromAtomIndices,
     getDiagnostics(){return {viewerReady:!!viewer,modelReady:!!model,atomCount:model?.selectedAtoms?model.selectedAtoms({}).length:0,representation:state.representation,colorMode:state.colorMode,split:state.split,mappingEnabled:state.mapping.enabled,source:state.currentFileName,derivedSecondary:state.derivedSecondary,
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
       selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
