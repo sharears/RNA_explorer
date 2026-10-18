@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { strict as assert } from "node:assert";
 import { createHash } from "node:crypto";
 
-const base=process.env.RNA_EXPLORER_URL||"http://127.0.0.1:4173/?page=tertiary";
+const base=process.env.RNA_EXPLORER_URL||"http://127.0.0.1:4173/?page=tertiary&start=example";
 const outputDir=resolve("test-output/illustrator-svg");
 mkdirSync(outputDir,{recursive:true});
 const browser=await chromium.launch({headless:true});
