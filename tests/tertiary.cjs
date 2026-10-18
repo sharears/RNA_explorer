@@ -112,6 +112,16 @@ const tertiary = read("tertiary.js");
 assert(!tertiary.includes("PyMOL-style sticks"), "User-facing PyMOL-style stick wording should stay removed");
 
 const tertiaryApi = new Function(tertiary + "\nreturn TertiaryExplorer;")();
+
+const inlinePng="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==";
+const illustratorSvg=tertiaryApi.buildEmbeddedRasterSvg(inlinePng,640,480);
+assert(illustratorSvg.startsWith('<?xml version="1.0" encoding="UTF-8"?>'),"3D SVG should include an XML header");
+assert(illustratorSvg.includes('xmlns:xlink="http://www.w3.org/1999/xlink"'),"3D SVG must declare the xlink namespace");
+assert(illustratorSvg.includes('xlink:href="'+inlinePng+'"'),"3D PNG must be embedded with SVG 1.1 xlink:href for Illustrator");
+assert(illustratorSvg.includes('viewBox="0 0 640 480"')&&illustratorSvg.includes('width="640" height="480"'),"3D SVG dimensions should match export");
+assert(!/<image\s+href=/.test(illustratorSvg),"3D SVG must not use href-only image links");
+assert.throws(()=>tertiaryApi.buildEmbeddedRasterSvg("https://example.com/missing.png",640,480),/embedded PNG/,"SVG should never link external images");
+
 assert.strictEqual(tertiaryApi.normalizeBase("PSU"), "U", "Pseudouridine normalizes to U");
 assert.strictEqual(tertiaryApi.normalizeBase("2MG"), "G", "Modified guanosine normalizes to G");
 assert.strictEqual(tertiaryApi.normalizeBase("XYZ"), "?", "Unknown modification is flagged");
