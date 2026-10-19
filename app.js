@@ -180,6 +180,7 @@ function setupHomePaths() {
   // Workspace navigation menus use the same progressive-disclosure pattern.
   document.querySelectorAll(".nav-menu > button").forEach(button=>{
     button.addEventListener("click",()=>{
+      const more=document.getElementById("utilityMenu");if(more)more.open=false;
       const open=button.getAttribute("aria-expanded")==="true";
       document.querySelectorAll(".nav-menu > button").forEach(b=>b.setAttribute("aria-expanded","false"));
       button.setAttribute("aria-expanded",String(!open));
@@ -187,6 +188,7 @@ function setupHomePaths() {
   });
   document.addEventListener("click",event=>{
     if(!event.target.closest(".nav-menu"))document.querySelectorAll(".nav-menu > button").forEach(b=>b.setAttribute("aria-expanded","false"));
+    if(event.target.closest("#utilityMenu"))document.querySelectorAll(".nav-menu > button").forEach(b=>b.setAttribute("aria-expanded","false"));
   });
 }
 
@@ -517,7 +519,7 @@ function setupModernWorkspaceUi(){
     });
     root.prepend(nav);
   };
-  addControlNavigator(secondaryControls,["Display","Analyze"]);
+  // Secondary already has functional Select / Display / Inspect tabs. Do not add a second shortcut row.
   addControlNavigator(tertiaryControls,["Import","Select","Display","Analyze","View"]);
 }
 
