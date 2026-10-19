@@ -2,37 +2,21 @@
   "use strict";
 
   function setupUtilityMenuHover() {
-    const menu = document.getElementById("utilityMenu");
-    if (!menu || menu.dataset.hoverReady === "true") return;
-    menu.dataset.hoverReady = "true";
-
-    const finePointer = window.matchMedia?.("(hover: hover) and (pointer: fine)");
-    let closeTimer = null;
-    const canHover = () => finePointer ? finePointer.matches : true;
-    const cancelClose = () => {
-      if (closeTimer !== null) {
-        clearTimeout(closeTimer);
-        closeTimer = null;
-      }
-    };
-    const openMenu = () => {
-      if (!canHover()) return;
-      cancelClose();
-      menu.open = true;
-    };
-    const scheduleClose = () => {
-      if (!canHover()) return;
-      cancelClose();
-      closeTimer = setTimeout(() => {
-        closeTimer = null;
-        if (!menu.matches(":hover") && !menu.matches(":focus-within")) menu.open = false;
-      }, 140);
-    };
-
-    menu.addEventListener("mouseenter", openMenu);
-    menu.addEventListener("mouseleave", scheduleClose);
-    menu.addEventListener("focusin", cancelClose);
-    menu.addEventListener("focusout", scheduleClose);
+    // More is click/keyboard activated, not hover activated: its old hover
+    // bridge was accidentally opening over Explore in the compact topbar.
+    const menu=document.getElementById("utilityMenu");
+    if(!menu||menu.dataset.exclusiveMenuReady==="true")return;
+    menu.dataset.exclusiveMenuReady="true";
+    const navButtons=()=>document.querySelectorAll(".nav-menu > button");
+    const closeNav=()=>navButtons().forEach(b=>b.setAttribute("aria-expanded","false"));
+    menu.addEventListener("toggle",()=>{if(menu.open)closeNav();});
+    document.addEventListener("pointerdown",e=>{if(menu.open&&!menu.contains(e.target))menu.open=false;},true);
+    document.addEventListener("keydown",e=>{
+      if(e.key==="Escape"&&menu.open){menu.open=false;menu.querySelector("summary")?.focus();}
+    });
+    const nav=document.getElementById("innerNav");
+    nav?.addEventListener("pointerover",()=>{if(menu.open)menu.open=false;});
+    nav?.addEventListener("focusin",()=>{if(menu.open)menu.open=false;});
   }
 
   function renderTertiaryWithAdvancedMode() {
