@@ -82,69 +82,68 @@
     if (cleaned) summary.textContent = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
   }
 
-  function setupSecondaryCategories() {
-    const scene = document.getElementById("scene-secondary");
-    const controls = scene?.querySelector(".se-controls");
-    if (!scene || !controls || controls.dataset.categoryOrganized === "true") return false;
-    const shell = categoryShell("seWorkspaceCategories", "select");
-    controls.prepend(shell);
-    const panels = Object.fromEntries(CATEGORY_ORDER.map(k => [k, shell.querySelector(`[data-workspace-panel="${k}"]`)]));
+  // The site already has three tabs, created by workspace-organizer.js.
+  // Merge into them instead of creating a competing navigation.
+  function existingPanels(workspace) {
+    const root=workspace==="secondary"
+      ? document.querySelector("#scene-secondary .se-controls .rna-category-host")
+      : document.querySelector("#tertiaryControls .te-controls .rna-category-host");
+    if(!root)return null;
+    const panel=key=>root.querySelector(':scope > .rna-tool-panel[data-rna-panel="'+key+'"]');
+    const result={select:panel("select"),display:panel("display"),inspect:panel("analyze")};
+    return Object.values(result).every(Boolean)?result:null;
+  }
 
-    [...controls.children].filter(el => el.tagName === "DETAILS" && !shell.contains(el)).forEach(details => {
-      const summary = details.querySelector(":scope > summary")?.textContent.trim() || "";
-      const lower = summary.toLowerCase();
-      const category = lower.startsWith("analyze") ? "analyze" : lower.startsWith("display") ? "display" : "select";
-      tidySummary(details, category);
-      panels[category].append(details);
+  function controlCategory(details) {
+    const text=(details.querySelector(":scope > summary")?.textContent||"").trim().toLowerCase();
+    if(!text||text.includes("import structure"))return null;
+    if(text.startsWith("select")||text.includes("saved object"))return "select";
+    if(text.startsWith("display")||text.includes("residue index")||text.includes("clipping")||
+       text.includes("saved camera")||text.includes("focus on structural")||text.startsWith("view"))return "display";
+    if(text.startsWith("analyze")||text.startsWith("inspect")||text.includes("compare / align")||
+       text.includes("measurements & contacts"))return "inspect";
+    return null;
+  }
+
+  function mergeToolDetails(controls,panels) {
+    // Move whole tool groups, never their nested Selected/All disclosures.
+    const groups=[...controls.children].flatMap(el=>{
+      if(el.matches?.("details.workspace-advanced-panel"))return [...el.children].filter(x=>x.tagName==="DETAILS");
+      return el.tagName==="DETAILS"?[el]:[];
     });
+    groups.forEach(details=>{
+      const category=controlCategory(details);
+      if(category&&panels[category]&&details.parentElement!==panels[category])
+        panels[category].append(details);
+    });
+  }
 
-    const transformToolbar = document.getElementById("seTransformToolbar");
-    if (transformToolbar) {
-      const groups = [...transformToolbar.querySelectorAll(":scope > details")];
-      const historyGroup = groups.find(d => /history/i.test(d.querySelector("summary")?.textContent || ""));
-      const selectGroup = groups.find(d => /select/i.test(d.querySelector("summary")?.textContent || ""));
-      const stage = scene.querySelector(".secondary-stage");
-      let history = document.getElementById("seWorkspaceHistory");
-      if (!history && stage) {
-        history = document.createElement("div"); history.id = "seWorkspaceHistory"; history.className = "workspace-history-cluster";
-        const anchor = stage.querySelector("#seTransformToolbar,.se-toolbar");
-        if (anchor) anchor.insertAdjacentElement("beforebegin", history); else stage.prepend(history);
-      }
-      ["seUndo","seRedo"].forEach(id => { const b = document.getElementById(id); if (b && history) { b.classList.add("workspace-history-button"); history.append(b); } });
-      if (selectGroup) { tidySummary(selectGroup, "select"); panels.select.prepend(selectGroup); }
-      historyGroup?.remove();
-      if (!transformToolbar.children.length) transformToolbar.remove();
+  function setupSecondaryCategories() {
+    const scene=document.getElementById("scene-secondary");
+    const controls=scene?.querySelector(".se-controls");
+    const panels=existingPanels("secondary");
+    if(!scene||!controls||!panels)return false;
+    mergeToolDetails(controls,panels);
+
+    // Preserve selection gestures and the whole-structure rotation slider.
+    const transformToolbar=document.getElementById("seTransformToolbar");
+    if(transformToolbar){
+      const groups=[...transformToolbar.querySelectorAll(":scope > details")];
+      const selectGroup=groups.find(d=>(d.querySelector("summary")?.textContent||"").toLowerCase().startsWith("select"));
+      if(selectGroup&&selectGroup.parentElement!==panels.select)panels.select.prepend(selectGroup);
     }
-
-    const rotationDock = scene.querySelector(".se-whole-rotation-dock");
-    if (rotationDock) panels.display.prepend(rotationDock);
-    controls.dataset.categoryOrganized = "true";
+    const rotationDock=scene.querySelector(".se-whole-rotation-dock");
+    if(rotationDock&&rotationDock.parentElement!==panels.display)panels.display.prepend(rotationDock);
+    controls.dataset.categoryOrganized="true";
     return true;
   }
 
   function setupTertiaryCategories() {
-    const box = document.getElementById("tertiaryControls");
-    const controls = box?.querySelector(".te-controls");
-    if (!controls || controls.dataset.categoryOrganized === "true") return false;
-    const directDetails = [...controls.children].filter(el => el.tagName === "DETAILS");
-    if (!directDetails.length) return false;
-    const shell = categoryShell("teWorkspaceCategories", "select");
-    const context = document.getElementById("teContextPanel");
-    if (context) context.insertAdjacentElement("afterend", shell); else controls.prepend(shell);
-    const panels = Object.fromEntries(CATEGORY_ORDER.map(k => [k, shell.querySelector(`[data-workspace-panel="${k}"]`)]));
-
-    directDetails.forEach((details, index) => {
-      const summary = details.querySelector(":scope > summary")?.textContent.trim() || "";
-      const lower = summary.toLowerCase();
-      if (index === 0 || lower.includes("import structure")) return;
-      let category = "display";
-      if (lower.startsWith("select") || lower.includes("saved object") || lower.includes("focus on structural")) category = "select";
-      else if (lower.startsWith("analyze") || lower.includes("compare / align")) category = "analyze";
-      else if (lower.includes("display") || lower.includes("residue index") || lower.includes("clipping") || lower.includes("saved camera")) category = "display";
-      tidySummary(details, category);
-      panels[category].append(details);
-    });
-    controls.dataset.categoryOrganized = "true";
+    const controls=document.querySelector("#tertiaryControls .te-controls");
+    const panels=existingPanels("tertiary");
+    if(!controls||!panels)return false;
+    mergeToolDetails(controls,panels);
+    controls.dataset.categoryOrganized="true";
     return true;
   }
 
