@@ -1072,14 +1072,12 @@ body{
 .compact-icon-button svg{display:block;width:19px;height:19px}
 .utility-menu>summary span{display:block;transform:none!important;line-height:1}
 
-/* Match Learn/Explore: hover reveals More, while click still works for touch/keyboard. */
+/* Open More only on explicit click/keyboard activation; never on Explore hover. */
 .utility-menu>.utility-menu-panel{display:none}
-.utility-menu[open]>.utility-menu-panel,
-.utility-menu:hover>.utility-menu-panel,
-.utility-menu:focus-within>.utility-menu-panel{display:block}
+.utility-menu[open]>.utility-menu-panel{display:block}
 .utility-menu-panel{top:40px;background:rgba(10,27,49,.985);border-color:rgba(88,217,247,.18)}
 .utility-menu::after{
-  content:"";position:absolute;right:0;top:35px;width:220px;height:10px;pointer-events:auto;
+  content:none;display:none;pointer-events:none;
 }
 
 /* Give the small homepage labels enough presence without competing with the headline. */
