@@ -1,0 +1,49 @@
+name: Secondary base-pair and menu integration
+
+on:
+  push:
+    branches:
+      - fix/secondary-basepair-and-navigation-2026-10-19
+    paths:
+      - secondary.js
+      - secondary-selection-tools.js
+      - secondary-selection-tools.css
+      - app.js
+      - ui-fixes.js
+      - styles.css
+      - index.html
+      - tests/secondary-display-and-menus-browser.mjs
+      - .github/workflows/secondary-display-menus-test.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - name: Start test server
+        run: |
+          python3 -m http.server 4173 >/tmp/rna-menu-test-http.log 2>&1 &
+          echo $! > /tmp/rna-menu-test.pid
+          sleep 2
+      - name: Verify base-pair controls, layout, topbar, and 3D
+        run: node tests/secondary-display-and-menus-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: secondary-display-menu-diagnostics
+          path: test-output/secondary-display-and-menus/
+          if-no-files-found: warn
+      - name: Stop test server
+        if: always()
+        run: |
+          if [ -f /tmp/rna-menu-test.pid ]; then kill "$(cat /tmp/rna-menu-test.pid)" || true; fi
