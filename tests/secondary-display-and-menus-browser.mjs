@@ -69,7 +69,7 @@ try{
   assert.equal(await pair.locator('path[stroke]:not([stroke="transparent"])').count(),0,
     "LW symbols only unexpectedly left line connectors");
   await page.locator("#seLWLabels").check();
-  assert.equal(await pair.locator("text").innerText(),"cWW","Show family labels failed");
+  assert.equal(await pair.locator("text").textContent(),"cWW","Show family labels failed");
   await page.locator("#se-mode").selectOption("lw");
   // An existing per-pair override is not allowed to silently defeat the global both mode.
   // Restore selected pair style to inherit if needed.
