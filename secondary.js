@@ -1265,7 +1265,12 @@ const SecondaryExplorer = (() => {
     }));
     $("seLw").addEventListener("change",e=>{
       const key=activeKey();if(!key)return;
-      if(e.target.value){annotations[key]=e.target.value;overrides[key]={...overrides[key],mode:"lw"};}
+      if(e.target.value){
+        annotations[key]=e.target.value;
+        const currentMode=overrides[key]?.mode||settings.mode;
+        if(!["lw","lw-only"].includes(currentMode))
+          overrides[key]={...overrides[key],mode:"lw"};
+      }
       else delete annotations[key];
       panel();render();
     });
