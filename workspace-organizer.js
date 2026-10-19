@@ -107,7 +107,7 @@
     global?.undo.addEventListener('click',undoTertiary);global?.redo.addEventListener('click',redoTertiary);
 
     const categoryHost=document.createElement('div');categoryHost.className='rna-category-host';root.prepend(categoryHost);
-    const panels=makeTabs(categoryHost,'tertiary',[['select','Select'],['display','Display'],['analyze','Analyze']],'select');
+    const panels=makeTabs(categoryHost,'tertiary',[['select','Select'],['display','Display'],['analyze','Inspect']],'select');
     const details=qa(':scope > details',root);
     details.forEach(d=>{
       const s=(q(':scope > summary',d)?.textContent||'').toLowerCase();
@@ -155,7 +155,7 @@
     const controls=q('#scene-secondary .se-controls');if(!controls||controls.dataset.rnaDone==='1')return false;
     controls.dataset.rnaDone='1';
     const host=document.createElement('div');host.className='rna-category-host';controls.prepend(host);
-    const panels=makeTabs(host,'secondary',[['select','Select'],['display','Display'],['analyze','Analyze']],'display');
+    const panels=makeTabs(host,'secondary',[['select','Select'],['display','Display'],['analyze','Inspect']],'display');
     qa(':scope > details',controls).forEach(d=>{
       if(d.closest('.rna-category-host'))return;
       const s=(q(':scope > summary',d)?.textContent||'').toLowerCase();
