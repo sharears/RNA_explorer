@@ -7,7 +7,7 @@ const SecondaryExplorer = (() => {
   const settings = {backColor:"#74d7b6", backWidth:2, backOpacity:0.8,
     pairColor:"#e8bb69", pairWidth:2, pairOpacity:1, circleColor:"#c5d6e2",
     circleWidth:1, circleVisible:true, letterColor:"#ffffff", letterSize:16, font:"monospace",
-    fontStyle:"normal", mode:"uniform", legend:true};
+    fontStyle:"normal", mode:"uniform", legend:true, pairVisible:true, lwLabels:false};
   let seq="", db="", defaultSeq="", defaultDb="", pairs=[], partner=[], selected=0, selectedPairKey=null;
   let selectedResidues=new Set(), selectedPairKeys=new Set(), sourceNote="";
   let layout="radial", overrides={}, annotations={}, onDefaultSelect=()=>{};
@@ -200,6 +200,8 @@ const SecondaryExplorer = (() => {
     document.querySelectorAll("[data-setting]").forEach(el=>{
       const key=el.dataset.setting;if(key in settings)el.value=String(settings[key]);
     });
+    if($("sePairVisible"))$("sePairVisible").checked=settings.pairVisible!==false;
+    if($("seLWLabels"))$("seLWLabels").checked=!!settings.lwLabels;
     if($("seLegendToggle")){$("seLegendToggle").textContent=settings.legend?"Hide base-pair legend":"Show base-pair legend";$("seLegendToggle").setAttribute("aria-pressed",String(settings.legend));}
     if($("seDragMode"))$("seDragMode").value=dragMode;
     if($("seFlexDrag"))$("seFlexDrag").checked=flexDrag;
@@ -493,6 +495,7 @@ const SecondaryExplorer = (() => {
     parent.append(el);
   }
   function pairGraphic(parent,a,b,pos,key,preview=false) {
+    if(settings.pairVisible===false)return;
     const s=effective(key), p=pos[a],q=pos[b];
     const probability=pairProbabilities[key];
     const pairColor=pairProbEnabled&&probability!=null&&!overrides[key]?.pairColor?probabilityColor(probability):s.pairColor;
@@ -500,7 +503,7 @@ const SecondaryExplorer = (() => {
     const code=annotations[key];
     const identity=seq[a]+seq[b];
     const count=s.mode==="typed"?(/GC|CG/.test(identity)?3:/AU|UA/.test(identity)?2:1):1;
-    const dashed=s.mode==="typed"&&!/GC|CG|AU|UA|GU|UG/.test(identity) || s.mode==="lw"&&!code;
+    const dashed=s.mode==="typed"&&!/GC|CG|AU|UA|GU|UG/.test(identity) || (s.mode==="lw"||s.mode==="lw-only")&&!code;
     const dx=q.x-p.x,dy=q.y-p.y,len=Math.hypot(dx,dy)||1;
     const normal={x:-dy/len,y:dx/len},trim=Math.min(17,len/4);
     const start={x:p.x+dx/len*trim,y:p.y+dy/len*trim},end={x:q.x-dx/len*trim,y:q.y-dy/len*trim};
@@ -515,15 +518,22 @@ const SecondaryExplorer = (() => {
         :square
           ?`M ${p.x} ${p.y-17-offset} L ${p.x} ${topY} L ${q.x} ${topY} L ${q.x} ${q.y-17-offset}`
           :`M ${start.x+normal.x*offset} ${start.y+normal.y*offset} L ${end.x+normal.x*offset} ${end.y+normal.y*offset}`;
+      if(s.mode==="lw-only"&&code)continue;
       g.append(svg("path",{d:path,fill:"none",stroke:pairColor,"stroke-width":s.pairWidth,
         "stroke-dasharray":dashed?"5 5":"none","stroke-linecap":"round"}));
     }
-    if(s.mode==="lw"&&code) {
+    if((s.mode==="lw"||s.mode==="lw-only")&&code) {
       const midpoint={x:(p.x+q.x)/2,y:(arch||square)?(p.y-Math.max(42,Math.abs(dx)*.42)):(p.y+q.y)/2};
       if(code[1]===code[2]) symbol(g,code[1],midpoint.x,midpoint.y,code[0],pairColor);
       else {
         symbol(g,code[1],midpoint.x-dx/len*10,midpoint.y-dy/len*10,code[0],pairColor);
         symbol(g,code[2],midpoint.x+dx/len*10,midpoint.y+dy/len*10,code[0],pairColor);
+      }
+      if(s.lwLabels){
+        const label=svg("text",{x:midpoint.x,y:midpoint.y-16,"text-anchor":"middle",fill:pairColor,
+          "font-size":12,"font-family":"Arial, sans-serif","font-weight":"700",
+          stroke:"#07111c","stroke-width":3,"paint-order":"stroke","pointer-events":"none"});
+        label.textContent=code;g.append(label);
       }
     }
     if(!preview) {
@@ -579,13 +589,13 @@ const SecondaryExplorer = (() => {
     const explanation=document.createElement("p");
     explanation.textContent=settings.mode==="uniform"?"One solid line: paired residues."
       :settings.mode==="typed"?"G–C: 3 solid lines · A–U: 2 · G–U: 1 · Other: dashed. Line counts are a display convention, not a general hydrogen-bond count."
-      :"W: circle · H: square · S: triangle. Filled: cis; open: trans. Dashed: unannotated. For mixed edges, each symbol is nearer its corresponding residue.";
+      :"W: circle · H: square · S: triangle. Filled: cis; open: trans. Dashed: unannotated. Families must be assigned individually; dot-bracket cannot infer them.";
     box.append(explanation);
-    if(settings.mode==="lw" || Object.values(overrides).some(s=>s.mode==="lw")){
+    if(["lw","lw-only"].includes(settings.mode) || Object.values(overrides).some(s=>["lw","lw-only"].includes(s.mode))){
       const illustration=svg("svg",{viewBox:"0 0 300 38",width:300,height:38,"aria-label":"Filled cis and open trans edge symbols"});
       ["c","t"].forEach((c,row)=>["W","H","S"].forEach((e,col)=>symbol(illustration,e,20+col*38+row*150,18,c,settings.pairColor)));
       box.append(illustration);
-      if(settings.mode!=="lw") {
+      if(!["lw","lw-only"].includes(settings.mode)) {
         const note=document.createElement("p");
         note.textContent="LW overrides: circle W, square H, triangle S; filled cis, open trans.";
         box.append(note);
@@ -731,7 +741,7 @@ const SecondaryExplorer = (() => {
       el.innerHTML='<summary>'+name+'</summary><details open><summary>Selected</summary></details><details><summary>All</summary></details>';
       controls.insertBefore(el,old[0]);return [el.children[1],el.children[2]];
     }
-    const [bs,ba]=group("Display · Backbone"),[rs,ra]=group("Display · Residues"),[ps,pa]=group("Analyze · Base pairs"),[ixs,ixa]=group("Display · Residue index");
+    const [bs,ba]=group("Display · Backbone"),[rs,ra]=group("Display · Residues"),[ps,pa]=group("Display · Base pairs"),[ixs,ixa]=group("Display · Residue index");
     const layerBox=document.createElement("details");
     layerBox.className="se-data-layers";
     layerBox.innerHTML='<summary>Analyze · Data layers</summary><p>Load reactivity/residue information, base-pair probabilities, or both. Loaded data stay available while you turn each visual layer on or off independently.</p><label><input id="seLayerReactivity" type="checkbox" disabled> Show reactivity colors</label><label><input id="seLayerPairProb" type="checkbox" disabled> Show base-pair probability colors</label><p id="seLayerStatus" role="status">Reactivity: not loaded · Pair probability: not loaded</p>';
@@ -740,7 +750,9 @@ const SecondaryExplorer = (() => {
     backFields.forEach(([k])=>ba.append($("se-"+k).closest("label")));
     ba.insertAdjacentHTML("afterbegin","<p>Phosphodiester connections between consecutive residues.</p>");
     bs.innerHTML+='<label>Connection indices<select id="seBackList"></select></label><fieldset id="seBackEditor"><legend>Selected connection</legend>'+localFields(backFields,"seBack-")+'<button id="seBackReset" type="button">Reset selected connection</button></fieldset>';
+    pa.insertAdjacentHTML("afterbegin",'<p>Style all pairing connectors without changing which residues are paired. Leontis–Westhof families must be annotated manually; dot-bracket input does not specify base-pair geometry.</p><label class="se-check"><input type="checkbox" id="sePairVisible" checked> Show base-pair connectors</label>');
     ["pairColor","pairWidth","pairOpacity","mode"].forEach(k=>pa.append($("se-"+k).closest("label")));
+    pa.insertAdjacentHTML("beforeend",'<label class="se-check"><input type="checkbox" id="seLWLabels"> Show Leontis–Westhof family labels (e.g., cWW)</label>');
     pa.append($("seLegendToggle"));
     pa.insertAdjacentHTML("beforeend",'<button type="button" id="seStandardPairChemistry">Standard WCF / G–U chemistry</button><fieldset><legend>Base-pair probability</legend><p>Upload either an N × N probability matrix (comma- or whitespace-separated) or sparse CSV with headers Residue_i,Residue_j,Probability. Values must be 0–1. This colors pair connectors independently of residue reactivity.</p><label>Probability data<input id="sePairProbFile" type="file" accept=".csv,.txt,text/csv,text/plain"></label><label>Probability theme<select id="sePairProbTheme"><option value="viridis">Viridis</option><option value="magma">Magma</option><option value="blueRed">Blue–white–red</option><option value="cividis">Cividis</option></select></label><label><input type="checkbox" id="sePairProbEnabled">Show base-pair probability colors</label><button type="button" id="sePairProbClear">Clear pair probabilities</button><p id="sePairProbStatus" role="status">Upload a probability matrix or sparse CSV for the current sequence.</p></fieldset>');
     const fill=document.createElement("div");fill.innerHTML=input("fillColor","All circle fills (replaces heatmap)","color","#2f6b57");
@@ -796,6 +808,8 @@ const SecondaryExplorer = (() => {
       '<label>Border color<input id="sePairLegendBorderColor" type="color" value="#c5d6e2"></label>'+
       '<label>Border thickness<input id="sePairLegendBorderThickness" type="number" min="0.5" max="8" step="0.5" value="1"></label></details>');
     old.forEach(el=>el.remove());
+    $("sePairVisible").addEventListener("change",e=>{settings.pairVisible=e.target.checked;render();});
+    $("seLWLabels").addEventListener("change",e=>{settings.lwLabels=e.target.checked;render();});
     $("seMetadataFile").closest("fieldset").insertAdjacentHTML("afterbegin",'<button type="button" id="seExample">Load example reactivity CSV</button><p><a href="data/rna_residue_reactivity.csv" download>Download example CSV</a> · Values supplied for the default tRNA.</p>');
     $("sePairProbFile").closest("fieldset").insertAdjacentHTML("afterbegin",'<button type="button" id="sePairProbExample">Load example base-pair probabilities</button><p><a href="data/rna_base_pair_probability_example.csv" download>Download example probability CSV</a> · Synthetic demonstration data for the default tRNA.</p>');
     $("seBackList").addEventListener("change",e=>{selectedBackbone=Number(e.target.value);panel();});
@@ -1132,7 +1146,7 @@ const SecondaryExplorer = (() => {
       <label>Base-pair display<select id="se-mode" data-setting="mode">
         <option value="uniform">Default · one line for all pairs</option>
         <option value="typed">Default · pair-specific lines</option>
-        <option value="lw">Leontis–Westhof symbols</option></select></label>
+        <option value="lw">Lines + Leontis–Westhof symbols</option><option value="lw-only">Leontis–Westhof symbols only</option></select></label>
       <button type="button" id="seLegendToggle" aria-pressed="true">Hide base-pair legend</button>
       </details>
       <details><summary>Nucleotide circles & letters</summary><label class="se-check"><input id="seCircleVisible" type="checkbox" checked> Show residue circles</label>
@@ -1147,7 +1161,7 @@ const SecondaryExplorer = (() => {
       <strong id="seSelected"></strong>
       <label>Pair indices<select id="sePairList"></select></label>
       <fieldset id="sePairEditor"><legend>Override this pair</legend>
-      <label>Display<select id="seLocal-mode"><option value="inherit">Use global display</option><option value="uniform">One solid line</option><option value="typed">Pair-specific lines</option><option value="lw">Leontis–Westhof symbols</option></select></label>
+      <label>Display<select id="seLocal-mode"><option value="inherit">Use global display</option><option value="uniform">One solid line</option><option value="typed">Pair-specific lines</option><option value="lw">Lines + Leontis–Westhof symbols</option><option value="lw-only">Leontis–Westhof symbols only</option></select></label>
       <label>Color<input type="color" id="seLocal-pairColor"></label>
       <label>Thickness<input type="number" id="seLocal-pairWidth" min="0" max="10" step=".5"></label>
       <label>Opacity (0–1)<input type="number" id="seLocal-pairOpacity" min="0" max="1" step=".05"></label>
@@ -1251,7 +1265,12 @@ const SecondaryExplorer = (() => {
     }));
     $("seLw").addEventListener("change",e=>{
       const key=activeKey();if(!key)return;
-      if(e.target.value){annotations[key]=e.target.value;overrides[key]={...overrides[key],mode:"lw"};}
+      if(e.target.value){
+        annotations[key]=e.target.value;
+        const currentMode=overrides[key]?.mode||settings.mode;
+        if(!["lw","lw-only"].includes(currentMode))
+          overrides[key]={...overrides[key],mode:"lw"};
+      }
       else delete annotations[key];
       panel();render();
     });
