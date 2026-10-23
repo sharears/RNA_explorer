@@ -1836,7 +1836,7 @@ const TertiaryExplorer = (() => {
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
       selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
       comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count,selectedPairCount:state.selectedPairs.size,
-      learningKey:state.learning.key,learningTorsion:state.learning.torsion,learningActive:!!state.learning.geometry,learningFlashActive:learningPulseTimer!==null,learningGuidedDimmed:guidedLearningActive(),learningStatus:state.learning.geometry?.status||"",
+      learningKey:state.learning.key,learningTorsion:state.learning.torsion,learningActive:!!state.learning.geometry,learningFlashActive:learningPulseTimer!==null,linkedPulseActive:linkedPulseTimer!==null||linkedPulseOn,linkedPulseVisible:linkedPulseOn,linkedPulseShapes:linkedPulseShapes.length,learningGuidedDimmed:guidedLearningActive(),learningStatus:state.learning.geometry?.status||"",
       selectedPairKeys:[...state.selectedPairs],hbondCounts:Object.fromEntries([...state.selectedPairs].map(key=>{const [a,b]=key.split(":").map(Number);return [key,pairHydrogenBonds(a,b).length];}))};}
   };
 })();
