@@ -16,7 +16,7 @@ const SecondaryExplorer = (() => {
   const indexSettings={color:"#bacbd7",size:12,font:"monospace",fontStyle:"normal"};
   let metadata={}, heatEnabled=false, heatTheme="viridis", heatRange=[0,1], metadataTicket=0;
   let pairProbabilities={}, pairProbEnabled=false, pairProbTheme="viridis", pairProbTicket=0, pairChemistry={};
-  let arcPairStyle="arc", exportScale=2;
+  let arcPairStyle="arc", arcRoundness=1, exportScale=2;
   let manualOffsets={}, pinnedResidues=new Set(), dragMode="residue", flexDrag=true, nodeDrag=null, suppressNodeClick=false;
   let wholeRotation=0,selectionRotation=0,selectionScale=1;
   let layoutHistory=[],layoutFuture=[],restoringWorkspace=false;
@@ -185,7 +185,7 @@ const SecondaryExplorer = (() => {
   }
   function workspaceSnapshot(){
     return {
-      version:3,sequence:seq,structure:db,layout,arcPairStyle,manualOffsets,zoom,panX,panY,wholeRotation,selectionRotation,selectionScale,
+      version:3,sequence:seq,structure:db,layout,arcPairStyle,arcRoundness,manualOffsets,zoom,panX,panY,wholeRotation,selectionRotation,selectionScale,
       settings:{...settings},indexSettings:{...indexSettings},overrides,annotations,pairChemistry,
       metadata,heatEnabled,heatTheme,heatRange,pairProbabilities,pairProbEnabled,pairProbTheme,
       legendSettings,residueOverrides,backboneOverrides,indexMode,indexSelection:[...indexSelection],indexOverrides,indexLabelOffsets,pinnedResidues:[...pinnedResidues],
@@ -196,6 +196,7 @@ const SecondaryExplorer = (() => {
   function syncWorkspaceControls(){
     document.querySelectorAll("[data-secondary-layout]").forEach(b=>{const active=b.dataset.secondaryLayout===layout;b.classList.toggle("active",active);b.setAttribute("aria-pressed",String(active));});
     document.querySelectorAll("[data-arc-style]").forEach(b=>{const active=b.dataset.arcStyle===arcPairStyle;b.classList.toggle("active",active);b.setAttribute("aria-pressed",String(active));});
+    if($("seArcRoundness")){$("seArcRoundness").value=String(arcRoundness);$("seArcRoundnessValue").textContent=arcRoundness.toFixed(2)+"×";$("seArcRoundnessControl").hidden=arcPairStyle!=="arc";$("seArcRoundnessReset").hidden=arcPairStyle!=="arc";}
     if($("seArcPairStyle"))$("seArcPairStyle").hidden=layout!=="arc";
     document.querySelectorAll("[data-setting]").forEach(el=>{
       const key=el.dataset.setting;if(key in settings)el.value=String(settings[key]);
@@ -216,7 +217,7 @@ const SecondaryExplorer = (() => {
     restoringWorkspace=true;
     try{
       load(w.sequence,w.structure);
-      layout=["radial","circular","arc"].includes(w.layout)?w.layout:"radial";arcPairStyle=w.arcPairStyle==="square"?"square":"arc";
+      layout=["radial","circular","arc"].includes(w.layout)?w.layout:"radial";arcPairStyle=w.arcPairStyle==="square"?"square":"arc";arcRoundness=Math.max(.35,Math.min(1.45,Number(w.arcRoundness)||1));
       if(w.settings&&typeof w.settings==="object")Object.assign(settings,w.settings);
       if(w.indexSettings&&typeof w.indexSettings==="object")Object.assign(indexSettings,w.indexSettings);
       overrides=w.overrides&&typeof w.overrides==="object"?w.overrides:{};
@@ -513,8 +514,9 @@ const SecondaryExplorer = (() => {
     for(let k=0;k<count;k++){
       const offset=(k-(count-1)/2)*5;
       const topY=p.y-Math.max(42,Math.abs(dx)*.42)-offset*2;
+      const radiusX=Math.max(1,Math.abs(dx)/2),radiusY=radiusX*arcRoundness;
       path=arch
-        ?`M ${p.x} ${p.y-17-offset} Q ${(p.x+q.x)/2} ${p.y-Math.abs(dx)-offset*2} ${q.x} ${q.y-17-offset}`
+        ?`M ${p.x} ${p.y-17-offset} A ${radiusX} ${radiusY} 0 0 ${dx>=0?1:0} ${q.x} ${q.y-17-offset}`
         :square
           ?`M ${p.x} ${p.y-17-offset} L ${p.x} ${topY} L ${q.x} ${topY} L ${q.x} ${q.y-17-offset}`
           :`M ${start.x+normal.x*offset} ${start.y+normal.y*offset} L ${end.x+normal.x*offset} ${end.y+normal.y*offset}`;
@@ -523,7 +525,7 @@ const SecondaryExplorer = (() => {
         "stroke-dasharray":dashed?"5 5":"none","stroke-linecap":"round"}));
     }
     if((s.mode==="lw"||s.mode==="lw-only")&&code) {
-      const midpoint={x:(p.x+q.x)/2,y:(arch||square)?(p.y-Math.max(42,Math.abs(dx)*.42)):(p.y+q.y)/2};
+      const midpoint={x:(p.x+q.x)/2,y:arch?(p.y-17-Math.abs(dx)*arcRoundness/2):square?(p.y-Math.max(42,Math.abs(dx)*.42)):(p.y+q.y)/2};
       if(code[1]===code[2]) symbol(g,code[1],midpoint.x,midpoint.y,code[0],pairColor);
       else {
         symbol(g,code[1],midpoint.x-dx/len*10,midpoint.y-dy/len*10,code[0],pairColor);
@@ -541,11 +543,27 @@ const SecondaryExplorer = (() => {
       g.append(hit);
       g.setAttribute("tabindex","0");g.setAttribute("role","button");g.setAttribute("aria-pressed",String(selectedPairKeys.has(key)));
       g.setAttribute("aria-label",`Base pair ${a+1}–${b+1}${probability!=null?", probability "+probability.toFixed(3):""}${code?", "+code:""}`);
-      const choose=()=>selectPair(a,b);
+      const choose=()=>{selectPair(a,b);openSettingsFor("pair");};
       g.addEventListener("click",choose);
       g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();choose();}});
     }
     parent.append(g);
+  }
+  // Reuse Display tab's existing editors for every interactive drawing component.
+  function openSettingsFor(component,index){
+    const labels={backbone:"Display · Backbone",residue:"Display · Residues",pair:"Display · Base pairs",index:"Display · Residue index"};
+    const name=labels[component];if(!name)return;
+    if(component==="index"&&Number.isInteger(index)){indexSelection.add(index);indexMode="selected";panel();render();}
+    const scene=document.getElementById("scene-secondary");if(!scene)return;
+    if(scene.classList.contains("controls-collapsed"))scene.querySelector('[data-controls-toggle="secondary"]')?.click();
+    const advanced=scene.querySelector(".workspace-advanced-panel");if(advanced)advanced.open=true;
+    scene.querySelector('.rna-tool-tabs [data-rna-tab="display"]')?.click();
+    const details=[...scene.querySelectorAll(".se-controls details")].find(el=>el.querySelector(":scope > summary")?.textContent.trim()===name);
+    if(!details)return;
+    for(let el=details;el&&el!==scene;el=el.parentElement)if(el.tagName==="DETAILS")el.open=true;
+    const selectedSection=[...details.children].find(el=>el.tagName==="DETAILS"&&el.querySelector(":scope > summary")?.textContent.trim()==="Selected");
+    if(selectedSection)selectedSection.open=true;
+    details.scrollIntoView?.({behavior:"smooth",block:"nearest"});
   }
   function selectPair(a,b,notify=true,forceSelected){
     const key=keyOf(a,b);
@@ -620,7 +638,7 @@ const SecondaryExplorer = (() => {
     const pos=coordinates();
     const xs=pos.map(p=>p.x),ys=pos.map(p=>p.y);
     let minX=Math.min(...xs)-52,maxX=Math.max(...xs)+52,minY=Math.min(...ys)-55,maxY=Math.max(...ys)+55;
-    if(layout==="arc") for(const [a,b] of pairs) minY=Math.min(minY,-Math.abs(pos[b].x-pos[a].x)/2-55);
+    if(layout==="arc") for(const [a,b] of pairs) minY=Math.min(minY,Math.min(pos[a].y,pos[b].y)-Math.abs(pos[b].x-pos[a].x)*(arcPairStyle==="arc"?arcRoundness/2:.42)-65);
     root.dataset.fullViewBox=`${minX} ${minY} ${Math.max(150,maxX-minX)} ${Math.max(150,maxY-minY)}`;
     root.setAttribute("aria-label",`${layout} RNA secondary structure with ${seq.length} nucleotides`);
     applyZoom();
@@ -632,7 +650,7 @@ const SecondaryExplorer = (() => {
       if(trimA+trimB>len-4){const scale=Math.max(0,(len-4)/Math.max(1,trimA+trimB));trimA*=scale;trimB*=scale;}
       g.append(svg("line",{x1:a.x+dx/len*trimA,y1:a.y+dy/len*trimA,x2:b.x-dx/len*trimB,y2:b.y-dy/len*trimB,stroke:bs.backColor,"stroke-width":bs.backWidth,opacity:bs.backOpacity,"data-backbone-visible":""}));
       g.append(svg("line",{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:"transparent","stroke-width":14,"pointer-events":"stroke","data-export-remove":""}));
-      const choose=()=>{selectedBackbone=i;panel();};
+      const choose=()=>{selectedBackbone=i;panel();openSettingsFor("backbone");};
       g.addEventListener("click",choose);
       g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();choose();}});
       root.append(g);
@@ -656,8 +674,8 @@ const SecondaryExplorer = (() => {
         const indexHit=svg("circle",{cx:number.getAttribute("x"),cy:number.getAttribute("y"),r:Math.max(13,(Number(style.size)||12)*.95),fill:"transparent"});indexHit.setAttribute("class","se-index-hit");indexHit.setAttribute("data-index-label",String(i));indexHit.setAttribute("role","button");indexHit.setAttribute("aria-label","Drag residue index "+(i+1)+" without moving the RNA structure.");g.append(indexHit);
       }
       const title=svg("title");title.textContent=`${seq[i]}${i+1}`+(metadata[i]?` · ${metadata[i].id} · ${metadata[i].value??"No value"}`:"");g.append(title);
-      g.addEventListener("click",()=>{if(!suppressNodeClick)select(i);});
-      g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select(i);}});
+      g.addEventListener("click",()=>{if(!suppressNodeClick){select(i);openSettingsFor("residue");}});
+      g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select(i);openSettingsFor("residue");}});
       root.append(g);
     });
     text(root,"5′",{x:pos[0].x-30,y:pos[0].y,fill:"#74d7b6","font-size":16,"text-anchor":"end"});
@@ -1180,13 +1198,16 @@ const SecondaryExplorer = (() => {
     $("secondarySequence").value=sequence;$("secondaryDotBracket").value=structure;
     const stage=document.querySelector(".secondary-stage"),root=$("secondarySvg");
     const arcStyleControl=document.createElement("div");arcStyleControl.id="seArcPairStyle";arcStyleControl.className="se-arc-style";arcStyleControl.hidden=true;
-    arcStyleControl.innerHTML='<span>Pair shape</span><button type="button" data-arc-style="arc" class="active" aria-pressed="true">Arc</button><button type="button" data-arc-style="square" aria-pressed="false">Square</button>';
+    arcStyleControl.innerHTML='<span>Pair shape</span><button type="button" data-arc-style="arc" class="active" aria-pressed="true">Arc</button><button type="button" data-arc-style="square" aria-pressed="false">Square</button><label id="seArcRoundnessControl" class="se-arc-roundness">Arc roundness <input id="seArcRoundness" type="range" min="0.35" max="1.45" step="0.05" value="1" aria-label="Arc height relative to a semicircle"><output id="seArcRoundnessValue">1.00×</output></label><button type="button" id="seArcRoundnessReset" title="Restore semicircular arcs">Reset</button>';
     stage.querySelector(".secondary-layout-picker").insertAdjacentElement("afterend",arcStyleControl);
     arcStyleControl.querySelectorAll("[data-arc-style]").forEach(button=>button.addEventListener("click",()=>{
       arcPairStyle=button.dataset.arcStyle;
+      $("seArcRoundnessControl").hidden=arcPairStyle!=="arc";$("seArcRoundnessReset").hidden=arcPairStyle!=="arc";
       arcStyleControl.querySelectorAll("[data-arc-style]").forEach(b=>{b.classList.toggle("active",b===button);b.setAttribute("aria-pressed",String(b===button));});
       render();
     }));
+    $("seArcRoundness").addEventListener("input",e=>{arcRoundness=Math.max(.35,Math.min(1.45,Number(e.target.value)||1));$("seArcRoundnessValue").textContent=arcRoundness.toFixed(2)+"×";render();});
+    $("seArcRoundnessReset").addEventListener("click",()=>{arcRoundness=1;$("seArcRoundness").value="1";$("seArcRoundnessValue").textContent="1.00×";render();});
     const viewport=document.createElement("div");viewport.className="se-viewport";root.before(viewport);viewport.append(root);
     const legend=document.createElement("div");legend.id="seLegend";legend.setAttribute("aria-label","Base-pair legend");stage.append(legend);
     setupToolbar(viewport,stage);
@@ -1289,6 +1310,7 @@ const SecondaryExplorer = (() => {
       render();return {rotation:selectionRotation,scale:selectionScale};
     },
     getTransformState(){return {wholeRotation,selectionRotation,selectionScale};},
+    openSettingsFor,
     commitSelectionTransform(){const changed=commitSelectionTransform();if(changed)render();return changed;},
     getWorkspaceSnapshot(){return workspaceSnapshot();},
     restoreWorkspaceSnapshot,
