@@ -20,11 +20,11 @@ try{
   // 1. RNA arc roundness is a geometric ellipse, not a CSS-distorted path.
   await page.locator('[data-secondary-layout="arc"]').first().click();
   await page.locator('[data-arc-style="arc"]').click();
-  await page.locator("#seArcRoundness").fill("1");
+  await page.locator("#seArcRoundness").evaluate(el=>{el.value="1";el.dispatchEvent(new Event("input",{bubbles:true}));});
   const firstPath=await page.locator("#secondarySvg .se-pair path[stroke]:not([stroke='transparent'])").first().getAttribute("d");
   assert.match(firstPath,/\bA\s+[\d.]+\s+[\d.]+\s+0\s+0/,"Arc is not elliptical SVG");
   let m=firstPath.match(/\bA\s+([\d.]+)\s+([\d.]+)/);assert(Math.abs(Number(m[1])-Number(m[2]))<.001,"1.00× did not produce a semicircle");
-  await page.locator("#seArcRoundness").fill("0.5");
+  await page.locator("#seArcRoundness").evaluate(el=>{el.value="0.5";el.dispatchEvent(new Event("input",{bubbles:true}));});
   const flatter=await page.locator("#secondarySvg .se-pair path[stroke]:not([stroke='transparent'])").first().getAttribute("d");
   m=flatter.match(/\bA\s+([\d.]+)\s+([\d.]+)/);
   assert(Math.abs(Number(m[2])/Number(m[1])-.5)<.001,"Roundness did not change ellipse geometry");
@@ -53,7 +53,7 @@ try{
   await page.locator("#secondarySvg [data-se-transform-handle='rotate']").waitFor({state:"attached",timeout:7000});
   await reveal("#seSelectedRotation");
   assert(await page.locator("#seSelectedRotation").isEnabled(),"Region rotation slider disabled despite four selected residues");
-  await page.locator("#seSelectedRotation").fill("45");
+  await page.locator("#seSelectedRotation").evaluate(el=>{el.value="45";el.dispatchEvent(new Event("input",{bubbles:true}));});
   assert.equal((await page.evaluate(()=>SecondaryExplorer.getTransformState())).selectionRotation,45);
   assert(await page.locator(".se-rotate-hint").count(),"Rotation cue is missing");
   report.rotation="Selection box, rotation handle, cue and 45-degree slider";
