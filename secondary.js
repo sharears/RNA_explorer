@@ -553,7 +553,7 @@ const SecondaryExplorer = (() => {
   function openSettingsFor(component,index){
     const labels={backbone:"Display · Backbone",residue:"Display · Residues",pair:"Display · Base pairs",index:"Display · Residue index"};
     const name=labels[component];if(!name)return;
-    if(component==="index"&&Number.isInteger(index)){indexSelection.add(index);indexMode="selected";panel();render();}
+    if(component==="index"&&Number.isInteger(index)){indexSelection.add(index);panel();}
     const scene=document.getElementById("scene-secondary");if(!scene)return;
     if(scene.classList.contains("controls-collapsed"))scene.querySelector('[data-controls-toggle="secondary"]')?.click();
     const advanced=scene.querySelector(".workspace-advanced-panel");if(advanced)advanced.open=true;
@@ -1208,6 +1208,8 @@ const SecondaryExplorer = (() => {
     }));
     $("seArcRoundness").addEventListener("input",e=>{arcRoundness=Math.max(.35,Math.min(1.45,Number(e.target.value)||1));$("seArcRoundnessValue").textContent=arcRoundness.toFixed(2)+"×";render();});
     $("seArcRoundnessReset").addEventListener("click",()=>{arcRoundness=1;$("seArcRoundness").value="1";$("seArcRoundnessValue").textContent="1.00×";render();});
+    root.addEventListener("click",e=>{if(e.target.closest?.("[data-index-label]")){e.stopImmediatePropagation();e.preventDefault();}},true);
+    root.addEventListener("keydown",e=>{const label=e.target.closest?.("[data-index-label]");if(label&&(e.key==="Enter"||e.key===" ")){e.stopPropagation();e.preventDefault();openSettingsFor("index",Number(label.dataset.indexLabel));}},true);
     const viewport=document.createElement("div");viewport.className="se-viewport";root.before(viewport);viewport.append(root);
     const legend=document.createElement("div");legend.id="seLegend";legend.setAttribute("aria-label","Base-pair legend");stage.append(legend);
     setupToolbar(viewport,stage);
