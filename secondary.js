@@ -553,7 +553,7 @@ const SecondaryExplorer = (() => {
   function openSettingsFor(component,index){
     const labels={backbone:"Display · Backbone",residue:"Display · Residues",pair:"Display · Base pairs",index:"Display · Residue index"};
     const name=labels[component];if(!name)return;
-    if(component==="index"&&Number.isInteger(index)){indexSelection.add(index);panel();}
+    if(component==="index"&&Number.isInteger(index)){indexSelection=new Set([index]);panel();}
     const scene=document.getElementById("scene-secondary");if(!scene)return;
     if(scene.classList.contains("controls-collapsed"))scene.querySelector('[data-controls-toggle="secondary"]')?.click();
     const advanced=scene.querySelector(".workspace-advanced-panel");if(advanced)advanced.open=true;
