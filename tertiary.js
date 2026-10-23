@@ -133,6 +133,7 @@ const TertiaryExplorer = (() => {
 
   let viewer=null,model=null,viewerPromise=null,initialView=null,hoverLabel=null;
   let pairs=[],partner=[],setupDone=false,surfaceToken=0,resizeTicket=0,learningPulseTimer=null,learningPulseStep=0;
+  let linkedPulseTimer=null,linkedPulseOn=false,linkedPulseShapes=[];
   function scheduleViewerResize(preserveView=true){
     if(!viewer)return;
     const ticket=++resizeTicket,view=preserveView&&viewer.getView?viewer.getView():null;
@@ -651,7 +652,7 @@ const TertiaryExplorer = (() => {
   }
   function addSelectedPairHighlights(){
     const residues=activeResidues(),indices=selectedPairResidues();
-    indices.forEach(i=>{if(residues[i]&&isVisibleIndex(i))model.addStyle(selectorForResidue(residues[i]),{stick:{radius:.28,color:"#74d7b6"},sphere:{radius:.29,color:"#74d7b6",opacity:.28}});});
+    indices.forEach(i=>{if(residues[i]&&isVisibleIndex(i)){const linked=state.split&&state.mapping.enabled;model.addStyle(selectorForResidue(residues[i]),{stick:{radius:linked?.4:.28,color:linked?"#ffe66d":"#74d7b6",opacity:1},sphere:{radius:linked?.42:.29,color:linked?"#ffe66d":"#74d7b6",opacity:linked?.95:.28}});}});
   }
   function addSelectedPairHydrogenBonds(){
     if(!viewer||!state.mapping.enabled)return;
@@ -1053,12 +1054,55 @@ const TertiaryExplorer = (() => {
   }
 
   function addSelectionHighlights(){
-    const residues=activeResidues(),st=state.selectionStyle;
+    const residues=activeResidues(),st=state.split&&state.mapping.enabled?{color:"#ffe66d",thickness:.37,opacity:.96}:state.selectionStyle;
     state.selectionIndices.forEach(i=>{
       if(!isVisibleIndex(i)||!residues[i])return;
       model.addStyle(selectorForResidue(residues[i]),{stick:{radius:st.thickness,color:st.color,opacity:st.opacity},sphere:{radius:Math.max(.22,st.thickness*1.18),color:st.color,opacity:st.opacity}});
       if(state.selectionLabels&&residues[i].coord)viewer.addLabel(baseAt(i)+(i+1),{position:residues[i].coord,fontSize:11,fontColor:"#07111c",backgroundColor:st.color,backgroundOpacity:.9,inFront:true});
     });
+  }
+  // Linked 2D/3D teaching mode: only 3D pulses; the 2D map is a steady highlight.
+  // Separate removable shapes avoid recomputing models, surfaces, and measurements every frame.
+  function linkedPulseIndices(){
+    if(!state.split||!state.mapping.enabled)return [];
+    return [...new Set([...state.selectionIndices,...selectedPairResidues()])].filter(i=>isVisibleIndex(i));
+  }
+  function clearLinkedPulseShapes(){
+    if(!viewer){linkedPulseShapes=[];return;}
+    linkedPulseShapes.forEach(shape=>{try{viewer.removeShape?.(shape);}catch(_){}});
+    linkedPulseShapes=[];
+  }
+  function drawLinkedPulse(){
+    clearLinkedPulseShapes();
+    if(!viewer||!linkedPulseOn)return;
+    linkedPulseIndices().forEach(i=>{
+      const residue=activeResidues()[i];if(!residue)return;
+      const ring=BASE_RING_ATOMS[baseAt(i)]||[];
+      let atoms=(residue.atoms||[]).filter(a=>ring.includes(atomName(a)));
+      if(!atoms.length)atoms=residue.coord?[residue.coord]:[];
+      atoms.slice(0,12).forEach(a=>{
+        const center={x:Number(a.x),y:Number(a.y),z:Number(a.z)};
+        if(Object.values(center).every(Number.isFinite))
+          linkedPulseShapes.push(viewer.addSphere({center,radius:.43,color:"#fff47a",opacity:.83}));
+      });
+    });
+    viewer.render();
+  }
+  function syncLinkedPulse(){
+    const active=linkedPulseIndices().length>0;
+    if(!active){
+      if(linkedPulseTimer){clearInterval(linkedPulseTimer);linkedPulseTimer=null;}
+      linkedPulseOn=false;clearLinkedPulseShapes();viewer?.render();return;
+    }
+    if(!linkedPulseTimer){
+      linkedPulseOn=true;
+      const reduced=window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+      if(!reduced)linkedPulseTimer=setInterval(()=>{
+        if(!linkedPulseIndices().length){syncLinkedPulse();return;}
+        linkedPulseOn=!linkedPulseOn;drawLinkedPulse();
+      },850);
+    }
+    drawLinkedPulse();
   }
   function addObjectHighlights(){
     const residues=activeResidues();
@@ -1086,7 +1130,7 @@ const TertiaryExplorer = (() => {
   function applyStyles(renderNow=true){
     if(!viewer||!model)return;
     const safe=(label,fn)=>{try{fn();}catch(error){console.warn("3D "+label+":",error);}};
-    safe("shape cleanup",()=>viewer.removeAllShapes());safe("label cleanup",()=>viewer.removeAllLabels());hoverLabel=null;
+    clearLinkedPulseShapes();safe("shape cleanup",()=>viewer.removeAllShapes());safe("label cleanup",()=>viewer.removeAllLabels());hoverLabel=null;
     safe("base style reset",()=>model.setStyle({},{}));
     if(state.comparison.model)safe("comparison reset",()=>state.comparison.model.setStyle({},{}));
     const residues=activeResidues();
@@ -1098,6 +1142,7 @@ const TertiaryExplorer = (() => {
     safe("indices",addIndices);safe("selected label",addSelectedLabel);safe("proximity",addProximity);safe("contacts",addContacts);
     safe("measurements",addMeasurements);safe("surface",updateSurface);safe("clipping",applyClipping);safe("guided learning",addLearningFeature);
     if(renderNow)safe("render",()=>viewer.render());
+    syncLinkedPulse();
   }
 
   function chooseResidue(index,{toggle=true,notify=true}={}){
