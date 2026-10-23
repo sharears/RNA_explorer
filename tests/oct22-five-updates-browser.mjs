@@ -1,9 +1,10 @@
 import {chromium} from "playwright";
 import assert from "node:assert/strict";
-import {mkdirSync,writeFileSync} from "node:fs";
+import {mkdirSync,writeFileSync,existsSync} from "node:fs";
 const root=process.env.RNA_EXPLORER_URL||"http://127.0.0.1:4173/";
 const dir="test-output/oct22-five-updates";mkdirSync(dir,{recursive:true});
-const browser=await chromium.launch({headless:true});
+const systemChrome=["/usr/bin/google-chrome","/usr/bin/google-chrome-stable","/usr/bin/chromium"].find(existsSync);
+const browser=await chromium.launch({headless:true,executablePath:systemChrome});
 const page=await browser.newPage({viewport:{width:1440,height:1000},acceptDownloads:true});
 const browserErrors=[],report={};
 page.on("pageerror",e=>browserErrors.push(String(e)));
