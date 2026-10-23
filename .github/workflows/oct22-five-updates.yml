@@ -16,7 +16,7 @@ jobs:
         with:
           node-version: "22"
       - run: npm install --no-save playwright
-      - run: npx playwright install --with-deps chromium
+      - run: which google-chrome || which chromium || true
       - name: Start app server
         run: |
           python3 -m http.server 4173 >/tmp/rna-five-http.log 2>&1 &
