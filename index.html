@@ -12,12 +12,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=modern-ui-5" />
-  <link rel="stylesheet" href="secondary.css?v=secondary-23" />
-  <link rel="stylesheet" href="tertiary.css?v=tertiary-17" />
+  <link rel="stylesheet" href="secondary.css?v=secondary-24" />
+  <link rel="stylesheet" href="tertiary.css?v=tertiary-18" />
   <link rel="stylesheet" href="guided-transitions.css?v=guided-6" />
   <link rel="stylesheet" href="chemistry-editor.css?v=chem-editor-10" />
   <link rel="stylesheet" href="learning-tools.css?v=learning-tools-1" />
-  <link rel="stylesheet" href="secondary-selection-tools.css?v=5">
+  <link rel="stylesheet" href="secondary-selection-tools.css?v=6">
   <link rel="stylesheet" href="readability.css?v=readability-1" />
 </head>
 <body>
@@ -127,8 +127,17 @@
 
       <section class="home-fact-strip" id="rnaFactStrip" aria-labelledby="rnaFactLabel">
         <span class="home-fact-label" id="rnaFactLabel">Did you know?</span>
-        <p id="rnaFactText">RNA can fold into precise three-dimensional shapes, not just carry genetic information.</p>
-        <button type="button" id="rnaFactNext" aria-label="Show another RNA fact">Another fact ↻</button>
+        <div class="home-fact-content">
+          <span class="home-fact-category" id="rnaFactCategory">RNA science</span>
+          <h3 id="rnaFactTitle">RNA has many shapes</h3>
+          <p id="rnaFactText">RNA can fold into precise three-dimensional shapes, not just carry genetic information.</p>
+          <details id="rnaFactLearnMore" class="home-fact-learn"><summary>Learn more</summary>
+            <p id="rnaFactDetails">Explore the published studies behind each fact.</p>
+            <a id="rnaFactSource" href="https://www.rcsb.org/structure/1EHZ" target="_blank" rel="noopener noreferrer">Original source ↗</a>
+          </details>
+          <small id="rnaFactCounter">Curated RNA discoveries · changes daily</small>
+        </div>
+        <button type="button" id="rnaFactNext" aria-label="Show another researched RNA fact">Another discovery ↻</button>
       </section>
 
       <section class="home-discovery" id="tutorials" aria-labelledby="homeDiscoveryTitle">
@@ -439,12 +448,12 @@
   <script src="journey.js?v=guided-2"></script>
   <script src="primary-animation.js?v=primary-5"></script>
   <script src="guided-transitions.js?v=guided-8"></script>
-  <script src="secondary.js?v=secondary-27"></script>
-  <script src="tertiary.js?v=tertiary-19"></script>
+  <script src="secondary.js?v=secondary-28"></script>
+  <script src="tertiary.js?v=tertiary-20"></script>
   <script src="project-session.js?v=project-1"></script>
-  <script src="learning-tools.js?v=learning-tools-3"></script>
+  <script src="learning-tools.js?v=learning-tools-4"></script>
   <script src="app.js?v=modern-ui-3"></script>
-  <script src="secondary-selection-tools.js?v=5"></script>
+  <script src="secondary-selection-tools.js?v=6"></script>
   <script src="workspace-organizer.js?v=2"></script>
   <script src="ui-fixes.js?v=ui-fixes-7"></script>
 </body>

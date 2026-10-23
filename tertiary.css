@@ -334,3 +334,14 @@ body[data-page-mode="tertiary"] #followButton{font-size:.78rem;padding:8px 10px;
   body[data-page-mode="tertiary"] #scene-tertiary .tertiary-stage{min-height:68vh}
   body[data-page-mode="tertiary"] .te-viewport{height:60vh;min-height:420px}
 }
+
+/* Linked 2D stays brightly highlighted; only the separate 3D structure pulses. */
+#tertiaryMiniSvg .te-linked-selected circle,#tertiaryMiniSvg .te-linked-pair-residue circle{
+ stroke:#ffeb70!important;stroke-width:6!important;
+ filter:drop-shadow(0 0 10px rgba(255,231,99,.96))!important}
+#tertiaryMiniSvg .te-linked-selected text,#tertiaryMiniSvg .te-linked-pair-residue text{font-weight:900!important}
+#tertiaryMiniSvg [data-pair].te-linked-pair-selected path:not([stroke="transparent"]),
+#tertiaryMiniSvg [data-pair].te-linked-pair-selected line:not([stroke="transparent"]),
+#tertiaryMiniSvg .te-mini-pair-group.te-linked-pair-selected .te-mini-pair{
+ stroke:#ffeb70!important;stroke-width:6!important;opacity:1!important;
+ filter:drop-shadow(0 0 9px rgba(255,235,112,.95))}

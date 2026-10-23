@@ -30,3 +30,19 @@ body:not([data-page-mode="home"]) .home-fact-strip{display:none!important}
   .home-fact-strip{grid-template-columns:1fr;gap:8px;margin-top:-24px}.home-fact-strip button{justify-self:start}
   .flashcard-levels{grid-template-columns:repeat(2,minmax(0,1fr))}.flashcard-level-heading{display:grid;gap:4px}.flashcard-level-heading span{text-align:left}.rna-flashcard{min-height:230px;padding:24px 18px}.rna-flashcard strong{font-size:clamp(1.2rem,6vw,1.65rem)}
 }
+
+/* Region selection handles mimic Molecular Drawing, including an explicit rotate cue. */
+.se-rotate-hint{fill:#ffe66d;font:700 12px "DM Mono",monospace;paint-order:stroke;stroke:#07111c;stroke-width:3px;pointer-events:none}
+.se-rotate-handle{stroke:#fefefe!important;stroke-width:2.5px!important;filter:drop-shadow(0 0 5px rgba(255,230,109,.86))}
+.se-region-rotation{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px;min-width:0;width:100%;color:var(--cream);font-size:12px}
+.se-region-rotation input{min-width:0;width:100%;accent-color:#f2c66d}
+.se-region-rotation output{color:#ffe66d;min-width:36px;text-align:right}
+.home-fact-content{min-width:0;display:grid;gap:6px}
+.home-fact-content h3{font-size:1.02rem;margin:0;color:var(--cream);line-height:1.3}
+.home-fact-category{color:var(--mint);font-size:.68rem;font-weight:800;letter-spacing:.065em;text-transform:uppercase}
+.home-fact-content small{font-size:.67rem;color:var(--muted)}
+.home-fact-learn{border-top:1px solid rgba(116,215,182,.23);padding-top:7px;margin-top:2px}
+.home-fact-learn summary{cursor:pointer;color:var(--mint);font-weight:750;font-size:.84rem;list-style:revert}
+.home-fact-learn p{font-size:.85rem!important;margin:7px 0!important;line-height:1.5}
+.home-fact-learn a{font-size:.8rem;color:var(--mint);text-decoration:underline;text-underline-offset:3px}
+@media(max-width:720px){.home-fact-content{width:100%}.home-fact-strip{align-items:start}}

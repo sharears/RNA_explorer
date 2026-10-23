@@ -299,3 +299,15 @@ body[data-page-mode="secondary"] .workspace-advanced-panel .se-controls{margin-t
   body[data-page-mode="secondary"] #scene-secondary .secondary-stage{min-height:68vh}
   body[data-page-mode="secondary"] .se-viewport{height:62vh}
 }
+
+/* Adjustable circular-to-oval pairing arcs; controls remain accessible on small viewports. */
+.se-arc-style{flex-wrap:wrap;max-width:100%;align-self:stretch;gap:6px}
+.se-arc-roundness{display:flex;align-items:center;gap:8px;flex:1 1 180px;min-width:0;padding:4px 6px;white-space:nowrap}
+.se-arc-roundness[hidden],#seArcRoundnessReset[hidden]{display:none!important}
+.se-arc-roundness input{width:clamp(76px,12vw,190px);min-width:55px;flex:1 1 auto;accent-color:var(--mint)}
+.se-arc-roundness output{color:var(--cream);min-width:3.7em;text-align:right}
+/* Make selection in the full Secondary workspace conspicuous but steady. */
+#secondarySvg .se-node.multi-selected>circle:first-child{stroke:#fff1a6!important;stroke-width:5!important;filter:drop-shadow(0 0 9px #f2c66d)}
+#secondarySvg .se-node.multi-selected>circle:not(:first-child){stroke:#ffffff!important;stroke-width:3!important}
+#secondarySvg .se-pair.selected path:not([stroke="transparent"]){stroke:#ffe66d!important;stroke-width:5!important;filter:drop-shadow(0 0 7px rgba(255,230,109,.9))}
+#secondarySvg .se-node.multi-selected>text:not(.se-index){fill:#ffffff!important;font-weight:900;paint-order:stroke;stroke:#172032;stroke-width:2.4px}
