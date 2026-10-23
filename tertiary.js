@@ -133,7 +133,7 @@ const TertiaryExplorer = (() => {
 
   let viewer=null,model=null,viewerPromise=null,initialView=null,hoverLabel=null;
   let pairs=[],partner=[],setupDone=false,surfaceToken=0,resizeTicket=0,learningPulseTimer=null,learningPulseStep=0;
-  let linkedPulseTimer=null,linkedPulseOn=false,linkedPulseShapes=[];
+  let linkedPulseTimer=null,linkedPulseOn=false,linkedPulseShapes=[],linkedPulseFocus=[];
   function scheduleViewerResize(preserveView=true){
     if(!viewer)return;
     const ticket=++resizeTicket,view=preserveView&&viewer.getView?viewer.getView():null;
@@ -1065,7 +1065,8 @@ const TertiaryExplorer = (() => {
   // Separate removable shapes avoid recomputing models, surfaces, and measurements every frame.
   function linkedPulseIndices(){
     if(!state.split||!state.mapping.enabled)return [];
-    return [...new Set([...state.selectionIndices,...selectedPairResidues()])].filter(i=>isVisibleIndex(i));
+    const selected=new Set([...state.selectionIndices,...selectedPairResidues()]);
+    return linkedPulseFocus.filter(i=>selected.has(i)&&isVisibleIndex(i));
   }
   function clearLinkedPulseShapes(){
     if(!viewer){linkedPulseShapes=[];return;}
@@ -1151,6 +1152,7 @@ const TertiaryExplorer = (() => {
       if(state.selectionIndices.has(state.selected))state.selectionIndices.delete(state.selected);
       else state.selectionIndices.add(state.selected);
     }
+    linkedPulseFocus=state.selectionIndices.has(state.selected)?[state.selected]:[];
     if(notify&&state.mapping.enabled){
       if(isCuratedDefaultPair())state.onSelect(state.selected);
       if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.followExternal)SecondaryExplorer.followExternal(state.selected,state.selectionIndices.has(state.selected));
@@ -1160,6 +1162,7 @@ const TertiaryExplorer = (() => {
   function choosePair(a,b,{toggle=true,notify=true}={}){
     const key=pairKey(a,b);state.selected=a;
     if(toggle){if(state.selectedPairs.has(key))state.selectedPairs.delete(key);else state.selectedPairs.add(key);}
+    linkedPulseFocus=state.selectedPairs.has(key)?[a,b]:[];
     if(notify&&state.mapping.enabled&&typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.followPairExternal)SecondaryExplorer.followPairExternal(a,b,state.selectedPairs.has(key));
     render();
   }
@@ -1823,8 +1826,8 @@ const TertiaryExplorer = (() => {
     window.addEventListener("rna-metadata-change",e=>applyMetadata(e.detail));
     window.addEventListener("rna-secondary-context",e=>handleSecondaryContext(e.detail));
     window.addEventListener("rna-secondary-layout",e=>handleSecondaryLayout(e.detail));
-    window.addEventListener("rna-secondary-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){state.selected=clamp(e.detail.index,0,state.secondarySequence.length-1);if(e.detail.selected===true)state.selectionIndices.add(state.selected);else if(e.detail.selected===false)state.selectionIndices.delete(state.selected);render();}});
-    window.addEventListener("rna-secondary-pair-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){const key=pairKey(e.detail.a,e.detail.b);if(e.detail.selected)state.selectedPairs.add(key);else state.selectedPairs.delete(key);render();}});
+    window.addEventListener("rna-secondary-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){state.selected=clamp(e.detail.index,0,state.secondarySequence.length-1);if(e.detail.selected===true){state.selectionIndices.add(state.selected);linkedPulseFocus=[state.selected];}else if(e.detail.selected===false){state.selectionIndices.delete(state.selected);linkedPulseFocus=[];}render();}});
+    window.addEventListener("rna-secondary-pair-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){const key=pairKey(e.detail.a,e.detail.b);if(e.detail.selected){state.selectedPairs.add(key);linkedPulseFocus=[e.detail.a,e.detail.b];}else{state.selectedPairs.delete(key);linkedPulseFocus=[];}render();}});
     window.addEventListener("resize",()=>scheduleViewerResize(true));
     if(typeof ResizeObserver!=="undefined"){const viewport=$("tertiaryViewport");if(viewport)new ResizeObserver(()=>scheduleViewerResize(true)).observe(viewport);}
     try{const p=typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.getCurrentPositions?SecondaryExplorer.getCurrentPositions():null;if(Array.isArray(p)&&p.length===state.secondarySequence.length)state.secondaryLayoutPositions=p.map(x=>({x:Number(x.x),y:Number(x.y)}));}catch(_){}
@@ -1836,7 +1839,7 @@ const TertiaryExplorer = (() => {
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
       selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
       comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count,selectedPairCount:state.selectedPairs.size,
-      learningKey:state.learning.key,learningTorsion:state.learning.torsion,learningActive:!!state.learning.geometry,learningFlashActive:learningPulseTimer!==null,linkedPulseActive:linkedPulseTimer!==null||linkedPulseOn,linkedPulseVisible:linkedPulseOn,linkedPulseShapes:linkedPulseShapes.length,learningGuidedDimmed:guidedLearningActive(),learningStatus:state.learning.geometry?.status||"",
+      learningKey:state.learning.key,learningTorsion:state.learning.torsion,learningActive:!!state.learning.geometry,learningFlashActive:learningPulseTimer!==null,linkedPulseActive:linkedPulseTimer!==null||linkedPulseOn,linkedPulseVisible:linkedPulseOn,linkedPulseShapes:linkedPulseShapes.length,linkedPulseFocus:[...linkedPulseFocus],learningGuidedDimmed:guidedLearningActive(),learningStatus:state.learning.geometry?.status||"",
       selectedPairKeys:[...state.selectedPairs],hbondCounts:Object.fromEntries([...state.selectedPairs].map(key=>{const [a,b]=key.split(":").map(Number);return [key,pairHydrogenBonds(a,b).length];}))};}
   };
 })();
