@@ -76,7 +76,8 @@ try{
   await page.goto(root+"?page=tertiary&start=example",{waitUntil:"domcontentloaded"});
   await page.waitForFunction(()=>typeof TertiaryExplorer!=="undefined"&&TertiaryExplorer.getDiagnostics().modelReady,
     null,{timeout:45000});
-  await page.locator("#teSplit").check({force:true});
+  await reveal("#teSplit");
+  await page.locator("#teSplit").check();
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().split&&TertiaryExplorer.getDiagnostics().mappingEnabled,
     null,{timeout:12000});
   await page.locator("#tertiaryMiniSvg [data-residue-index='9']").waitFor({state:"attached",timeout:12000});
