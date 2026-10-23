@@ -105,25 +105,49 @@ const RNAExplorerLearningTools=(()=>{
     ]}
   };
 
+  // Editorial collection; sources are verified primary publications or official Nobel history.
+  // Add reviewed entries here periodically (target: about 5–10 newly vetted items per month).
+  // No unreviewed network content is auto-published.
   const facts=[
-    "RNA can fold into precise three-dimensional shapes, not just carry genetic information.",
-    "The ribose sugar in A-form RNA helices commonly favors a C3′-endo sugar pucker.",
-    "G–U wobble pairs are non-Watson–Crick interactions that occur frequently in structured RNA.",
-    "Base stacking can contribute strongly to RNA helix stability in addition to hydrogen bonding.",
-    "RNA nucleotides are linked through 3′–5′ phosphodiester bonds in the backbone.",
-    "A single RNA sequence can populate an ensemble of related conformations rather than one rigid structure.",
-    "Magnesium ions often help RNA fold by reducing electrostatic repulsion between negatively charged phosphates.",
-    "RNA base pairs can use Watson–Crick, Hoogsteen, or sugar edges, creating many noncanonical geometries.",
-    "Chemical probing methods such as DMS and SHAPE can report which nucleotides are accessible or conformationally constrained.",
-    "Pseudoknots contain pairing connections that cross when drawn in a conventional secondary-structure diagram.",
-    "Tertiary contacts can bring residues that are far apart in sequence next to each other in three-dimensional space.",
-    "Yeast tRNA-Phe, PDB 1EHZ, is the experimental example used throughout RNA Explorer."
+    {category:"History",year:"1956",title:"Rosalind Franklin and a virus made of RNA",
+      fact:"Rosalind Franklin helped locate RNA inside the tobacco mosaic virus particle.",
+      detail:"Her X-ray diffraction research examined how RNA is arranged within this rod-shaped virus, broadening structural studies beyond DNA.",
+      source:"Franklin, Nature (1956)",url:"https://doi.org/10.1038/177928b0"},
+    {category:"History",year:"1961",title:"How messenger RNA became a central idea",
+      fact:"Researchers established evidence for a short-lived RNA messenger carrying information from genes to ribosomes.",
+      detail:"Brenner, Jacob, and Meselson studied an unstable intermediate consistent with messenger RNA: a molecule that conveys information used in protein synthesis.",
+      source:"Brenner, Jacob & Meselson, Nature (1961)",url:"https://doi.org/10.1038/190576a0"},
+    {category:"History",year:"1970",title:"A foundational rule about molecular information",
+      fact:"Francis Crick clarified the central dogma: protein sequence information is not transferred back into nucleic acids.",
+      detail:"The central dogma is about transfers of sequence information, not a claim that all information flows only from DNA to RNA to protein.",
+      source:"Crick, Nature (1970)",url:"https://doi.org/10.1038/227561a0"},
+    {category:"Classic RNA science",year:"1989",title:"RNA can act as a catalyst",
+      fact:"Thomas Cech and Sidney Altman showed that certain RNAs can catalyze chemical reactions.",
+      detail:"Self-splicing RNA and the RNA component of RNase P changed the old view that biological catalysts must always be proteins. Their work received the 1989 Nobel Prize in Chemistry.",
+      source:"Nobel Prize in Chemistry (1989)",url:"https://www.nobelprize.org/prizes/chemistry/1989/summary/"},
+    {category:"Classic RNA science",year:"2001",title:"Not all base pairs look alike",
+      fact:"RNA bases can pair using Watson–Crick, Hoogsteen, and sugar edges, in cis or trans orientations.",
+      detail:"The Leontis–Westhof classification describes geometrically distinct RNA base-pair families. A dot-bracket diagram alone cannot tell you which family a pair belongs to.",
+      source:"Leontis & Westhof, RNA (2001)",url:"https://rnajournal.cshlp.org/content/7/4/499.long"},
+    {category:"RNA essentials",year:"",title:"RNA is more than a linear sequence",
+      fact:"A single RNA sequence can form loops, helices, and tertiary contacts that help determine its function.",
+      detail:"RNA folding depends on base pairing, stacking, ionic conditions, and interactions between parts of the same or different strands. These features produce diverse structures.",
+      source:"PDB 1EHZ, RCSB Protein Data Bank",url:"https://www.rcsb.org/structure/1EHZ"},
+    {category:"Recent research",year:"2024",title:"Machine learning predicts RNA 3D structures",
+      fact:"A 2024 study introduced RhoFold+, a language-model-based approach for predicting RNA three-dimensional structure.",
+      detail:"RhoFold+ was evaluated on RNA-Puzzles, CASP15, and additional RNA targets. It is a computational prediction method, not a replacement for experimental validation.",
+      source:"Shen et al., Nature Methods (2024)",url:"https://doi.org/10.1038/s41592-024-02487-0"},
+    {category:"Recent research",year:"2025",title:"Natural RNA-only nanocages",
+      fact:"Cryo-EM revealed large bacterial RNAs forming elaborate complexes, including RNA-only nanocage structures.",
+      detail:"A 2025 Nature study reported 3D structures of GOLLD, ROOL, and OLE RNAs. GOLLD and ROOL assembled into distinct multimeric RNA cages, while OLE formed dimers.",
+      source:"Kretsch et al., Nature (2025)",url:"https://doi.org/10.1038/s41586-025-09073-0"}
   ];
 
   const levelKeys=["starter","explorer","investigator","expert"];
   let tutorialKey="drawing",tutorialStep=0,levelKey="starter",cardIndex=0,flipped=false;
   const scores=Object.fromEntries(levelKeys.map(key=>[key,{known:0,review:0}]));
-  let factIndex=0,factTimer=null;
+  const dayIndex=()=>Math.floor(Date.now()/86400000);
+  let factDay=dayIndex(),factIndex=factDay%facts.length,factTimer=null;
   const $=id=>document.getElementById(id);
 
   function renderTutorial(){
@@ -153,9 +177,19 @@ const RNAExplorerLearningTools=(()=>{
   }
   function moveCard(delta){const cards=decks[levelKey].cards;cardIndex=(cardIndex+delta+cards.length)%cards.length;flipped=false;renderCard();}
 
-  function renderFact(){if($("rnaFactText"))$("rnaFactText").textContent=facts[factIndex];}
+  function renderFact(){
+    const fact=facts[factIndex];if(!fact)return;
+    if($("rnaFactText"))$("rnaFactText").textContent=fact.fact;
+    if($("rnaFactCategory"))$("rnaFactCategory").textContent=fact.category+(fact.year?" · "+fact.year:"");
+    if($("rnaFactTitle"))$("rnaFactTitle").textContent=fact.title;
+    if($("rnaFactDetails"))$("rnaFactDetails").textContent=fact.detail;
+    const link=$("rnaFactSource");if(link){link.href=fact.url;link.textContent="Original source: "+fact.source+" ↗";}
+    const more=$("rnaFactLearnMore");if(more)more.open=false;
+    if($("rnaFactCounter"))$("rnaFactCounter").textContent=(factIndex+1)+" / "+facts.length+" · Curated Oct 2026";
+  }
   function nextFact(){factIndex=(factIndex+1)%facts.length;renderFact();}
-  function startFacts(){if(factTimer||window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)return;factTimer=setInterval(nextFact,120000);}
+  // Rotate the featured entry once per UTC day. Reader-initiated Next is immediate.
+  function startFacts(){if(factTimer)return;factTimer=setInterval(()=>{const now=dayIndex();if(now!==factDay){factDay=now;factIndex=factDay%facts.length;renderFact();}},3600000);}
   function stopFacts(){if(factTimer){clearInterval(factTimer);factTimer=null;}}
 
   function setup(){
@@ -167,8 +201,7 @@ const RNAExplorerLearningTools=(()=>{
     $("rnaFlashcard")?.addEventListener("click",()=>{flipped=!flipped;renderCard();});$("flashcardFlip")?.addEventListener("click",()=>{flipped=!flipped;renderCard();});
     $("flashcardPrevious")?.addEventListener("click",()=>moveCard(-1));$("flashcardNext")?.addEventListener("click",()=>moveCard(1));
     $("flashcardKnow")?.addEventListener("click",()=>{scores[levelKey].known++;moveCard(1);});$("flashcardReview")?.addEventListener("click",()=>{scores[levelKey].review++;moveCard(1);});
-    $("rnaFactNext")?.addEventListener("click",()=>{nextFact();stopFacts();startFacts();});
-    const strip=$("rnaFactStrip");strip?.addEventListener("mouseenter",stopFacts);strip?.addEventListener("mouseleave",startFacts);strip?.addEventListener("focusin",stopFacts);strip?.addEventListener("focusout",startFacts);
+    $("rnaFactNext")?.addEventListener("click",nextFact);
     renderCard();renderFact();startFacts();
   }
   return {setup,openTutorial,setLevel,getDeckCounts(){return Object.fromEntries(levelKeys.map(k=>[k,decks[k].cards.length]));}};
