@@ -1,0 +1,30 @@
+name: Oct23 RNA selection and stock regression
+on:
+  push:
+    branches: [fix/selection-linked-base-glow-stock-20261023]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-save playwright
+      - run: which google-chrome || which chromium || true
+      - name: Start test server
+        run: |
+          python3 -m http.server 4173 >/tmp/rna-oct23-server.log 2>&1 &
+          echo $! >/tmp/rna-oct23-server.pid
+          sleep 2
+      - name: Verify selection and stock UI
+        run: node tests/oct23-selection-stock-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: oct23-rna-selection-stock-results
+          path: test-output/oct23-selection-stock/
