@@ -9,7 +9,7 @@ const SecondaryExplorer = (() => {
     circleWidth:1, circleVisible:true, letterColor:"#ffffff", letterSize:16, font:"monospace",
     fontStyle:"normal", mode:"uniform", legend:true, pairVisible:true, lwLabels:false};
   let seq="", db="", defaultSeq="", defaultDb="", pairs=[], partner=[], selected=0, selectedPairKey=null;
-  let selectedResidues=new Set(), selectedPairKeys=new Set(), sourceNote="";
+  let selectedResidues=new Set(), selectedPairKeys=new Set(), focusedObject=null, sourceNote="";
   let layout="radial", overrides={}, annotations={}, onDefaultSelect=()=>{};
   let residueOverrides={}, backboneOverrides={}, selectedBackbone=0, zoom=1;
   let panX=0,panY=0,indexMode="default",indexSelection=new Set(),indexOverrides={},indexLabelOffsets={};
@@ -189,7 +189,7 @@ const SecondaryExplorer = (() => {
       settings:{...settings},indexSettings:{...indexSettings},overrides,annotations,pairChemistry,
       metadata,heatEnabled,heatTheme,heatRange,pairProbabilities,pairProbEnabled,pairProbTheme,
       legendSettings,residueOverrides,backboneOverrides,indexMode,indexSelection:[...indexSelection],indexOverrides,indexLabelOffsets,pinnedResidues:[...pinnedResidues],
-      selected:selected,selectedPairKey,selectedResidues:[...selectedResidues],selectedPairKeys:[...selectedPairKeys],
+      selected:selected,selectedPairKey,focusedObject,selectedResidues:[...selectedResidues],selectedPairKeys:[...selectedPairKeys],
       exportScale,dragMode,flexDrag,sourceNote
     };
   }
@@ -230,6 +230,7 @@ const SecondaryExplorer = (() => {
       residueOverrides=w.residueOverrides||{};backboneOverrides=w.backboneOverrides||{};indexMode=w.indexMode||"default";indexSelection=new Set(w.indexSelection||[]);indexOverrides=w.indexOverrides||{};indexLabelOffsets=w.indexLabelOffsets&&typeof w.indexLabelOffsets==="object"?w.indexLabelOffsets:{};pinnedResidues=new Set(w.pinnedResidues||[]);
       selected=Number.isInteger(w.selected)?Math.max(0,Math.min(seq.length-1,w.selected)):0;
       selectedPairKey=typeof w.selectedPairKey==="string"?w.selectedPairKey:null;
+      focusedObject=typeof w.focusedObject==="string"?w.focusedObject:null;
       selectedResidues=new Set((w.selectedResidues||[]).filter(i=>Number.isInteger(i)&&i>=0&&i<seq.length));
       selectedPairKeys=new Set((w.selectedPairKeys||[]).filter(key=>pairs.some(([a,b])=>keyOf(a,b)===key)));
       sourceNote=String(w.sourceNote||"");
@@ -565,26 +566,41 @@ const SecondaryExplorer = (() => {
     if(selectedSection)selectedSection.open=true;
     details.scrollIntoView?.({behavior:"smooth",block:"nearest"});
   }
+  // Ordinary clicks edit one component. Box/Lasso is the only multi-residue mode.
   function selectPair(a,b,notify=true,forceSelected){
-    const key=keyOf(a,b);
-    const next=forceSelected===undefined?!selectedPairKeys.has(key):Boolean(forceSelected);
-    if(next)selectedPairKeys.add(key);else selectedPairKeys.delete(key);
-    selectedPairKey=next?key:(selectedPairKey===key?([...selectedPairKeys].at(-1)||null):selectedPairKey);
-    selected=a;selectedBackbone=Math.min(selected,Math.max(0,seq.length-2));panel();render();
+    commitSelectionTransform();
+    const key=keyOf(a,b),id="pair:"+key;
+    const next=forceSelected===undefined?focusedObject!==id:Boolean(forceSelected);
+    selectedResidues.clear();selectedPairKeys.clear();
+    if(next)selectedPairKeys.add(key);
+    selectedPairKey=next?key:null;focusedObject=next?id:null;
+    selected=a;selectedBackbone=Math.min(a,Math.max(0,seq.length-2));
+    panel();render();
     if(notify&&typeof window!=="undefined"&&typeof CustomEvent!=="undefined"){
-      window.dispatchEvent(new CustomEvent("rna-secondary-pair-select",{detail:{a,b,key,selected:next,sequence:seq,structure:db}}));
+      window.dispatchEvent(new CustomEvent("rna-secondary-pair-select",{detail:{a,b,key,selected:next,exclusive:true,sequence:seq,structure:db}}));
     }
   }
-  function select(index,notify=true,forceSelected) {
+  function select(index,notify=true,forceSelected){
     commitSelectionTransform();
     selected=Math.max(0,Math.min(seq.length-1,index));
-    const next=forceSelected===undefined?!selectedResidues.has(selected):Boolean(forceSelected);
-    if(next)selectedResidues.add(selected);else selectedResidues.delete(selected);
-    selectedBackbone=Math.min(selected,Math.max(0,seq.length-2));panel();render();
+    const id="residue:"+selected,next=forceSelected===undefined?focusedObject!==id:Boolean(forceSelected);
+    selectedPairKeys.clear();selectedPairKey=null;selectedResidues.clear();
+    if(next)selectedResidues.add(selected);
+    focusedObject=next?id:null;
+    selectedBackbone=Math.min(selected,Math.max(0,seq.length-2));
+    panel();render();
     if(notify){
-      window.dispatchEvent(new CustomEvent("rna-secondary-select",{detail:{index:selected,selected:next,sequence:seq,isDefault:seq===defaultSeq&&db===defaultDb}}));
-      if(seq===defaultSeq&&db===defaultDb) onDefaultSelect(selected);
+      window.dispatchEvent(new CustomEvent("rna-secondary-select",{detail:{index:selected,selected:next,exclusive:true,sequence:seq,isDefault:seq===defaultSeq&&db===defaultDb}}));
+      if(next&&seq===defaultSeq&&db===defaultDb)onDefaultSelect(selected);
     }
+  }
+  function selectBackbone(index){
+    commitSelectionTransform();
+    const id="backbone:"+index,next=focusedObject!==id;
+    selectedResidues.clear();selectedPairKeys.clear();selectedPairKey=null;
+    focusedObject=next?id:null;selectedBackbone=index;
+    panel();render();
+    if(typeof CustomEvent!=="undefined")window.dispatchEvent(new CustomEvent("rna-secondary-clear-linked-selection"));
   }
   function panel() {
     extendedPanel();
@@ -644,13 +660,13 @@ const SecondaryExplorer = (() => {
     applyZoom();
     for(let i=0;i<pos.length-1;i++){
       const a=pos[i],b=pos[i+1],bs={...settings,...backboneOverrides[i]};
-      const g=svg("g",{class:"se-backbone",role:"button",tabindex:0,"aria-label":`Backbone ${i+1}–${i+2}`,"data-backbone":i});
+      const g=svg("g",{class:"se-backbone"+(focusedObject==="backbone:"+i?" selected":""),role:"button",tabindex:0,"aria-label":`Backbone ${i+1}–${i+2}`,"data-backbone":i});
       const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1;
       let trimA=residueTextClearance(i),trimB=residueTextClearance(i+1);
       if(trimA+trimB>len-4){const scale=Math.max(0,(len-4)/Math.max(1,trimA+trimB));trimA*=scale;trimB*=scale;}
       g.append(svg("line",{x1:a.x+dx/len*trimA,y1:a.y+dy/len*trimA,x2:b.x-dx/len*trimB,y2:b.y-dy/len*trimB,stroke:bs.backColor,"stroke-width":bs.backWidth,opacity:bs.backOpacity,"data-backbone-visible":""}));
       g.append(svg("line",{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:"transparent","stroke-width":14,"pointer-events":"stroke","data-export-remove":""}));
-      const choose=()=>{selectedBackbone=i;panel();openSettingsFor("backbone");};
+      const choose=()=>{selectBackbone(i);openSettingsFor("backbone");};
       g.addEventListener("click",choose);
       g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();choose();}});
       root.append(g);
@@ -659,7 +675,7 @@ const SecondaryExplorer = (() => {
     pos.forEach((p,i)=>{
       const s=residueStyle(i);
       const g=svg("g",{transform:`translate(${p.x} ${p.y})`,class:"se-node"+(pinnedResidues.has(i)?" pinned":"")+(selectedResidues.has(i)?" multi-selected":""),tabindex:0,role:"button","aria-pressed":String(selectedResidues.has(i)),"data-residue-index":i,"aria-label":`${seq[i]}${i+1}, ${partner[i]<0?"unpaired":"paired with "+(partner[i]+1)}`});
-      const persistent=selectedResidues.has(i),current=i===selected,pairedFocus=i===partner[selected];
+      const persistent=selectedResidues.has(i),current=persistent,pairedFocus=selectedPairKeys.size>0&&[...selectedPairKeys].some(key=>key.split(":").map(Number).includes(i));
       if(persistent||current||pairedFocus) g.append(svg("circle",{"data-export-remove":"",r:persistent?22:20,fill:"none",stroke:persistent?"#f5e9c8":"#ffffff","stroke-width":persistent?3:1.5,"stroke-dasharray":persistent||current?"none":"3 3"}));
       if(s.circleVisible!==false)g.append(svg("circle",{r:16,fill:s.fillColor,stroke:s.circleColor,"stroke-width":s.circleWidth}));
       text(g,seq[i],{y:0,fill:s.letterColor,"font-family":s.font,"font-size":s.letterSize,"font-style":s.fontStyle==="italic"?"italic":"normal","font-weight":s.fontStyle==="bold"?"700":"400","text-anchor":"middle","dominant-baseline":"central"});
@@ -1328,16 +1344,16 @@ const SecondaryExplorer = (() => {
       saveWorkspaceLocal();return {sequence:seq,structure:db,isDefault:false,selected,selectedPairKey,selectedResidues:[...selectedResidues],selectedPairKeys:[...selectedPairKeys],sourceNote};
     },
     followDefault(index){if(index>=0&&index<seq.length){selected=index;panel();render();}},
-    followExternal(index,selectedState){if(index>=0&&index<seq.length){commitSelectionTransform();selected=index;if(selectedState===true)selectedResidues.add(index);else if(selectedState===false)selectedResidues.delete(index);panel();render();}},
-    followPairExternal(a,b,selectedState){const key=keyOf(a,b);if(selectedState===true){selectedPairKeys.add(key);selectedPairKey=key;}else if(selectedState===false){selectedPairKeys.delete(key);if(selectedPairKey===key)selectedPairKey=[...selectedPairKeys].at(-1)||null;}selected=a;panel();render();},
+    followExternal(index,selectedState){if(index>=0&&index<seq.length){commitSelectionTransform();selected=index;selectedResidues.clear();selectedPairKeys.clear();selectedPairKey=null;if(selectedState===true){selectedResidues.add(index);focusedObject="residue:"+index;}else focusedObject=null;panel();render();}},
+    followPairExternal(a,b,selectedState){const key=keyOf(a,b);selectedResidues.clear();selectedPairKeys.clear();if(selectedState===true){selectedPairKeys.add(key);selectedPairKey=key;focusedObject="pair:"+key;}else{selectedPairKey=null;focusedObject=null;}selected=a;panel();render();},
     highlightResidues(indices=[]){
       commitSelectionTransform();
       const clean=[...new Set((Array.isArray(indices)?indices:[]).filter(i=>Number.isInteger(i)&&i>=0&&i<seq.length))];
-      selectedResidues=new Set(clean);selectedPairKeys.clear();selectedPairKey=null;
+      selectedResidues=new Set(clean);selectedPairKeys.clear();selectedPairKey=null;focusedObject=null;
       if(clean.length)selected=clean[0];
       panel();render();return clean;
     },
-    clearHighlights(){commitSelectionTransform();selectedResidues.clear();selectedPairKeys.clear();selectedPairKey=null;panel();render();},
+    clearHighlights(){commitSelectionTransform();selectedResidues.clear();selectedPairKeys.clear();selectedPairKey=null;focusedObject=null;panel();render();if(typeof CustomEvent!=="undefined")window.dispatchEvent(new CustomEvent("rna-secondary-clear-linked-selection"));},
     getContext(){return getContextSnapshot();}
   };
 })();
