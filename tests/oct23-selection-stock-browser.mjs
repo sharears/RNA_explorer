@@ -36,7 +36,7 @@ async function reveal(selector){await page.locator(selector).evaluate(el=>{for(l
 try{
   await page.goto(root+"?page=secondary&start=example",{waitUntil:"domcontentloaded"});
   await page.waitForSelector("#secondarySvg .se-node");
-  await page.waitForSelector("#seBoxSelectTool");
+  await page.locator("#seBoxSelectTool").waitFor({state:"attached"});
   const context=()=>page.evaluate(()=>SecondaryExplorer.getContext());
   async function clickNode(i){await page.locator('#secondarySvg .se-node[data-residue-index="'+i+'"] circle').last().evaluate(el=>el.dispatchEvent(new MouseEvent("click",{bubbles:true})));}
   await clickNode(5);
