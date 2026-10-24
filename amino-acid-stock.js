@@ -44,7 +44,7 @@ const AminoAcidStock=(()=>{
     const add=(a,b,order=1)=>{if(!bonds.some(x=>(x.a===a&&x.b===b)||(x.a===b&&x.b===a)))bonds.push({a,b,order});};
     const explicit=new Set(extra.map(([a,b])=>a+":"+b));
     side.forEach(([atom])=>{
-      const p=code==="ILE"&&atom==="CD1"?"CG1":parent[atom];
+      const p=code==="ILE"&&atom==="CD1"?"CG1":code==="MET"&&atom==="CE"?"SD":parent[atom];
       if(p&&atoms.some(a=>a.id===p)&&!extra.some(([a,b])=>a===atom&&b===p||a===p&&b===atom))add(p,atom);
     });
     extra.forEach(([a,b,order])=>add(a,b,order));
