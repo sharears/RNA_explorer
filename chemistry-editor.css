@@ -318,3 +318,18 @@ body.chem-3d-expanded-open{overflow:hidden!important}
 #chem3DStatus[data-state="ready"]{color:var(--mint)}
 #chem3DStatus[data-state="warning"]{color:#efc178}
 @media(max-width:720px){.chem-3d-mode-controls{grid-column:1/-1;justify-content:flex-start}.chem-3d-mode-controls button{flex:1 1 auto}}
+
+/* Stock structures: compact collapsible chooser, preserving editable atom/bond tools. */
+#chemEditorDialog .chem-stock-structures{border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:rgba(116,215,182,.035);min-width:0}
+#chemEditorDialog .chem-stock-structures>summary{color:var(--mint);font-weight:800;cursor:pointer;padding:4px 0}
+#chemEditorDialog .chem-stock-tabs{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}
+#chemEditorDialog .chem-stock-tabs button,
+#chemEditorDialog .chem-stock-amino button,
+#chemEditorDialog #chemLoadStockNucleic{border:1px solid var(--line);border-radius:7px;padding:8px 11px;color:var(--text);background:var(--ink-soft);cursor:pointer}
+#chemEditorDialog .chem-stock-tabs button.active{border-color:var(--mint);color:var(--mint);background:rgba(116,215,182,.12)}
+#chemEditorDialog .chem-pair-controls{padding:0;gap:8px;align-items:center}
+#chemEditorDialog .chem-stock-amino{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+#chemEditorDialog .chem-stock-amino[hidden],#chemEditorDialog .chem-pair-controls[hidden]{display:none!important}
+#chemEditorDialog .chem-stock-amino label{display:flex;align-items:center;flex-wrap:wrap;gap:8px;color:var(--muted);font-size:13px}
+#chemEditorDialog .chem-stock-amino select{padding:8px;border:1px solid var(--line);border-radius:7px;background:var(--ink);color:var(--text)}
+#chemEditorDialog .chem-stock-amino p{flex:1 1 100%;margin:0;color:var(--muted);font-size:.75rem}
