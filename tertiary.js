@@ -650,9 +650,41 @@ const TertiaryExplorer = (() => {
   function selectedPairResidues(){
     const out=new Set();state.selectedPairs.forEach(key=>{const [a,b]=key.split(":").map(Number);out.add(a);out.add(b);});return out;
   }
+  // Choose high-contrast highlights against both the canvas and the current base colors.
+  function contrastColor(indices=[]){
+    const colors=["#ffe86a","#55f4ff","#ff7fe1","#ffffff","#ffad52","#a3ff82"];
+    const rgb=hex=>{const value=String(hex||"#07111c").replace("#","");return /^[0-9a-f]{6}$/i.test(value)?[0,2,4].map(j=>parseInt(value.slice(j,j+2),16)/255):[.03,.07,.11];};
+    const linear=v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4;
+    const luminance=arr=>[.2126,.7152,.0722].reduce((n,k,i)=>n+k*linear(arr[i]),0);
+    const backdrop=rgb(state.backgroundColor||"#07111c"),near=indices.map(i=>rgb(residueColor(i,activeResidues()[i])));
+    return colors.map(color=>{
+      const c=rgb(color),lum=luminance(c),base=luminance(backdrop),contrast=(Math.max(lum,base)+.05)/(Math.min(lum,base)+.05);
+      const difference=near.length?near.reduce((sum,r)=>sum+Math.hypot(...r.map((v,k)=>v-c[k])),0)/near.length:1;
+      return {color,score:contrast+.9*difference};
+    }).sort((a,b)=>b.score-a.score)[0].color;
+  }
+  function baseAtoms(residue){
+    // Atom names with prime/star belong to ribose; P/OP* and O*P belong to phosphate.
+    return (residue?.atoms||[]).filter(atom=>{
+      const name=atomName(atom);
+      return !/['*]/.test(name)&&!/^(P|OP[123]|O[123]P|H|HO|H[0-9])$/.test(name)&&normalizeElement(atom)!=="H";
+    });
+  }
+  function highlightBaseOnly(index,color,thickness=.31){
+    const r=activeResidues()[index];if(!r||!isVisibleIndex(index))return;
+    baseAtoms(r).forEach(atom=>{
+      if(!Number.isFinite(Number(atom.serial)))return;
+      model.addStyle({serial:atom.serial},{stick:{radius:thickness,color,opacity:1},sphere:{radius:Math.max(.26,thickness*.95),color,opacity:.55}});
+    });
+  }
   function addSelectedPairHighlights(){
-    const residues=activeResidues(),indices=selectedPairResidues();
-    indices.forEach(i=>{if(residues[i]&&isVisibleIndex(i)){const linked=state.split&&state.mapping.enabled;model.addStyle(selectorForResidue(residues[i]),{stick:{radius:linked?.4:.28,color:linked?"#ffe66d":"#74d7b6",opacity:1},sphere:{radius:linked?.42:.29,color:linked?"#ffe66d":"#74d7b6",opacity:linked?.95:.28}});}});
+    const residues=activeResidues(),indices=selectedPairResidues(),linked=state.split&&state.mapping.enabled;
+    const color=linked?contrastColor([...indices]):"#74d7b6";
+    indices.forEach(i=>{
+      if(!residues[i]||!isVisibleIndex(i))return;
+      if(linked)highlightBaseOnly(i,color,.32);
+      else model.addStyle(selectorForResidue(residues[i]),{stick:{radius:.28,color},sphere:{radius:.29,color,opacity:.28}});
+    });
   }
   function addSelectedPairHydrogenBonds(){
     if(!viewer||!state.mapping.enabled)return;
@@ -661,7 +693,9 @@ const TertiaryExplorer = (() => {
       const bonds=pairHydrogenBonds(a,b),group=ensurePairHbondStyle(key,bonds);
       bonds.forEach(bond=>{
         const style={...group,...group.bonds[bond.id]};if(style.visible===false)return;
-        drawStyledConnector(bond.donor,bond.acceptor,style);
+        const linked=state.split&&state.mapping.enabled;
+        const displayStyle=linked?{...style,color:contrastColor([a,b]),thickness:Math.max(.14,Number(style.thickness)||0),opacity:Math.max(.95,Number(style.opacity)||0)}:style;
+        drawStyledConnector(bond.donor,bond.acceptor,displayStyle);
         if(style.labelVisible){
           const mid={x:(bond.donor.x+bond.acceptor.x)/2,y:(bond.donor.y+bond.acceptor.y)/2,z:(bond.donor.z+bond.acceptor.z)/2};
           viewer.addLabel(bond.distance.toFixed(2)+" Å",{position:mid,fontSize:11,fontColor:"#f7fbff",backgroundColor:"#08111e",backgroundOpacity:.8,inFront:true});
@@ -1054,11 +1088,16 @@ const TertiaryExplorer = (() => {
   }
 
   function addSelectionHighlights(){
-    const residues=activeResidues(),st=state.split&&state.mapping.enabled?{color:"#ffe66d",thickness:.37,opacity:.96}:state.selectionStyle;
+    const residues=activeResidues(),linked=state.split&&state.mapping.enabled;
     state.selectionIndices.forEach(i=>{
       if(!isVisibleIndex(i)||!residues[i])return;
-      model.addStyle(selectorForResidue(residues[i]),{stick:{radius:st.thickness,color:st.color,opacity:st.opacity},sphere:{radius:Math.max(.22,st.thickness*1.18),color:st.color,opacity:st.opacity}});
-      if(state.selectionLabels&&residues[i].coord)viewer.addLabel(baseAt(i)+(i+1),{position:residues[i].coord,fontSize:11,fontColor:"#07111c",backgroundColor:st.color,backgroundOpacity:.9,inFront:true});
+      const color=linked?contrastColor([i]):state.selectionStyle.color;
+      if(linked)highlightBaseOnly(i,color,.32);
+      else{
+        const st=state.selectionStyle;
+        model.addStyle(selectorForResidue(residues[i]),{stick:{radius:st.thickness,color:st.color,opacity:st.opacity},sphere:{radius:Math.max(.22,st.thickness*1.18),color:st.color,opacity:st.opacity}});
+      }
+      if(state.selectionLabels&&residues[i].coord)viewer.addLabel(baseAt(i)+(i+1),{position:residues[i].coord,fontSize:11,fontColor:"#07111c",backgroundColor:color,backgroundOpacity:.9,inFront:true});
     });
   }
   // Linked 2D/3D teaching mode: only 3D pulses; the 2D map is a steady highlight.
@@ -1073,19 +1112,34 @@ const TertiaryExplorer = (() => {
     linkedPulseShapes.forEach(shape=>{try{viewer.removeShape?.(shape);}catch(_){}});
     linkedPulseShapes=[];
   }
+  function baseRings(base){
+    const purine=[["N1","C2","N3","C4","C5","C6"],["N9","C8","N7","C5","C4"]];
+    const pyrimidine=[["N1","C2","N3","C4","C5","C6"]];
+    return base==="A"||base==="G"?purine:pyrimidine;
+  }
   function drawLinkedPulse(){
-    clearLinkedPulseShapes();
-    if(!viewer||!linkedPulseOn)return;
-    linkedPulseIndices().forEach(i=>{
+    clearLinkedPulseShapes();if(!viewer||!linkedPulseOn)return;
+    const indices=linkedPulseIndices(),color=contrastColor(indices);
+    indices.forEach(i=>{
       const residue=activeResidues()[i];if(!residue)return;
-      const ring=BASE_RING_ATOMS[baseAt(i)]||[];
-      let atoms=(residue.atoms||[]).filter(a=>ring.includes(atomName(a)));
-      if(!atoms.length)atoms=residue.coord?[residue.coord]:[];
-      atoms.slice(0,12).forEach(a=>{
-        const center={x:Number(a.x),y:Number(a.y),z:Number(a.z)};
-        if(Object.values(center).every(Number.isFinite))
-          linkedPulseShapes.push(viewer.addSphere({center,radius:.43,color:"#fff47a",opacity:.83}));
-      });
+      const byName=new Map((residue.atoms||[]).map(atom=>[atomName(atom),atom]));
+      for(const names of baseRings(baseAt(i))){
+        const atoms=names.map(name=>byName.get(name));if(atoms.some(a=>!a))continue;
+        const verts=atoms.map(a=>({x:Number(a.x),y:Number(a.y),z:Number(a.z)}));
+        if(verts.some(v=>!Object.values(v).every(Number.isFinite)))continue;
+        // Filled, translucent polygon rather than separate atom-centered blinking balls.
+        const faces=[];for(let j=1;j<verts.length-1;j++)faces.push(0,j,j+1);
+        try{
+          const face=viewer.addShape({color,opacity:.24,wireframe:false});
+          face.addCustom({vertexArr:verts,faceArr:faces,color,opacity:.24});
+          linkedPulseShapes.push(face);
+        }catch(error){console.warn("Nucleobase surface:",error);}
+        for(let j=0;j<verts.length;j++){
+          const a=verts[j],b=verts[(j+1)%verts.length];
+          linkedPulseShapes.push(viewer.addCylinder({start:a,end:b,radius:.19,color,opacity:.28,fromCap:1,toCap:1}));
+          linkedPulseShapes.push(viewer.addCylinder({start:a,end:b,radius:.09,color,opacity:.93,fromCap:1,toCap:1}));
+        }
+      }
     });
     viewer.render();
   }
@@ -1148,10 +1202,7 @@ const TertiaryExplorer = (() => {
 
   function chooseResidue(index,{toggle=true,notify=true}={}){
     state.selected=clamp(index,0,Math.max(0,activeResidues().length-1));
-    if(toggle){
-      if(state.selectionIndices.has(state.selected))state.selectionIndices.delete(state.selected);
-      else state.selectionIndices.add(state.selected);
-    }
+    if(toggle){const next=!state.selectionIndices.has(state.selected);state.selectionIndices.clear();state.selectedPairs.clear();if(next)state.selectionIndices.add(state.selected);}
     linkedPulseFocus=state.selectionIndices.has(state.selected)?[state.selected]:[];
     if(notify&&state.mapping.enabled){
       if(isCuratedDefaultPair())state.onSelect(state.selected);
@@ -1161,7 +1212,7 @@ const TertiaryExplorer = (() => {
   }
   function choosePair(a,b,{toggle=true,notify=true}={}){
     const key=pairKey(a,b);state.selected=a;
-    if(toggle){if(state.selectedPairs.has(key))state.selectedPairs.delete(key);else state.selectedPairs.add(key);}
+    if(toggle){const next=!state.selectedPairs.has(key);state.selectedPairs.clear();state.selectionIndices.clear();if(next)state.selectedPairs.add(key);}
     linkedPulseFocus=state.selectedPairs.has(key)?[a,b]:[];
     if(notify&&state.mapping.enabled&&typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.followPairExternal)SecondaryExplorer.followPairExternal(a,b,state.selectedPairs.has(key));
     render();
@@ -1826,8 +1877,9 @@ const TertiaryExplorer = (() => {
     window.addEventListener("rna-metadata-change",e=>applyMetadata(e.detail));
     window.addEventListener("rna-secondary-context",e=>handleSecondaryContext(e.detail));
     window.addEventListener("rna-secondary-layout",e=>handleSecondaryLayout(e.detail));
-    window.addEventListener("rna-secondary-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){state.selected=clamp(e.detail.index,0,state.secondarySequence.length-1);if(e.detail.selected===true){state.selectionIndices.add(state.selected);linkedPulseFocus=[state.selected];}else if(e.detail.selected===false){state.selectionIndices.delete(state.selected);linkedPulseFocus=[];}render();}});
-    window.addEventListener("rna-secondary-pair-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){const key=pairKey(e.detail.a,e.detail.b);if(e.detail.selected){state.selectedPairs.add(key);linkedPulseFocus=[e.detail.a,e.detail.b];}else{state.selectedPairs.delete(key);linkedPulseFocus=[];}render();}});
+    window.addEventListener("rna-secondary-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){state.selected=clamp(e.detail.index,0,state.secondarySequence.length-1);if(e.detail.exclusive){state.selectionIndices.clear();state.selectedPairs.clear();}if(e.detail.selected===true){state.selectionIndices.add(state.selected);linkedPulseFocus=[state.selected];}else if(e.detail.selected===false){state.selectionIndices.delete(state.selected);linkedPulseFocus=[];}render();}});
+    window.addEventListener("rna-secondary-pair-select",e=>{if(state.mapping.enabled&&e.detail?.sequence===state.secondarySequence){const key=pairKey(e.detail.a,e.detail.b);if(e.detail.exclusive){state.selectionIndices.clear();state.selectedPairs.clear();}if(e.detail.selected){state.selectedPairs.add(key);linkedPulseFocus=[e.detail.a,e.detail.b];}else{state.selectedPairs.delete(key);linkedPulseFocus=[];}render();}});
+    window.addEventListener("rna-secondary-clear-linked-selection",()=>{state.selectionIndices.clear();state.selectedPairs.clear();linkedPulseFocus=[];render();});
     window.addEventListener("resize",()=>scheduleViewerResize(true));
     if(typeof ResizeObserver!=="undefined"){const viewport=$("tertiaryViewport");if(viewport)new ResizeObserver(()=>scheduleViewerResize(true)).observe(viewport);}
     try{const p=typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.getCurrentPositions?SecondaryExplorer.getCurrentPositions():null;if(Array.isArray(p)&&p.length===state.secondarySequence.length)state.secondaryLayoutPositions=p.map(x=>({x:Number(x.x),y:Number(x.y)}));}catch(_){}

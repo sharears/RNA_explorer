@@ -356,9 +356,21 @@ const MoleculeEditor = (() => {
           <span class="chem-text-help">No atom selected → applies to all atom text.</span>
         </div>
         <div class="chem-iupac-panel" id="chemIupacPanel" hidden aria-live="polite"></div>
-        <div class="chem-pair-controls" id="chemPairControls" hidden>
-          <label>Left base<select id="chemLeftBase"><option>A</option><option>G</option><option>C</option><option>U</option></select></label>
-          <label>Right base<select id="chemRightBase"><option>A</option><option>G</option><option>C</option><option>U</option></select></label>
+        <details class="chem-stock-structures" id="chemStockStructures">
+          <summary>Stock structures · Nucleic acids & amino acids</summary>
+          <div class="chem-stock-tabs" role="group" aria-label="Stock structure family">
+            <button type="button" class="active" id="chemStockNucleicTab" aria-pressed="true">Nucleic acids</button>
+            <button type="button" id="chemStockAminoTab" aria-pressed="false">Amino acids</button>
+          </div>
+          <div class="chem-pair-controls" id="chemPairControls">
+          <label>Single nucleic acid component<select id="chemStockNucleic">
+            <option value="A">Adenine</option><option value="G">Guanine</option>
+            <option value="C">Cytosine</option><option value="U">Uracil (RNA)</option>
+            <option value="T">Thymine (DNA)</option><option value="RIBOSE">Ribose</option>
+            <option value="PHOSPHATE">Phosphate</option></select></label>
+          <button type="button" id="chemLoadStockNucleic">Load single component</button>
+          <label>Left base<select id="chemLeftBase"><option>A</option><option>G</option><option>C</option><option>U</option><option>T</option></select></label>
+          <label>Right base<select id="chemRightBase"><option>A</option><option>G</option><option>C</option><option>U</option><option>T</option></select></label>
           <button type="button" id="chemLoadPair">Load bases</button>
           <button type="button" id="chemSelectLeft">Select left base</button>
           <button type="button" id="chemSelectRight">Select right base</button>
@@ -367,6 +379,12 @@ const MoleculeEditor = (() => {
           <button type="button" data-pair-template="AU">A–U WCF</button>
           <button type="button" data-pair-template="GU">G–U wobble</button>
         </div>
+        <div id="chemAminoControls" class="chem-stock-amino" hidden>
+          <label>Standard amino acid<select id="chemAminoSelect"></select></label>
+          <button type="button" id="chemLoadAmino" class="primary-action">Load amino acid</button>
+          <p>Editable neutral free amino-acid structure. Stereochemistry is not specified; charged states depend on pH.</p>
+        </div>
+        </details>
         <div class="chem-editor-workspace">
           <div class="chem-editor-canvas-wrap">
             <svg id="chemEditorSvg" viewBox="0 0 820 470" aria-label="Editable molecular structure"></svg>
@@ -413,6 +431,27 @@ const MoleculeEditor = (() => {
     document.body.append(exportDialog);
     svg=dialog.querySelector("#chemEditorSvg");status=dialog.querySelector("#chemEditorStatus");title=dialog.querySelector("#chemEditorTitle");
     setup3DPreview();
+    if(typeof AminoAcidStock!=="undefined"){
+      AminoAcidStock.list().forEach(({code,name})=>dialog.querySelector("#chemAminoSelect").append(new Option(name+" ("+code+")",code)));
+    }
+    const switchStock=which=>{
+      const nucleic=which==="nucleic";
+      dialog.querySelector("#chemPairControls").hidden=!nucleic;
+      dialog.querySelector("#chemAminoControls").hidden=nucleic;
+      for(const [id,on] of [["chemStockNucleicTab",nucleic],["chemStockAminoTab",!nucleic]]){
+        const btn=dialog.querySelector("#"+id);btn.classList.toggle("active",on);btn.setAttribute("aria-pressed",String(on));
+      }
+    };
+    dialog.querySelector("#chemStockNucleicTab").addEventListener("click",()=>switchStock("nucleic"));
+    dialog.querySelector("#chemStockAminoTab").addEventListener("click",()=>switchStock("amino"));
+    dialog.querySelector("#chemLoadAmino").addEventListener("click",()=>{
+      const code=dialog.querySelector("#chemAminoSelect").value;
+      if(code)loadAminoStock(code);
+    });
+    dialog.querySelector("#chemLoadStockNucleic").addEventListener("click",()=>{
+      const name=dialog.querySelector("#chemStockNucleic").value;
+      pushUndo();mode="blank";base=name;graph=graphFromBase(name);title.textContent="Edit "+(BASES[name]?.name||name);resetCanvasView();renumber();fitCanvasToDrawing(false);render();validate();
+    });
     dialog.querySelector("#chemEditorClose").addEventListener("click",()=>dialog.close());
     dialog.addEventListener("close",()=>{document.body.classList.remove("chem-editor-open","chem-3d-expanded-open");dialog.classList.remove("chem-3d-dialog-expanded");threeDDrag=null;threeDPointers.clear();threeDPinch=null;threeDPanel?.classList.remove("chem-3d-expanded");});
     dialog.querySelector("#chemUndoButton").addEventListener("click",undo);
@@ -483,14 +522,14 @@ const MoleculeEditor = (() => {
     });
     dialog.querySelector("#chemLeftBase").addEventListener("change",e=>leftBase=e.target.value);
     dialog.querySelector("#chemRightBase").addEventListener("change",e=>rightBase=e.target.value);
-    dialog.querySelector("#chemLoadPair").addEventListener("click",()=>{pushUndo();graph=mergePair(leftBase,rightBase);renumber();render();validate();});
+    dialog.querySelector("#chemLoadPair").addEventListener("click",()=>{pushUndo();mode="pair";title.textContent="Base-pair chemistry editor";graph=mergePair(leftBase,rightBase);renumber();fitCanvasToDrawing(false);render();validate();});
     dialog.querySelectorAll("[data-pair-template]").forEach(b=>b.addEventListener("click",()=>{
       const k=b.dataset.pairTemplate;
       if(k==="GC"){leftBase="G";rightBase="C";}
       if(k==="AU"){leftBase="A";rightBase="U";}
       if(k==="GU"){leftBase="G";rightBase="U";}
       dialog.querySelector("#chemLeftBase").value=leftBase;dialog.querySelector("#chemRightBase").value=rightBase;
-      pushUndo();graph=pairTemplate(k,leftBase,rightBase);renumber();render();validate();
+      pushUndo();mode="pair";title.textContent="Base-pair chemistry editor";graph=pairTemplate(k,leftBase,rightBase);renumber();fitCanvasToDrawing(false);render();validate();
     }));
     svg.addEventListener("pointerdown",canvasPointerDown);
     svg.addEventListener("pointermove",canvasPointerMove);
@@ -1213,13 +1252,14 @@ const MoleculeEditor = (() => {
   function openBase(selectedBase,callback){
     ensureDialog();mode="base";base=selectedBase||"A";onSave=callback||null;showAtomCircles=false;showAtomLabels=true;showAtomNumbers=false;syncDisplayButtons();syncTextControls(textDefaults);
     title.textContent="Edit "+((BASES[base]||{}).name||base);
-    dialog.querySelector("#chemPairControls").hidden=true;
+    dialog.querySelector("#chemStockStructures").open=false;
     graph=graphFromBase(base);resetCanvasView();renumber();fitCanvasToDrawing(false);resetUndoHistory();render();validate();showEditorWindow();
   }
   function openPair(a,b,callback){
     ensureDialog();mode="pair";leftBase=a||"G";rightBase=b||"C";onSave=callback||null;showAtomCircles=false;showAtomLabels=true;showAtomNumbers=false;syncDisplayButtons();syncTextControls(textDefaults);
     title.textContent="Base-pair chemistry editor";
-    dialog.querySelector("#chemPairControls").hidden=false;
+    dialog.querySelector("#chemStockStructures").open=false;
+    dialog.querySelector("#chemStockNucleicTab").click();
     dialog.querySelector("#chemLeftBase").value=leftBase;dialog.querySelector("#chemRightBase").value=rightBase;
     const identity=leftBase+rightBase;
     graph=/^(GC|CG)$/.test(identity)?pairTemplate("GC",leftBase,rightBase)
@@ -1228,10 +1268,27 @@ const MoleculeEditor = (() => {
       :mergePair(leftBase,rightBase);
     resetCanvasView();renumber();fitCanvasToDrawing(false);resetUndoHistory();render();validate();showEditorWindow();
   }
+  function loadAminoStock(code,callback){
+    if(typeof AminoAcidStock==="undefined")throw Error("Amino acid stock library is not loaded.");
+    ensureDialog();
+    const template=AminoAcidStock.getGraph(code);
+    if(dialog.open)pushUndo();else resetUndoHistory();
+    mode="blank";base=code;onSave=callback||null;
+    title.textContent="Edit "+template.name;
+    graph={atoms:template.atoms,bonds:template.bonds,hbonds:[],iupac:null};
+    resetCanvasView();renumber();fitCanvasToDrawing(false);render();validate();
+  }
+  function openAminoAcid(code,callback){
+    ensureDialog();showAtomCircles=false;showAtomLabels=true;showAtomNumbers=false;syncDisplayButtons();syncTextControls(textDefaults);
+    loadAminoStock(code,callback);resetUndoHistory();showEditorWindow();
+    dialog.querySelector("#chemStockStructures").open=true;
+    dialog.querySelector("#chemStockAminoTab").click();
+    dialog.querySelector("#chemAminoSelect").value=code;
+  }
   function openBlank(callback){
     ensureDialog();mode="blank";onSave=callback||null;showAtomCircles=false;showAtomLabels=true;showAtomNumbers=false;syncDisplayButtons();syncTextControls(textDefaults);
     title.textContent="New molecular drawing";
-    dialog.querySelector("#chemPairControls").hidden=true;
+    dialog.querySelector("#chemStockStructures").open=false;
     graph={atoms:[],bonds:[],hbonds:[],iupac:null};resetCanvasView();renumber();resetUndoHistory();render();validate();
     status.textContent="Blank canvas. Choose Add atom to begin, then connect atoms with Add bond.";
     showEditorWindow();
@@ -1261,7 +1318,7 @@ const MoleculeEditor = (() => {
     return getSessionSnapshot();
   }
 
-  return {setup,openBase,openPair,openBlank,getBaseGraph:graphFromBase,getCurrentGraph:()=>clone(graph),getSavedBase:b=>savedBases[b]?clone(savedBases[b]):null,pairTemplate,
+  return {setup,openBase,openPair,openBlank,openAminoAcid,getBaseGraph:graphFromBase,getCurrentGraph:()=>clone(graph),getSavedBase:b=>savedBases[b]?clone(savedBases[b]):null,pairTemplate,
     getSessionSnapshot,restoreSessionSnapshot,
     get3DDiagnostics:()=>({visible:threeDVisible,mode:threeDMode,view:{...threeDView},fullscreen:document.fullscreenElement===threeDPanel||Boolean(threeDPanel?.classList.contains("chem-3d-expanded")),atomCount:threeDCoords.length}),
     idealize2D:idealize2DGeometry,

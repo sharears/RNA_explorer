@@ -314,15 +314,16 @@ function renderWorkspaceLauncher(page){
     actions.innerHTML=`
       <article class="workspace-launch-card">
         <span class="workspace-launch-number">01</span>
-        <h2>Load a template</h2>
-        <p>Begin with a nucleobase, ribose, phosphate, or a common RNA base pair, then edit atoms, bonds, bond orders, and charges.</p>
-        <label class="workspace-template-label">Template
+        <h2>Stock structures</h2>
+        <p>Choose a nucleic acid component, base pair, or one of the 20 standard amino acids. Every template remains fully editable.</p>
+        <label class="workspace-template-label">Family<select id="drawingStockFamily"><option value="nucleic">Nucleic acids</option><option value="amino">Amino acids</option></select></label>
+        <label class="workspace-template-label">Stock structure
           <select id="drawingTemplateSelect">
             <option value="A">Adenine</option>
             <option value="G">Guanine</option>
             <option value="C">Cytosine</option>
             <option value="U">Uracil</option>
-            <option value="T">Thymine</option>
+            <option value="T">Thymine (DNA)</option>
             <option value="RIBOSE">Ribose</option>
             <option value="PHOSPHATE">Phosphate group</option>
             <option value="pair:GC">G–C Watson–Crick pair</option>
@@ -338,12 +339,18 @@ function renderWorkspaceLauncher(page){
         <p>Open an empty molecular canvas and build the structure yourself from atoms and bonds.</p>
         <button class="primary-action" id="drawingOpenBlank" type="button">Start with a blank canvas</button>
       </article>`;
+    const family=document.getElementById("drawingStockFamily"),templates=document.getElementById("drawingTemplateSelect");
+    const originalNucleic=templates.innerHTML;
+    family?.addEventListener("change",()=>{
+      if(family.value==="amino"&&typeof AminoAcidStock!=="undefined"){
+        templates.replaceChildren(...AminoAcidStock.list().map(({code,name})=>new Option(name+" ("+code+")","amino:"+code)));
+      }else templates.innerHTML=originalNucleic;
+    });
     document.getElementById("drawingOpenTemplate")?.addEventListener("click",()=>{
       const value=document.getElementById("drawingTemplateSelect")?.value||"A";
-      if(value.startsWith("pair:")){
-        const pair=value.slice(5);
-        MoleculeEditor.openPair(pair[0],pair[1]);
-      }else MoleculeEditor.openBase(value);
+      if(value.startsWith("amino:"))MoleculeEditor.openAminoAcid(value.slice(6));
+      else if(value.startsWith("pair:")){const pair=value.slice(5);MoleculeEditor.openPair(pair[0],pair[1]);}
+      else MoleculeEditor.openBase(value);
     });
     document.getElementById("drawingOpenBlank")?.addEventListener("click",()=>MoleculeEditor.openBlank());
     return;
