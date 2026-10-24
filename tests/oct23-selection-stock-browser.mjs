@@ -54,6 +54,11 @@ try{
   assert.equal(await page.locator('#secondarySvg .se-backbone.selected[data-backbone="2"]').count(),1);
   await page.locator('#secondarySvg .se-backbone[data-backbone="2"]').evaluate(el=>el.dispatchEvent(new MouseEvent("click",{bubbles:true})));
   assert.equal(await page.locator('#secondarySvg .se-backbone.selected[data-backbone="2"]').count(),0);
+  await page.evaluate(()=>SecondaryExplorer.openSettingsFor("index",0));
+  assert.equal(await page.locator("#secondarySvg .se-index.selected").count(),1,"Index click is not highlighted");
+  await page.evaluate(()=>SecondaryExplorer.openSettingsFor("index",0));
+  assert.equal(await page.locator("#secondarySvg .se-index.selected").count(),0,"Second index click did not clear focus");
+  assert(await page.locator("#secondarySvg .se-index").count()>5,"Clicking a label concealed other residue indices");
   await page.evaluate(()=>SecondarySelectionTools.setMode("box"));
   await page.evaluate(()=>SecondaryExplorer.highlightResidues([5,6,7]));
   assert.equal((await context()).selectedResidues.length,3);
