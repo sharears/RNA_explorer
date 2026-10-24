@@ -311,3 +311,6 @@ body[data-page-mode="secondary"] .workspace-advanced-panel .se-controls{margin-t
 #secondarySvg .se-node.multi-selected>circle:not(:first-child){stroke:#ffffff!important;stroke-width:3!important}
 #secondarySvg .se-pair.selected path:not([stroke="transparent"]){stroke:#ffe66d!important;stroke-width:5!important;filter:drop-shadow(0 0 7px rgba(255,230,109,.9))}
 #secondarySvg .se-node.multi-selected>text:not(.se-index){fill:#ffffff!important;font-weight:900;paint-order:stroke;stroke:#172032;stroke-width:2.4px}
+
+/* Only a deliberately clicked backbone segment receives single-object emphasis. */
+#secondarySvg .se-backbone.selected [data-backbone-visible]{stroke:#ffe66d!important;stroke-width:5!important;opacity:1!important;filter:drop-shadow(0 0 6px rgba(255,230,109,.8))}
