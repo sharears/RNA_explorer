@@ -45,7 +45,7 @@ const AminoAcidStock=(()=>{
     const explicit=new Set(extra.map(([a,b])=>a+":"+b));
     side.forEach(([atom])=>{
       const p=code==="ILE"&&atom==="CD1"?"CG1":parent[atom];
-      if(p&&!extra.some(([a,b])=>a===atom&&b===p||a===p&&b===atom))add(p,atom);
+      if(p&&atoms.some(a=>a.id===p)&&!extra.some(([a,b])=>a===atom&&b===p||a===p&&b===atom))add(p,atom);
     });
     extra.forEach(([a,b,order])=>add(a,b,order));
     // In a ring, assigning an automatic parent to every ring atom would add a
