@@ -554,7 +554,13 @@ const SecondaryExplorer = (() => {
   function openSettingsFor(component,index){
     const labels={backbone:"Display · Backbone",residue:"Display · Residues",pair:"Display · Base pairs",index:"Display · Residue index"};
     const name=labels[component];if(!name)return;
-    if(component==="index"&&Number.isInteger(index)){indexSelection=new Set([index]);panel();}
+    if(component==="index"&&Number.isInteger(index)){
+      const id="index:"+index,next=focusedObject!==id;
+      commitSelectionTransform();selectedResidues.clear();selectedPairKeys.clear();selectedPairKey=null;
+      focusedObject=next?id:null;indexSelection=new Set(next?[index]:[]);
+      panel();render();
+      if(typeof CustomEvent!=="undefined")window.dispatchEvent(new CustomEvent("rna-secondary-clear-linked-selection"));
+    }
     const scene=document.getElementById("scene-secondary");if(!scene)return;
     if(scene.classList.contains("controls-collapsed"))scene.querySelector('[data-controls-toggle="secondary"]')?.click();
     const advanced=scene.querySelector(".workspace-advanced-panel");if(advanced)advanced.open=true;
@@ -686,7 +692,7 @@ const SecondaryExplorer = (() => {
       if(indexMode==="all" || indexMode==="selected"&&indexSelection.has(i) || indexMode==="default"&&(i===0||(i+1)%5===0||i===seq.length-1)){
         const style={...indexSettings,...indexOverrides[i]},indexOffset=indexLabelOffsets[i]||{x:0,y:0};
         const number=text(g,String(i+1),{x:(layout==="arc"?0:away.x/norm*30)+(Number(indexOffset.x)||0),y:(layout==="arc"?36:away.y/norm*30+4)+(Number(indexOffset.y)||0),fill:style.color,"font-size":style.size,"font-family":style.font,"font-style":style.fontStyle==="italic"?"italic":"normal","font-weight":style.fontStyle==="bold"?700:400,"text-anchor":"middle"});
-        number.setAttribute("class","se-index");number.setAttribute("data-index-label",String(i));number.setAttribute("role","button");number.setAttribute("aria-label","Residue index "+(i+1)+". Drag to reposition the label without moving the residue.");
+        number.setAttribute("class","se-index"+(focusedObject==="index:"+i?" selected":""));number.setAttribute("data-index-label",String(i));number.setAttribute("role","button");number.setAttribute("aria-label","Residue index "+(i+1)+". Drag to reposition the label without moving the residue.");
         const indexHit=svg("circle",{cx:number.getAttribute("x"),cy:number.getAttribute("y"),r:Math.max(13,(Number(style.size)||12)*.95),fill:"transparent"});indexHit.setAttribute("class","se-index-hit");indexHit.setAttribute("data-index-label",String(i));indexHit.setAttribute("role","button");indexHit.setAttribute("aria-label","Drag residue index "+(i+1)+" without moving the RNA structure.");g.append(indexHit);
       }
       const title=svg("title");title.textContent=`${seq[i]}${i+1}`+(metadata[i]?` · ${metadata[i].id} · ${metadata[i].value??"No value"}`:"");g.append(title);
