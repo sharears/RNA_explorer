@@ -1,0 +1,28 @@
+name: Synchronized 3D hydrogen bond blink
+on:
+  push:
+    branches: [fix/hbond-sync-hot-pink-pulse-20261024]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-save playwright
+      - name: Serve branch without affecting production
+        run: |
+          python3 -m http.server 4173 >/tmp/rna-hbond-test.log 2>&1 &
+          sleep 2
+      - name: Test synchronized H-bond and nucleobase pulse
+        run: node tests/hbond-pulse-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hbond-pulse-browser-report
+          path: test-output/hbond-pulse/
