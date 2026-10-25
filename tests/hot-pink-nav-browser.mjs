@@ -26,7 +26,7 @@ async function reveal(selector){
 try{
   await page.goto(root+"?page=secondary&start=example",{waitUntil:"domcontentloaded"});
   await page.locator("#secondarySvg .se-node").first().waitFor({state:"attached"});
-  await clickSvg('#secondarySvg .se-node[data-residue-index="6"] circle:last-child');
+  await clickSvg('#secondarySvg .se-node[data-residue-index="6"]');
   assert.deepEqual(await page.evaluate(()=>SecondaryExplorer.getContext().selectedResidues),[6]);
   const selectedNode=await color('#secondarySvg .se-node.multi-selected>circle:first-child');
   assert.equal(selectedNode.stroke,"rgb(255, 20, 147)",JSON.stringify(selectedNode));
