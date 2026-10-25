@@ -134,7 +134,7 @@ const TertiaryExplorer = (() => {
 
   let viewer=null,model=null,viewerPromise=null,initialView=null,hoverLabel=null;
   let pairs=[],partner=[],setupDone=false,surfaceToken=0,resizeTicket=0,learningPulseTimer=null,learningPulseStep=0;
-  let linkedPulseTimer=null,linkedPulseOn=false,linkedPulseShapes=[],linkedPulseFocus=[];
+  let linkedPulseTimer=null,linkedPulseOn=false,linkedPulseShapes=[],linkedPulseFocus=[],linkedPulseHbondDots=0;
   function scheduleViewerResize(preserveView=true){
     if(!viewer)return;
     const ticket=++resizeTicket,view=preserveView&&viewer.getView?viewer.getView():null;
@@ -679,7 +679,7 @@ const TertiaryExplorer = (() => {
     });
   }
   function addSelectedPairHighlights(){
-    const residues=activeResidues(),indices=selectedPairResidues(),linked=state.split&&state.mapping.enabled;
+    const residues=activeResidues(),indices=selectedPairResidues();
     const color=HOT_PINK;
     indices.forEach(i=>{
       if(!residues[i]||!isVisibleIndex(i))return;
@@ -691,11 +691,15 @@ const TertiaryExplorer = (() => {
     state.selectedPairs.forEach(key=>{
       const [a,b]=key.split(":").map(Number);if(!isVisibleIndex(a)||!isVisibleIndex(b))return;
       const bonds=pairHydrogenBonds(a,b),group=ensurePairHbondStyle(key,bonds);
+      // The active pair's visible dots belong to the same pulse-shape group
+      // as its nucleobases. Drawing them here would leave static dots behind.
+      const pulsePair=linkedPulseIndices().includes(a)&&linkedPulseIndices().includes(b);
       bonds.forEach(bond=>{
         const style={...group,...group.bonds[bond.id]};if(style.visible===false)return;
-        const linked=state.split&&state.mapping.enabled;
-        const displayStyle={...style,color:HOT_PINK,lineStyle:"dotted",thickness:Math.max(.16,Number(style.thickness)||0),opacity:1};
-        drawStyledConnector(bond.donor,bond.acceptor,displayStyle);
+        if(!pulsePair){
+          const displayStyle={...style,color:HOT_PINK,lineStyle:"dotted",thickness:Math.max(.16,Number(style.thickness)||0),opacity:1};
+          drawStyledConnector(bond.donor,bond.acceptor,displayStyle);
+        }
         if(style.labelVisible){
           const mid={x:(bond.donor.x+bond.acceptor.x)/2,y:(bond.donor.y+bond.acceptor.y)/2,z:(bond.donor.z+bond.acceptor.z)/2};
           viewer.addLabel(bond.distance.toFixed(2)+" Å",{position:mid,fontSize:11,fontColor:"#f7fbff",backgroundColor:"#08111e",backgroundOpacity:.8,inFront:true});
@@ -1108,12 +1112,40 @@ const TertiaryExplorer = (() => {
   function clearLinkedPulseShapes(){
     if(!viewer){linkedPulseShapes=[];return;}
     linkedPulseShapes.forEach(shape=>{try{viewer.removeShape?.(shape);}catch(_){}});
-    linkedPulseShapes=[];
+    linkedPulseShapes=[];linkedPulseHbondDots=0;
   }
   function baseRings(base){
     const purine=[["N1","C2","N3","C4","C5","C6"],["N9","C8","N7","C5","C4"]];
     const pyrimidine=[["N1","C2","N3","C4","C5","C6"]];
     return base==="A"||base==="G"?purine:pyrimidine;
+  }
+  function addPulsingPairHydrogenBonds(indices){
+    // Use the same ON/OFF phase and removable 3Dmol shapes as the nucleobase
+    // rings. These are donor–acceptor contacts that passed the existing
+    // geometric screen, not inferred or invented hydrogen bonds.
+    if(!viewer||!state.mapping.enabled)return;
+    const focused=new Set(indices);
+    state.selectedPairs.forEach(key=>{
+      const [a,b]=key.split(":").map(Number);
+      if(!focused.has(a)||!focused.has(b)||!isVisibleIndex(a)||!isVisibleIndex(b))return;
+      const bonds=pairHydrogenBonds(a,b),group=ensurePairHbondStyle(key,bonds);
+      bonds.forEach(bond=>{
+        const style={...group,...group.bonds[bond.id]};
+        if(style.visible===false)return;
+        const radius=Math.max(.26,Math.max(.16,Number(style.thickness)||0)*1.65);
+        // Match the existing nine-dot hydrogen-bond connector, but register
+        // each dot for removal during the base rings' OFF phase.
+        for(let i=1;i<10;i++){
+          const t=i/10,center={
+            x:bond.donor.x+(bond.acceptor.x-bond.donor.x)*t,
+            y:bond.donor.y+(bond.acceptor.y-bond.donor.y)*t,
+            z:bond.donor.z+(bond.acceptor.z-bond.donor.z)*t
+          };
+          linkedPulseShapes.push(viewer.addSphere({center,radius,color:HOT_PINK,opacity:1}));
+          linkedPulseHbondDots++;
+        }
+      });
+    });
   }
   function drawLinkedPulse(){
     clearLinkedPulseShapes();if(!viewer||!linkedPulseOn)return;
@@ -1139,6 +1171,7 @@ const TertiaryExplorer = (() => {
         }
       }
     });
+    addPulsingPairHydrogenBonds(indices);
     viewer.render();
   }
   function syncLinkedPulse(){
@@ -1889,7 +1922,7 @@ const TertiaryExplorer = (() => {
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
       selectionHighlightColor:state.selectionStyle.color,pairHighlightColor:HOT_PINK,selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
       comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count,selectedPairCount:state.selectedPairs.size,
-      learningKey:state.learning.key,learningTorsion:state.learning.torsion,learningActive:!!state.learning.geometry,learningFlashActive:learningPulseTimer!==null,linkedPulseActive:linkedPulseTimer!==null||linkedPulseOn,linkedPulseVisible:linkedPulseOn,linkedPulseShapes:linkedPulseShapes.length,linkedPulseFocus:[...linkedPulseFocus],learningGuidedDimmed:guidedLearningActive(),learningStatus:state.learning.geometry?.status||"",
+      learningKey:state.learning.key,learningTorsion:state.learning.torsion,learningActive:!!state.learning.geometry,learningFlashActive:learningPulseTimer!==null,linkedPulseActive:linkedPulseTimer!==null||linkedPulseOn,linkedPulseVisible:linkedPulseOn,linkedPulseShapes:linkedPulseShapes.length,linkedPulseHbondDots,linkedPulseFocus:[...linkedPulseFocus],learningGuidedDimmed:guidedLearningActive(),learningStatus:state.learning.geometry?.status||"",
       selectedPairKeys:[...state.selectedPairs],hbondCounts:Object.fromEntries([...state.selectedPairs].map(key=>{const [a,b]=key.split(":").map(Number);return [key,pairHydrogenBonds(a,b).length];}))};}
   };
 })();
