@@ -512,22 +512,7 @@ function setupModernWorkspaceUi(){
     "Focus on structural region":"View · Focus on structural region"
   });
 
-  const addControlNavigator=(root,labels)=>{
-    if(!root||root.querySelector(":scope > .workspace-control-map"))return;
-    const nav=document.createElement("nav");nav.className="workspace-control-map";nav.setAttribute("aria-label","Control categories");
-    labels.forEach(label=>{
-      const button=document.createElement("button");button.type="button";button.textContent=label;
-      button.addEventListener("click",()=>{
-        const summary=[...root.querySelectorAll("summary")].find(s=>s.textContent.trim().startsWith(label+" ·"));
-        if(!summary)return;
-        let node=summary.parentElement;while(node&&node!==root){if(node.tagName==="DETAILS")node.open=true;node=node.parentElement;}
-        summary.parentElement.open=true;summary.scrollIntoView({behavior:"smooth",block:"nearest"});
-      });nav.append(button);
-    });
-    root.prepend(nav);
-  };
-  // Secondary already has functional Select / Display / Inspect tabs. Do not add a second shortcut row.
-  addControlNavigator(tertiaryControls,["Import","Select","Display","Analyze","View"]);
+  // Select / Display / Inspect tabs already organize every control; no redundant five-button shortcut row.
 }
 
 function applyPageMode() {
