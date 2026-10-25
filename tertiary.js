@@ -47,6 +47,7 @@ const TertiaryExplorer = (() => {
   };
   const BASE_PLANE_TRIPLE={A:["N9","C4","C8"],G:["N9","C4","C8"],C:["N1","C2","C6"],U:["N1","C2","C6"]};
   const DEFAULT_LINE_STYLE={lineStyle:"dashed",color:"#ffffff",thickness:.07,opacity:.82,visible:true,labelVisible:true};
+  const HOT_PINK="#ff1493"; // Accessible, deliberately fixed selection color instead of adaptive palette.
   const DEFAULT_HBOND_STYLE={lineStyle:"dashed",color:"#74d7b6",thickness:.055,opacity:.95,visible:true,labelVisible:false};
   const LEARNING_COLORS={amber:"#f2c66d",mint:"#74d7b6",rose:"#d9808e",blue:"#87a9cc",white:"#f7fbff"};
   const LEARNING_LESSONS={
@@ -121,7 +122,7 @@ const TertiaryExplorer = (() => {
     mapping:{enabled:false,level:"pending",message:""},
     surfaceEnabled:false,surfaceOpacity:0.35,uniformColor:"#74d7b6",backgroundColor:"#07111c",orthographic:false,
     visibility:{rna:true,protein:true,solvent:false,ions:true,other:true,hydrogen:false},
-    selectionIndices:new Set(),selectionLabels:false,selectionStyle:{color:"#f2c66d",thickness:.24,opacity:.32},
+    selectionIndices:new Set(),selectionLabels:false,selectionStyle:{color:"#ff1493",thickness:.37,opacity:.95},
     selectedPairs:new Set(),pairHbondStyles:{},hbondCutoff:3.5,
     savedObjects:[],objectSerial:1,isolateObjectId:null,
     savedViews:[],viewSerial:1,
@@ -540,7 +541,7 @@ const TertiaryExplorer = (() => {
     },(_,v)=>{if(hoverLabel){v.removeLabel(hoverLabel);hoverLabel=null;v.render();}});
   }
   function resetModelState(){
-    cancelLearningPulse();hoverLabel=null;initialView=null;state.selected=0;state.measurementPicks=[];state.measurements=[];state.measurementMode="off";state.derivedSecondary=null;state.learning.geometry=null;
+    linkedPulseFocus=[];cancelLearningPulse();hoverLabel=null;initialView=null;state.selected=0;state.measurementPicks=[];state.measurements=[];state.measurementMode="off";state.derivedSecondary=null;state.learning.geometry=null;
     state.selectionIndices.clear();state.selectedPairs.clear();state.pairHbondStyles={};state.savedObjects=[];state.isolateObjectId=null;state.savedViews=[];clearComparison(false);
   }
   async function setModelFromText(text,format,sourceIsDefault,fileName){
@@ -650,7 +651,7 @@ const TertiaryExplorer = (() => {
   function selectedPairResidues(){
     const out=new Set();state.selectedPairs.forEach(key=>{const [a,b]=key.split(":").map(Number);out.add(a);out.add(b);});return out;
   }
-  // Choose high-contrast highlights against both the canvas and the current base colors.
+  // Retained for non-selection overlays that may need automatic contrast.
   function contrastColor(indices=[]){
     const colors=["#ffe86a","#55f4ff","#ff7fe1","#ffffff","#ffad52","#a3ff82"];
     const rgb=hex=>{const value=String(hex||"#07111c").replace("#","");return /^[0-9a-f]{6}$/i.test(value)?[0,2,4].map(j=>parseInt(value.slice(j,j+2),16)/255):[.03,.07,.11];};
@@ -679,11 +680,10 @@ const TertiaryExplorer = (() => {
   }
   function addSelectedPairHighlights(){
     const residues=activeResidues(),indices=selectedPairResidues(),linked=state.split&&state.mapping.enabled;
-    const color=linked?contrastColor([...indices]):"#74d7b6";
+    const color=HOT_PINK;
     indices.forEach(i=>{
       if(!residues[i]||!isVisibleIndex(i))return;
-      if(linked)highlightBaseOnly(i,color,.32);
-      else model.addStyle(selectorForResidue(residues[i]),{stick:{radius:.28,color},sphere:{radius:.29,color,opacity:.28}});
+      highlightBaseOnly(i,color,.37);
     });
   }
   function addSelectedPairHydrogenBonds(){
@@ -694,7 +694,7 @@ const TertiaryExplorer = (() => {
       bonds.forEach(bond=>{
         const style={...group,...group.bonds[bond.id]};if(style.visible===false)return;
         const linked=state.split&&state.mapping.enabled;
-        const displayStyle=linked?{...style,color:contrastColor([a,b]),thickness:Math.max(.14,Number(style.thickness)||0),opacity:Math.max(.95,Number(style.opacity)||0)}:style;
+        const displayStyle={...style,color:HOT_PINK,lineStyle:"dotted",thickness:Math.max(.16,Number(style.thickness)||0),opacity:1};
         drawStyledConnector(bond.donor,bond.acceptor,displayStyle);
         if(style.labelVisible){
           const mid={x:(bond.donor.x+bond.acceptor.x)/2,y:(bond.donor.y+bond.acceptor.y)/2,z:(bond.donor.z+bond.acceptor.z)/2};
@@ -1091,21 +1091,19 @@ const TertiaryExplorer = (() => {
     const residues=activeResidues(),linked=state.split&&state.mapping.enabled;
     state.selectionIndices.forEach(i=>{
       if(!isVisibleIndex(i)||!residues[i])return;
-      const color=linked?contrastColor([i]):state.selectionStyle.color;
-      if(linked)highlightBaseOnly(i,color,.32);
-      else{
-        const st=state.selectionStyle;
-        model.addStyle(selectorForResidue(residues[i]),{stick:{radius:st.thickness,color:st.color,opacity:st.opacity},sphere:{radius:Math.max(.22,st.thickness*1.18),color:st.color,opacity:st.opacity}});
-      }
+      const color=state.selectionStyle.color||HOT_PINK;
+      highlightBaseOnly(i,color,Math.max(.34,state.selectionStyle.thickness||.34));
       if(state.selectionLabels&&residues[i].coord)viewer.addLabel(baseAt(i)+(i+1),{position:residues[i].coord,fontSize:11,fontColor:"#07111c",backgroundColor:color,backgroundOpacity:.9,inFront:true});
     });
   }
-  // Linked 2D/3D teaching mode: only 3D pulses; the 2D map is a steady highlight.
+  // Pulsing nucleobase glow works in standalone 3D and linked 2D/3D; 2D selection also pulses via CSS.
   // Separate removable shapes avoid recomputing models, surfaces, and measurements every frame.
   function linkedPulseIndices(){
-    if(!state.split||!state.mapping.enabled)return [];
     const selected=new Set([...state.selectionIndices,...selectedPairResidues()]);
-    return linkedPulseFocus.filter(i=>selected.has(i)&&isVisibleIndex(i));
+    // Use the clicked focus when available; selection tools (ranges/regions)
+    // can also provide two or more selected residues without a click focus.
+    const focused=linkedPulseFocus.filter(i=>selected.has(i)&&isVisibleIndex(i));
+    return (focused.length?focused:[...selected].filter(isVisibleIndex).slice(0,24));
   }
   function clearLinkedPulseShapes(){
     if(!viewer){linkedPulseShapes=[];return;}
@@ -1119,7 +1117,7 @@ const TertiaryExplorer = (() => {
   }
   function drawLinkedPulse(){
     clearLinkedPulseShapes();if(!viewer||!linkedPulseOn)return;
-    const indices=linkedPulseIndices(),color=contrastColor(indices);
+    const indices=linkedPulseIndices(),color=state.selectedPairs.size?HOT_PINK:(state.selectionStyle.color||HOT_PINK);
     indices.forEach(i=>{
       const residue=activeResidues()[i];if(!residue)return;
       const byName=new Map((residue.atoms||[]).map(atom=>[atomName(atom),atom]));
@@ -1130,14 +1128,14 @@ const TertiaryExplorer = (() => {
         // Filled, translucent polygon rather than separate atom-centered blinking balls.
         const faces=[];for(let j=1;j<verts.length-1;j++)faces.push(0,j,j+1);
         try{
-          const face=viewer.addShape({color,opacity:.24,wireframe:false});
-          face.addCustom({vertexArr:verts,faceArr:faces,color,opacity:.24});
+          const face=viewer.addShape({color,opacity:.4,wireframe:false});
+          face.addCustom({vertexArr:verts,faceArr:faces,color,opacity:.4});
           linkedPulseShapes.push(face);
         }catch(error){console.warn("Nucleobase surface:",error);}
         for(let j=0;j<verts.length;j++){
           const a=verts[j],b=verts[(j+1)%verts.length];
-          linkedPulseShapes.push(viewer.addCylinder({start:a,end:b,radius:.19,color,opacity:.28,fromCap:1,toCap:1}));
-          linkedPulseShapes.push(viewer.addCylinder({start:a,end:b,radius:.09,color,opacity:.93,fromCap:1,toCap:1}));
+          linkedPulseShapes.push(viewer.addCylinder({start:a,end:b,radius:.3,color,opacity:.4,fromCap:1,toCap:1}));
+          linkedPulseShapes.push(viewer.addCylinder({start:a,end:b,radius:.15,color,opacity:1,fromCap:1,toCap:1}));
         }
       }
     });
@@ -1155,7 +1153,7 @@ const TertiaryExplorer = (() => {
       if(!reduced)linkedPulseTimer=setInterval(()=>{
         if(!linkedPulseIndices().length){syncLinkedPulse();return;}
         linkedPulseOn=!linkedPulseOn;drawLinkedPulse();
-      },850);
+      },525);
     }
     drawLinkedPulse();
   }
@@ -1319,7 +1317,7 @@ const TertiaryExplorer = (() => {
   function renderSequencePanel(){
     const box=$("teSequencePanel");if(!box)return;box.replaceChildren();
     activeResidues().forEach((r,i)=>{
-      const b=document.createElement("button");b.type="button";b.className="te-seq-residue"+(i===state.selected?" active":"")+(state.selectionIndices.has(i)?" chosen":"")+(selectedPairResidues().has(i)?" paired-chosen":"");
+      const b=document.createElement("button");b.type="button";b.className="te-seq-residue"+(i===state.selected&&(state.selectionIndices.has(i)||selectedPairResidues().has(i))?" active":"")+(state.selectionIndices.has(i)?" chosen":"")+(selectedPairResidues().has(i)?" paired-chosen":"");
       b.textContent=baseAt(i)+(i+1);b.title=(r.resn||baseAt(i))+(r.chain?" · chain "+r.chain:"");b.addEventListener("click",()=>chooseResidue(i));box.append(b);
     });
   }
@@ -1368,7 +1366,7 @@ const TertiaryExplorer = (() => {
       [["Color",color],["Thickness",thick],["Opacity",opacity]].forEach(([label,input])=>{const l=document.createElement("label");l.append(document.createTextNode(label),input);grid.append(l);});
       const actions=document.createElement("div");actions.className="te-button-row";
       const focus=document.createElement("button");focus.type="button";focus.textContent="Center / zoom";focus.addEventListener("click",focusSelection);
-      const clear=document.createElement("button");clear.type="button";clear.textContent="Clear residues";clear.addEventListener("click",()=>{state.selectionIndices.clear();render();});
+      const clear=document.createElement("button");clear.type="button";clear.textContent="Clear residues";clear.addEventListener("click",()=>{state.selectionIndices.clear();linkedPulseFocus=[];render();});
       actions.append(focus,clear);section.append(grid,actions);box.append(section);
     }
     state.selectedPairs.forEach(key=>{
@@ -1391,7 +1389,7 @@ const TertiaryExplorer = (() => {
         });
         section.append(list);
       }
-      const remove=document.createElement("button");remove.type="button";remove.textContent="Remove this base-pair selection";remove.addEventListener("click",()=>{state.selectedPairs.delete(key);render();});section.append(remove);
+      const remove=document.createElement("button");remove.type="button";remove.textContent="Remove this base-pair selection";remove.addEventListener("click",()=>{state.selectedPairs.delete(key);linkedPulseFocus=[];render();});section.append(remove);
       box.append(section);
     });
   }
@@ -1418,7 +1416,7 @@ const TertiaryExplorer = (() => {
     evaluateMapping();
     const n=state.mapping.enabled?state.secondarySequence.length:activeResidues().length;
     const clean=[...new Set((Array.isArray(indices)?indices:[]).filter(i=>Number.isInteger(i)&&i>=0&&i<n))];
-    state.selectionIndices=new Set(clean);state.selectedPairs.clear();
+    state.selectionIndices=new Set(clean);state.selectedPairs.clear();linkedPulseFocus=clean.slice(0,24);
     if(clean.length)state.selected=clean[0];
     if(state.mapping.enabled)state.split=true;
     const split=$("teSplit");if(split){split.disabled=!state.mapping.enabled;split.checked=state.split;}
@@ -1427,7 +1425,7 @@ const TertiaryExplorer = (() => {
     return {indices:clean,linked:state.split,mappingEnabled:state.mapping.enabled};
   }
   function clearLinkedRegion(){
-    state.selectionIndices.clear();state.selectedPairs.clear();render();
+    state.selectionIndices.clear();state.selectedPairs.clear();linkedPulseFocus=[];render();
   }
   function saveView(){
     if(!viewer?.getView)return;const name=prompt("Name this view","View "+state.viewSerial);if(name===null)return;
@@ -1673,7 +1671,7 @@ const TertiaryExplorer = (() => {
     $("teIndexDefault").addEventListener("click",()=>{state.indexSelection=defaultIndices();buildIndexChoices();render();});
     $("teIndexAll").addEventListener("click",()=>{const n=state.mapping.enabled?state.secondarySequence.length:activeResidues().length;state.indexSelection=new Set(Array.from({length:n},(_,i)=>i));buildIndexChoices();render();});
     $("teIndexNone").addEventListener("click",()=>{state.indexSelection.clear();buildIndexChoices();render();});
-    $("teSelectRange").addEventListener("click",selectRange);$("teSelectCurrent").addEventListener("click",addCurrentToSelection);$("teSelectSubtract").addEventListener("click",subtractCurrentFromSelection);$("teSelectChain").addEventListener("click",selectActiveChain);$("teSelectInvert").addEventListener("click",invertSelection);$("teSelectClear").addEventListener("click",()=>{state.selectionIndices.clear();state.selectedPairs.clear();render();});
+    $("teSelectRange").addEventListener("click",selectRange);$("teSelectCurrent").addEventListener("click",addCurrentToSelection);$("teSelectSubtract").addEventListener("click",subtractCurrentFromSelection);$("teSelectChain").addEventListener("click",selectActiveChain);$("teSelectInvert").addEventListener("click",invertSelection);$("teSelectClear").addEventListener("click",()=>{state.selectionIndices.clear();state.selectedPairs.clear();linkedPulseFocus=[];render();});
     $("teSelectBaseButton").addEventListener("click",selectBase);$("teSelectNearButton").addEventListener("click",selectNearby);$("teFocusSelection").addEventListener("click",focusSelection);
     $("teSelectionLabels").addEventListener("change",e=>{state.selectionLabels=e.target.checked;render();});$("teCreateObject").addEventListener("click",createObject);
     $("teClipEnabled").addEventListener("change",e=>{state.clipEnabled=e.target.checked;render();});$("teClipNear").addEventListener("input",e=>{state.clipNear=Number(e.target.value);render();});$("teClipFar").addEventListener("input",e=>{state.clipFar=Number(e.target.value);render();});
@@ -1825,9 +1823,9 @@ const TertiaryExplorer = (() => {
     };
     state.selectionIndices=new Set(Array.isArray(w.selectionIndices)?w.selectionIndices.filter(Number.isInteger):[]);state.selectionLabels=Boolean(w.selectionLabels);
     state.selectionStyle={
-      color:restoredColor(w.selectionStyle?.color,"#f2c66d"),
-      thickness:restoredNumber(w.selectionStyle?.thickness,.24,.01,2),
-      opacity:restoredNumber(w.selectionStyle?.opacity,.32,0,1)
+      color:restoredColor(w.selectionStyle?.color,HOT_PINK),
+      thickness:restoredNumber(w.selectionStyle?.thickness,.37,.01,2),
+      opacity:restoredNumber(w.selectionStyle?.opacity,.95,0,1)
     };
     state.selectedPairs=new Set(w.selectedPairs||[]);state.pairHbondStyles=w.pairHbondStyles||{};state.hbondCutoff=Number(w.hbondCutoff)||3.5;
     state.savedObjects=(w.savedObjects||[]).map(o=>({...o,indices:new Set(o.indices||[])}));state.objectSerial=Number(w.objectSerial)||1;state.isolateObjectId=w.isolateObjectId??null;
@@ -1889,7 +1887,7 @@ const TertiaryExplorer = (() => {
   return {setup,render,buildEmbeddedRasterSvg,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,getWorkspaceSnapshot,restoreWorkspaceSnapshot,showLearningFeature,clearLearningFeature,showLinkedRegion,clearLinkedRegion,createDistanceMeasurementFromAtomIndices,
     getDiagnostics(){return {viewerReady:!!viewer,modelReady:!!model,atomCount:model?.selectedAtoms?model.selectedAtoms({}).length:0,representation:state.representation,colorMode:state.colorMode,split:state.split,mappingEnabled:state.mapping.enabled,source:state.currentFileName,derivedSecondary:state.derivedSecondary,
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
-      selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
+      selectionHighlightColor:state.selectionStyle.color,pairHighlightColor:HOT_PINK,selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
       comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count,selectedPairCount:state.selectedPairs.size,
       learningKey:state.learning.key,learningTorsion:state.learning.torsion,learningActive:!!state.learning.geometry,learningFlashActive:learningPulseTimer!==null,linkedPulseActive:linkedPulseTimer!==null||linkedPulseOn,linkedPulseVisible:linkedPulseOn,linkedPulseShapes:linkedPulseShapes.length,linkedPulseFocus:[...linkedPulseFocus],learningGuidedDimmed:guidedLearningActive(),learningStatus:state.learning.geometry?.status||"",
       selectedPairKeys:[...state.selectedPairs],hbondCounts:Object.fromEntries([...state.selectedPairs].map(key=>{const [a,b]=key.split(":").map(Number);return [key,pairHydrogenBonds(a,b).length];}))};}

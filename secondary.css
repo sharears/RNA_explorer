@@ -316,3 +316,26 @@ body[data-page-mode="secondary"] .workspace-advanced-panel .se-controls{margin-t
 #secondarySvg .se-backbone.selected [data-backbone-visible]{stroke:#ffe66d!important;stroke-width:5!important;opacity:1!important;filter:drop-shadow(0 0 6px rgba(255,230,109,.8))}
 
 #secondarySvg .se-index.selected{fill:#ffe86a!important;font-weight:900;paint-order:stroke;stroke:#07111c;stroke-width:2px;filter:drop-shadow(0 0 5px #ffe86a)}
+
+
+/* Selected residues and paired connections are consistently hot pink. */
+#secondarySvg .se-node.multi-selected>circle:first-child{
+ stroke:#ff1493!important;stroke-width:5!important;
+ filter:drop-shadow(0 0 11px #ff1493)!important;
+ animation:rna-hot-pink-pulse 1.05s ease-in-out infinite
+}
+#secondarySvg .se-pair.selected path:not([stroke="transparent"]){
+ stroke:#ff1493!important;stroke-width:5!important;
+ stroke-dasharray:3 7!important;
+ filter:drop-shadow(0 0 11px #ff1493)!important;
+ animation:rna-hot-pink-pulse 1.05s ease-in-out infinite
+}
+#secondarySvg .se-pair.selected [stroke]:not([stroke="transparent"]):not(path){stroke:#ff1493!important}
+@keyframes rna-hot-pink-pulse{
+ 0%,100%{filter:drop-shadow(0 0 12px #ff1493);opacity:1}
+ 50%{filter:drop-shadow(0 0 2px rgba(255,20,147,.45));opacity:.52}
+}
+@media(prefers-reduced-motion:reduce){
+ #secondarySvg .se-node.multi-selected>circle:first-child,
+ #secondarySvg .se-pair.selected path:not([stroke="transparent"]){animation:none!important;opacity:1!important}
+}

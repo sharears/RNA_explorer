@@ -1,0 +1,29 @@
+name: Hot pink selection and tertiary navigation
+on:
+  push:
+    branches: [fix/hot-pink-selection-remove-duplicate-nav-20261024]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-save playwright
+      - name: Start site
+        run: |
+          python3 -m http.server 4173 >/tmp/rna-pink-server.log 2>&1 &
+          echo $! >/tmp/rna-pink-server.pid
+          sleep 2
+      - name: Test navigation and pink selection
+        run: node tests/hot-pink-nav-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hot-pink-selection-regression
+          path: test-output/hot-pink-nav/
