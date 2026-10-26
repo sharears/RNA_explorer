@@ -68,8 +68,11 @@ try{
   await reveal("#teSplit");await page.locator("#teSplit").check();
   await wait(()=>TertiaryExplorer.getDiagnostics().split&&TertiaryExplorer.getDiagnostics().mappingEnabled);
   await select('#tertiaryMiniSvg [data-pair]');
-  await wait(()=>{const s=TertiaryExplorer.getDiagnostics();return s.selectedPairCount===1&&s.linkedPulseVisible&&s.linkedPulseAtomParts.phosphate>=4&&s.linkedPulseCovalentBonds>25;});
-  d=await get();
+  const pairSnapshot=await page.waitForFunction(()=>{
+    const s=TertiaryExplorer.getDiagnostics();
+    return s.selectedPairCount===1&&s.linkedPulseVisible&&s.linkedPulseAtomParts.phosphate>=4&&s.linkedPulseCovalentBonds>25?s:false;
+  },null,{timeout:12000});
+  d=await pairSnapshot.jsonValue(); // Snapshot the ON frame before the animation changes phase.
   assert.equal(d.linkedPulseFocus.length,2,"Only one nucleotide of base pair was highlighted");
   assert(d.linkedPulseAtomParts.sugar>=10);
   results.pair={highlightedResidues:d.linkedPulseFocus,parts:d.linkedPulseAtomParts,connectedBonds:d.linkedPulseCovalentBonds};
