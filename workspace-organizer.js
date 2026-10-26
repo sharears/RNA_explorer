@@ -115,9 +115,25 @@
       else if(s.startsWith('display')||s.includes('residue index')||s.includes('clipping')||s.includes('saved camera')||s.includes('focus on structural'))panels.display.append(d);
       else if(s.startsWith('analyze')||s.includes('compare / align'))panels.analyze.append(d);
     });
+    // Import comes first in the Tertiary controls, ahead of history and the
+    // Select / Display / Inspect tabs. Keep its original inputs and listeners.
     const importDetails=details.find(d=>(q(':scope > summary',d)?.textContent||'').toLowerCase().includes('import structure'));
-    if(importDetails){importDetails.open=false;root.insertBefore(importDetails,categoryHost);}
-    const context=$('teContextPanel');if(context&&context.parentElement===root)root.insertBefore(context,categoryHost);
+    if(importDetails){
+      importDetails.open=false;
+      root.prepend(importDetails);
+      if(global?.bar)root.insertBefore(global.bar,categoryHost);
+    }
+    // Current selection is a normal, collapsible Select tool, not an
+    // always-visible panel above the workspace tabs.
+    const context=$('teContextPanel');
+    if(context){
+      const selectionDetails=document.createElement('details');
+      selectionDetails.className='te-selection-details';
+      selectionDetails.id='teSelectionDetails';
+      const summary=document.createElement('summary');summary.textContent='Selection Details';
+      selectionDetails.append(summary,context);
+      panels.select.prepend(selectionDetails);
+    }
 
     const cutoff=$('teSelectNearCutoff');if(cutoff){cutoff.min='1';cutoff.max='25';cutoff.step='0.1';cutoff.placeholder='Å';}
     const nearButton=$('teSelectNearButton');if(nearButton)nearButton.textContent='Select residues within cutoff';
