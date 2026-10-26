@@ -384,3 +384,11 @@ body[data-page-mode="tertiary"] #followButton{font-size:.78rem;padding:8px 10px;
  #teSequencePanel .te-seq-residue.chosen,
  #teSequencePanel .te-seq-residue.paired-chosen{animation:none!important;opacity:1!important}
 }
+
+
+/* Tertiary selection appears as a collapsible Select-category tool, not as
+   an always-visible block between Import and the three category tabs. */
+#scene-tertiary #teSelectionDetails{border-top:1px solid var(--line);padding:12px 0}
+#scene-tertiary #teSelectionDetails>summary{color:var(--cream);font-weight:750}
+#scene-tertiary #teSelectionDetails .te-context-panel{margin:9px 0 0;padding:10px;border-color:rgba(116,215,182,.22)}
+#scene-tertiary .te-controls>details:first-child{margin-top:0}
