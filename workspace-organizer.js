@@ -117,7 +117,7 @@
     });
     // Import comes first in the Tertiary controls, ahead of history and the
     // Select / Display / Inspect tabs. Keep its original inputs and listeners.
-    const importDetails=details.find(d=>(q(':scope > summary',d)?.textContent||'').toLowerCase().includes('import structure'));
+    const importDetails=details.find(d=>(q(':scope > summary',d)?.textContent||'').trim().toLowerCase().startsWith('import'));
     if(importDetails){
       importDetails.open=false;
       root.prepend(importDetails);
