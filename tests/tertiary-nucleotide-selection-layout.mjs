@@ -52,8 +52,11 @@ try{
 
   await page.locator('#teSequencePanel .te-seq-residue').nth(8).click();
   await wait(()=>TertiaryExplorer.getDiagnostics().selectionCount===1);
-  await wait(()=>{const d=TertiaryExplorer.getDiagnostics();return d.linkedPulseVisible&&d.linkedPulseAtomParts.base>0&&d.linkedPulseAtomParts.sugar>0&&d.linkedPulseAtomParts.phosphate>0&&d.linkedPulseCovalentBonds>0;});
-  let d=await get();
+  const singleSnapshot=await page.waitForFunction(()=>{
+    const d=TertiaryExplorer.getDiagnostics();
+    return d.linkedPulseVisible&&d.linkedPulseAtomParts.base>0&&d.linkedPulseAtomParts.sugar>0&&d.linkedPulseAtomParts.phosphate>0&&d.linkedPulseCovalentBonds>0?d:false;
+  },null,{timeout:12000});
+  let d=await singleSnapshot.jsonValue(); // Capture ON frame before the blink toggles.
   assert.deepEqual(d.linkedPulseFocus,[8]);
   assert.equal(d.linkedPulseHbondDots,0,"A single nucleotide must not have pair H-bond dots");
   assert(d.linkedPulseAtomParts.base>0&&d.linkedPulseAtomParts.sugar>=5&&d.linkedPulseAtomParts.phosphate>=2);
