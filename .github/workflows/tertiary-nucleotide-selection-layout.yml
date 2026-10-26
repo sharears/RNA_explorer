@@ -1,0 +1,28 @@
+name: Tertiary full-nucleotide selection and control layout
+on:
+  push:
+    branches: [fix/tertiary-selection-details-import-nucleotide-20261025]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-save playwright
+      - name: Serve branch
+        run: |
+          python3 -m http.server 4173 >/tmp/rna-nucleotide-layout.log 2>&1 &
+          sleep 2
+      - name: Test layout and full selected nucleotide highlight
+        run: node tests/tertiary-nucleotide-selection-layout.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tertiary-nucleotide-selection-layout
+          path: test-output/full-nucleotide-and-layout/

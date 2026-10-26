@@ -134,7 +134,7 @@ const TertiaryExplorer = (() => {
 
   let viewer=null,model=null,viewerPromise=null,initialView=null,hoverLabel=null;
   let pairs=[],partner=[],setupDone=false,surfaceToken=0,resizeTicket=0,learningPulseTimer=null,learningPulseStep=0;
-  let linkedPulseTimer=null,linkedPulseOn=false,linkedPulseShapes=[],linkedPulseFocus=[],linkedPulseHbondDots=0;
+  let linkedPulseTimer=null,linkedPulseOn=false,linkedPulseShapes=[],linkedPulseFocus=[],linkedPulseHbondDots=0,linkedPulseAtomParts={base:0,sugar:0,phosphate:0},linkedPulseCovalentBonds=0;
   function scheduleViewerResize(preserveView=true){
     if(!viewer)return;
     const ticket=++resizeTicket,view=preserveView&&viewer.getView?viewer.getView():null;
@@ -664,18 +664,25 @@ const TertiaryExplorer = (() => {
       return {color,score:contrast+.9*difference};
     }).sort((a,b)=>b.score-a.score)[0].color;
   }
-  function baseAtoms(residue){
-    // Atom names with prime/star belong to ribose; P/OP* and O*P belong to phosphate.
-    return (residue?.atoms||[]).filter(atom=>{
-      const name=atomName(atom);
-      return !/['*]/.test(name)&&!/^(P|OP[123]|O[123]P|H|HO|H[0-9])$/.test(name)&&normalizeElement(atom)!=="H";
-    });
+  function nucleotideAtoms(residue){
+    // A selected RNA residue is the WHOLE nucleotide: base (including
+    // exocyclic substituents), ribose, and the phosphate atoms assigned to
+    // its residue record. Neighboring residues are deliberately excluded.
+    return (residue?.atoms||[]).filter(atom=>normalizeElement(atom)!=="H"&&
+      [atom.x,atom.y,atom.z].every(v=>Number.isFinite(Number(v))));
   }
-  function highlightBaseOnly(index,color,thickness=.31){
+  function nucleotidePart(atom){
+    const name=atomName(atom);
+    if(/^(P|OP[123]|O[123]P)$/.test(name))return "phosphate";
+    if(/['*]/.test(name))return "sugar";
+    return "base";
+  }
+  function highlightNucleotide(index,color,thickness=.37){
     const r=activeResidues()[index];if(!r||!isVisibleIndex(index))return;
-    baseAtoms(r).forEach(atom=>{
+    nucleotideAtoms(r).forEach(atom=>{
       if(!Number.isFinite(Number(atom.serial)))return;
-      model.addStyle({serial:atom.serial},{stick:{radius:thickness,color,opacity:1},sphere:{radius:Math.max(.26,thickness*.95),color,opacity:.55}});
+      model.addStyle({serial:atom.serial},{stick:{radius:thickness,color,opacity:1},
+        sphere:{radius:Math.max(.26,thickness*.95),color,opacity:.55}});
     });
   }
   function addSelectedPairHighlights(){
@@ -683,7 +690,7 @@ const TertiaryExplorer = (() => {
     const color=HOT_PINK;
     indices.forEach(i=>{
       if(!residues[i]||!isVisibleIndex(i))return;
-      highlightBaseOnly(i,color,.37);
+      highlightNucleotide(i,color,.37);
     });
   }
   function addSelectedPairHydrogenBonds(){
@@ -1092,11 +1099,11 @@ const TertiaryExplorer = (() => {
   }
 
   function addSelectionHighlights(){
-    const residues=activeResidues(),linked=state.split&&state.mapping.enabled;
+    const residues=activeResidues();
     state.selectionIndices.forEach(i=>{
       if(!isVisibleIndex(i)||!residues[i])return;
       const color=state.selectionStyle.color||HOT_PINK;
-      highlightBaseOnly(i,color,Math.max(.34,state.selectionStyle.thickness||.34));
+      highlightNucleotide(i,color,Math.max(.34,state.selectionStyle.thickness||.34));
       if(state.selectionLabels&&residues[i].coord)viewer.addLabel(baseAt(i)+(i+1),{position:residues[i].coord,fontSize:11,fontColor:"#07111c",backgroundColor:color,backgroundOpacity:.9,inFront:true});
     });
   }
@@ -1112,7 +1119,7 @@ const TertiaryExplorer = (() => {
   function clearLinkedPulseShapes(){
     if(!viewer){linkedPulseShapes=[];return;}
     linkedPulseShapes.forEach(shape=>{try{viewer.removeShape?.(shape);}catch(_){}});
-    linkedPulseShapes=[];linkedPulseHbondDots=0;
+    linkedPulseShapes=[];linkedPulseHbondDots=0;linkedPulseAtomParts={base:0,sugar:0,phosphate:0};linkedPulseCovalentBonds=0;
   }
   function baseRings(base){
     const purine=[["N1","C2","N3","C4","C5","C6"],["N9","C8","N7","C5","C4"]];
@@ -1147,11 +1154,61 @@ const TertiaryExplorer = (() => {
       });
     });
   }
+  function nucleotideCovalentBonds(atoms){
+    // Prefer bonds inferred by the 3Dmol model, but use covalent distance
+    // fallback for PDB/mmCIF structures whose atom records lack topology.
+    const byIndex=new Map(atoms.filter(a=>Number.isInteger(a.index)).map(a=>[a.index,a]));
+    const list=[],seen=new Set();
+    const add=(a,b)=>{
+      const ia=atoms.indexOf(a),ib=atoms.indexOf(b);
+      if(ia<0||ib<0||ia===ib)return;
+      const key=Math.min(ia,ib)+":"+Math.max(ia,ib);
+      if(seen.has(key))return;seen.add(key);list.push([a,b]);
+    };
+    atoms.forEach(a=>{
+      (Array.isArray(a.bonds)?a.bonds:[]).forEach(i=>{
+        const b=byIndex.get(i);if(b)add(a,b);
+      });
+    });
+    if(list.length)return list;
+    for(let i=0;i<atoms.length;i++){
+      for(let j=i+1;j<atoms.length;j++){
+        const a=atoms[i],b=atoms[j],d=atomDistanceRaw(a,b);
+        const phosphorus=normalizeElement(a)==="P"||normalizeElement(b)==="P";
+        if(d>=1.05&&d<=(phosphorus?1.95:1.83))add(a,b);
+      }
+    }
+    return list;
+  }
+  function addPulsingNucleotide(index,color){
+    const r=activeResidues()[index];if(!r||!isVisibleIndex(index))return;
+    const atoms=nucleotideAtoms(r);if(!atoms.length)return;
+    const bonds=nucleotideCovalentBonds(atoms);
+    // Two batched shapes make the entire nucleotide blink without modifying
+    // neighboring residues, and avoid one WebGL object per atom or bond.
+    const halo=viewer.addShape({color,opacity:.43});
+    const edge=viewer.addShape({color,opacity:1});
+    atoms.forEach(atom=>{
+      const center={x:Number(atom.x),y:Number(atom.y),z:Number(atom.z)};
+      const part=nucleotidePart(atom);linkedPulseAtomParts[part]++;
+      halo.addSphere({center,radius:.37,color,opacity:.43});
+      edge.addSphere({center,radius:.18,color,opacity:1});
+    });
+    bonds.forEach(([a,b])=>{
+      const start={x:Number(a.x),y:Number(a.y),z:Number(a.z)};
+      const end={x:Number(b.x),y:Number(b.y),z:Number(b.z)};
+      halo.addCylinder({start,end,radius:.28,color,opacity:.43,fromCap:1,toCap:1});
+      edge.addCylinder({start,end,radius:.145,color,opacity:1,fromCap:1,toCap:1});
+      linkedPulseCovalentBonds++;
+    });
+    linkedPulseShapes.push(halo,edge);
+  }
   function drawLinkedPulse(){
     clearLinkedPulseShapes();if(!viewer||!linkedPulseOn)return;
     const indices=linkedPulseIndices(),color=state.selectedPairs.size?HOT_PINK:(state.selectionStyle.color||HOT_PINK);
     indices.forEach(i=>{
       const residue=activeResidues()[i];if(!residue)return;
+      addPulsingNucleotide(i,color);
       const byName=new Map((residue.atoms||[]).map(atom=>[atomName(atom),atom]));
       for(const names of baseRings(baseAt(i))){
         const atoms=names.map(name=>byName.get(name));if(atoms.some(a=>!a))continue;
@@ -1922,7 +1979,7 @@ const TertiaryExplorer = (() => {
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
       selectionHighlightColor:state.selectionStyle.color,pairHighlightColor:HOT_PINK,selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
       comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count,selectedPairCount:state.selectedPairs.size,
-      learningKey:state.learning.key,learningTorsion:state.learning.torsion,learningActive:!!state.learning.geometry,learningFlashActive:learningPulseTimer!==null,linkedPulseActive:linkedPulseTimer!==null||linkedPulseOn,linkedPulseVisible:linkedPulseOn,linkedPulseShapes:linkedPulseShapes.length,linkedPulseHbondDots,linkedPulseFocus:[...linkedPulseFocus],learningGuidedDimmed:guidedLearningActive(),learningStatus:state.learning.geometry?.status||"",
+      learningKey:state.learning.key,learningTorsion:state.learning.torsion,learningActive:!!state.learning.geometry,learningFlashActive:learningPulseTimer!==null,linkedPulseActive:linkedPulseTimer!==null||linkedPulseOn,linkedPulseVisible:linkedPulseOn,linkedPulseShapes:linkedPulseShapes.length,linkedPulseHbondDots,linkedPulseAtomParts:{...linkedPulseAtomParts},linkedPulseCovalentBonds,linkedPulseFocus:[...linkedPulseFocus],learningGuidedDimmed:guidedLearningActive(),learningStatus:state.learning.geometry?.status||"",
       selectedPairKeys:[...state.selectedPairs],hbondCounts:Object.fromEntries([...state.selectedPairs].map(key=>{const [a,b]=key.split(":").map(Number);return [key,pairHydrogenBonds(a,b).length];}))};}
   };
 })();
