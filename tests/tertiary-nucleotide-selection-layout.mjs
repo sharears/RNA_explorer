@@ -25,6 +25,7 @@ try{
   assert.match(await importPanel.locator(":scope > summary").textContent(),/Import.*[Mm]apping/i,
     "Import Structures & Mapping is not the first controls section");
   const sequence=await ctrl.evaluate(el=>[...el.children].map(x=>({name:x.tagName,id:x.id,cl:x.className})));
+  console.log("Tertiary control order:",JSON.stringify(sequence));
   assert.equal(sequence[0].name,"DETAILS","First section is not the import disclosure");
   assert.equal(sequence[1].cl,"rna-workspace-global-bar","History must follow Import");
   assert.equal(sequence[2].cl,"rna-category-host","Select/Display/Inspect must follow Import and History");
