@@ -98,12 +98,16 @@ function refresh(){
 }
 function show(type){
  if(!matching(type).length)return;
- challenge=false;shown=type;solved=false;answer=[];controls();paint();
+ const wasChallenge=challenge;challenge=false;shown=type;solved=false;answer=[];
+ if(wasChallenge)SecondaryExplorer.clearHighlights();
+ controls();paint();
  const sizes=[...new Set(matching(type).map(m=>m.size))].sort((a,b)=>a-b);
  setStatus(matching(type).length+" "+typeName(type)+(matching(type).length===1?"":"s")+" highlighted in hot pink. Unpaired loop sizes: "+sizes.join(", ")+".");
 }
 function stop(){
- challenge=false;shown=null;answer=[];solved=false;controls();paint();
+ const wasChallenge=challenge;challenge=false;shown=null;answer=[];solved=false;
+ if(wasChallenge)SecondaryExplorer.clearHighlights();
+ controls();paint();
  setStatus("Choose a motif to highlight or start another challenge.");
 }
 function start(){
