@@ -14,9 +14,9 @@ const example=(sequence,structure,type,size,indices)=>{
 example("AAAAA","(...)","hairpin",3,[1,2,3]);
 example("AAAAAA","(....)","hairpin",4,[1,2,3,4]);
 example("AAAAAAA","(.(..))","bulge",1,[1]);
-example("AAAAAAAA","((..).)","bulge",1,[5]);
+example("AAAAAAA","((..).)","bulge",1,[5]);
 example("AAAAAAAA","(.(..).)","internal",2,[1,6]);
-example("AAAAAAAAAAAAA","((..)(..)....)","junction",4,[9,10,11,12]);
+example("AAAAAAAAAAAAAA","((..)(..)....)","junction",4,[9,10,11,12]);
 assert.equal(identify("AAAA","(())").filter(m=>m.type==="hairpin").length,0,"fully stacked pairs are not hairpin loops");
 assert.deepEqual(identify("AAA","(()"),[],"unbalanced brackets should be rejected");
 assert.deepEqual(identify("AAAA","([)]"),[],"unsupported pseudoknot notation should be rejected");
