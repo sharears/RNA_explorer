@@ -16,7 +16,8 @@ try {
  if((await page.locator("#secondarySvg .se-motif-ring").count())!==loopNucleotides)throw Error("All hairpin loop residues were not outlined.");
  await page.locator('[data-secondary-layout="circular"]').click();
  if((await page.locator("#secondarySvg .se-motif-ring").count())!==loopNucleotides)throw Error("Highlights did not survive a layout change.");
- if(!(await page.locator('#seMotifSize option[value="3"]').isDisabled())||!(await page.locator('#seMotifSize option[value="4"]').isDisabled()))throw Error("Unavailable 3- and 4-nucleotide hairpins should be disabled.");
+ const sizeOptions=await page.locator("#seMotifSize").evaluate(el=>[...el.options].map(o=>({value:o.value,disabled:o.disabled}))); 
+ if(!sizeOptions.find(o=>o.value==="3")?.disabled||!sizeOptions.find(o=>o.value==="4")?.disabled)throw Error("Unavailable 3- and 4-nucleotide hairpins should be disabled: "+JSON.stringify(sizeOptions));
  await page.selectOption("#seMotifSize","7");
  await page.locator("#seMotifStart").click();
  if((await page.locator("#secondarySvg .se-motif-ring").count())!==0)throw Error("Challenge gave away the answer before submission.");
