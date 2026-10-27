@@ -1,0 +1,30 @@
+name: Secondary motif explorer and challenges
+on:
+  push:
+    branches: [feature/secondary-motif-explore-challenges-20261026]
+  pull_request:
+    paths:
+      - secondary-motifs.js
+      - tests/secondary-motifs.cjs
+      - tests/secondary-motifs-browser.mjs
+      - index.html
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  motif-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tests/secondary-motifs.cjs
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - name: Browser UI and selection regression
+        run: |
+          python3 -m http.server 4173 >/tmp/rna-motifs.log 2>&1 &
+          sleep 2
+          node tests/secondary-motifs-browser.mjs
