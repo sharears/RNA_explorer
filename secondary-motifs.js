@@ -197,6 +197,13 @@ function setup(){
  $("seMotifCheck").addEventListener("click",check);
  $("seMotifReveal").addEventListener("click",reveal);
  $("seMotifStop").addEventListener("click",stop);
+ // The native editor selects on pointer-down, before click. In a challenge,
+ // block only that native selection, allowing our additive click handler to run.
+ svg.addEventListener("pointerdown",event=>{
+  if(!challenge||SecondarySelectionTools?.isRegionMode?.()||event.button!==0)return;
+  if(event.target.closest?.("[data-index-label]"))return;
+  if(event.target.closest?.(".se-node"))event.stopImmediatePropagation();
+ },true);
  svg.addEventListener("click",toggleResidue,true);svg.addEventListener("keydown",toggleResidue,true);
  window.addEventListener("rna-secondary-layout",refresh);window.addEventListener("rna-secondary-context",refresh);refresh();
 }
