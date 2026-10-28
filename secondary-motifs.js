@@ -3,42 +3,68 @@
    For hairpins, bulges, and internal loops, targets are unpaired loop residues. */
 const SecondaryMotifExplorer=(()=>{
 "use strict";
-const PINK="#ff1493",TYPES=[
- {id:"hairpin",label:"Hairpin loops",one:"hairpin loop"},
- {id:"bulge",label:"Bulges",one:"bulge"},
- {id:"internal",label:"Internal loops",one:"internal loop"},
- {id:"junction",label:"Multibranch junctions",one:"multibranch junction"}
+const PINK="#ff1493",NS="http://www.w3.org/2000/svg",TYPES=[
+{id:"stem",label:"Stem",one:"stem",description:"A stem is an uninterrupted run of at least three consecutive base pairs, whether or not it ends in a hairpin."},
+{id:"hairpin",label:"Hairpin",one:"hairpin",description:"A hairpin is the terminal unpaired loop together with its single closing base pair. The rest of the stem is excluded."},
+{id:"hairpinLoop",label:"Hairpin Loop",one:"hairpin loop",description:"A hairpin loop contains only the unpaired nucleotides at the end of a stem, without the closing base pair."},
+{id:"internal",label:"Internal Loop",one:"internal loop",description:"An internal loop has unpaired nucleotides on both strands between two paired regions."},
+{id:"bulge",label:"Bulge Loop",one:"bulge loop",description:"A bulge loop has unpaired nucleotides on only one strand between paired regions."},
+{id:"junction",label:"Multi-loop Junction",one:"multi-loop junction",description:"A multi-loop junction connects three or more RNA helices through a central loop, with or without unpaired nucleotides."}
 ],$=id=>document.getElementById(id),range=(a,b)=>Array.from({length:Math.max(0,b-a)},(_,i)=>a+i);
-let motifs=[],signature="",shown=null,challenge=false,kind="hairpin",size="any",answer=[],solved=false;
+const uniq=values=>[...new Set(values)].sort((a,b)=>a-b),pairKey=pair=>pair[0]+":"+pair[1],info=id=>TYPES.find(t=>t.id===id)||TYPES[0];
+let motifs=[],signature="",shown=null,focus=0,challenge=false,kind="hairpinLoop",size="any",answer=[],solved=false,hintLevel=0;
 function identify(sequence,dot){
  if(typeof sequence!=="string"||typeof dot!=="string"||sequence.length!==dot.length||!/^[ACGU]+$/.test(sequence))return [];
- const stack=[],roots=[];
+ const stack=[],roots=[],all=[];
  for(let i=0;i<dot.length;i++){
-  if(dot[i]==="("){const n={i,j:-1,children:[]};if(stack.length)stack[stack.length-1].children.push(n);else roots.push(n);stack.push(n);}
-  else if(dot[i]===")"){if(!stack.length)return [];stack.pop().j=i;}
+  if(dot[i]==="("){
+   const node={i,j:-1,children:[],parent:stack.at(-1)||null};
+   if(node.parent)node.parent.children.push(node);else roots.push(node);
+   stack.push(node);all.push(node);
+  }else if(dot[i]===")"){if(!stack.length)return [];stack.pop().j=i;}
   else if(dot[i]!==".")return [];
  }
  if(stack.length)return [];
  const out=[];
- const add=(type,n,indices,loopSize=indices.length)=>{if(indices.length)out.push({type,start:n.i,end:n.j,indices,size:loopSize});};
- function visit(n){
-  if(!n.children.length)add("hairpin",n,range(n.i+1,n.j));
-  else{
-   let cursor=n.i+1;const gaps=[];
-   n.children.forEach(c=>{gaps.push(range(cursor,c.i));cursor=c.j+1;});gaps.push(range(cursor,n.j));
-   if(n.children.length===1){
-    if(gaps[0].length&&gaps[1].length)add("internal",n,[...gaps[0],...gaps[1]]);
-    else if(gaps[0].length||gaps[1].length)add("bulge",n,[...gaps[0],...gaps[1]]);
+ function add(type,node,indices,pairs=[],size=indices.length,unpairedCount=size){
+  if(indices.length)out.push({type,start:node.i,end:node.j,indices:uniq(indices),pairs,size,unpairedCount});
+ }
+ function visit(node){
+  const kids=node.children;
+  if(!kids.length){
+   const loop=range(node.i+1,node.j);
+   if(loop.length){
+    add("hairpin",node,[node.i,...loop,node.j],[[node.i,node.j]],loop.length);
+    add("hairpinLoop",node,loop,[],loop.length);
+   }
+  }else{
+   let cursor=node.i+1;const gaps=[];
+   kids.forEach(child=>{gaps.push(range(cursor,child.i));cursor=child.j+1;});gaps.push(range(cursor,node.j));
+   const unpaired=gaps.flat();
+   if(kids.length===1){
+    if(gaps[0].length&&gaps[1].length)add("internal",node,unpaired);
+    else if(unpaired.length)add("bulge",node,unpaired);
    }else{
-    const loop=gaps.flat();
-    // Junctions with zero unpaired bases are shown using closing-pair boundaries.
-    const indices=loop.length?loop:[n.i,n.j,...n.children.flatMap(c=>[c.i,c.j])];
-    add("junction",n,[...new Set(indices)],loop.length);
+    const boundaries=[[node.i,node.j],...kids.map(child=>[child.i,child.j])];
+    add("junction",node,[...unpaired,...boundaries.flat()],boundaries,unpaired.length,unpaired.length);
    }
   }
-  n.children.forEach(visit);
+  kids.forEach(visit);
  }
- roots.forEach(visit);return out.sort((a,b)=>a.start-b.start||a.end-b.end);
+ roots.forEach(visit);
+ // Every maximal uninterrupted stack of >=3 pairs is one stem.
+ // Includes stems leading to hairpins and stems ending elsewhere.
+ all.forEach(node=>{
+  if(node.parent&&node.parent.i+1===node.i&&node.parent.j-1===node.j)return;
+  const run=[];let cur=node;
+  while(cur){
+   run.push([cur.i,cur.j]);
+   const child=cur.children.length===1?cur.children[0]:null;
+   cur=child&&child.i===cur.i+1&&child.j===cur.j-1?child:null;
+  }
+  if(run.length>=3)add("stem",node,run.flat(),run,run.length,0);
+ });
+ return out.sort((a,b)=>a.start-b.start||a.end-b.end||TYPES.findIndex(t=>t.id===a.type)-TYPES.findIndex(t=>t.id===b.type));
 }
 const matching=type=>motifs.filter(m=>m.type===type);
 const candidates=()=>matching(kind).filter(m=>size==="any"||m.size===Number(size));
@@ -48,102 +74,159 @@ function selected(){return SecondaryExplorer.getContext?.().selectedResidues||[]
 function paint(){
  const svg=$("secondarySvg");if(!svg)return;
  svg.querySelectorAll(".se-motif-ring").forEach(el=>el.remove());
- const indices=challenge?answer:shown?[...new Set(matching(shown).flatMap(m=>m.indices))]:[];
- indices.forEach(i=>{
+ svg.querySelectorAll(".se-motif-pair").forEach(el=>el.classList.remove("se-motif-pair","se-motif-pair-focus"));
+ const all=challenge?(answer.length?[{indices:answer,pairs:[]}]:[]):shown?matching(shown):[];
+ const active=!challenge&&all.length?all[Math.max(0,Math.min(focus,all.length-1))]:null;
+ const selected=new Set(active?.indices||[]);
+ new Set(all.flatMap(m=>m.indices)).forEach(i=>{
   const node=svg.querySelector('[data-residue-index="'+i+'"]');if(!node)return;
-  const ring=document.createElementNS("http://www.w3.org/2000/svg","circle");
-  ring.setAttribute("class","se-motif-ring");ring.setAttribute("r","23");ring.setAttribute("fill","none");
-  ring.setAttribute("stroke",PINK);ring.setAttribute("stroke-width","5");
-  ring.setAttribute("pointer-events","none");ring.setAttribute("data-export-remove","");
-  node.insertBefore(ring,node.firstChild);
+  const ring=document.createElementNS(NS,"circle");
+  ring.setAttribute("class","se-motif-ring"+(selected.has(i)?" se-motif-ring-focus":""));
+  ring.setAttribute("r","23");ring.setAttribute("fill","none");ring.setAttribute("stroke",PINK);
+  ring.setAttribute("stroke-width","5");ring.setAttribute("pointer-events","none");
+  ring.setAttribute("data-export-remove","");node.insertBefore(ring,node.firstChild);
+ });
+ const colored=new Set(all.flatMap(m=>m.pairs.map(pairKey)));
+ const current=new Set((active?.pairs||[]).map(pairKey));
+ svg.querySelectorAll(".se-pair[data-pair]").forEach(g=>{
+  if(!colored.has(g.dataset.pair))return;
+  g.classList.add("se-motif-pair");if(current.has(g.dataset.pair))g.classList.add("se-motif-pair-focus");
  });
 }
 function sizes(){
- const select=$("seMotifSize");if(!select)return;
+ const el=$("seMotifSize");if(!el)return;
  const found=[...new Set(matching(kind).map(m=>m.size))].sort((a,b)=>a-b);
- const all=[...new Set([...(kind==="hairpin"?[3,4]:[]),...found])].sort((a,b)=>a-b);
- select.replaceChildren(new Option("Any loop size","any"));
- all.forEach(n=>{const item=new Option(n+" unpaired nucleotide"+(n===1?"":"s"),String(n));item.disabled=!found.includes(n);select.append(item);});
+ const shownSizes=[...new Set([...(kind==="hairpin"||kind==="hairpinLoop"?[3,4]:[]),...found])].sort((a,b)=>a-b);
+ el.replaceChildren(new Option("Any size","any"));
+ shownSizes.forEach(n=>{
+  const unit=kind==="stem"?"consecutive base pairs":"unpaired nucleotides";
+  const option=new Option(n+" "+unit,String(n));option.disabled=!found.includes(n);el.append(option);
+ });
  if(size!=="any"&&!found.includes(Number(size)))size="any";
- select.value=size;select.disabled=!found.length;
+ el.value=size;el.disabled=!found.length;
+}
+function describe(){
+ const detail=$("seMotifDetails"),counter=$("seMotifCounter");
+ if(!detail||!counter)return;
+ if(!shown){counter.textContent="";detail.textContent="Select a motif type, then click a highlighted nucleotide or use Previous / Next to learn about each occurrence.";return;}
+ const list=matching(shown);if(!list.length){counter.textContent="0 occurrences";detail.textContent=info(shown).description;return;}
+ focus=(focus+list.length)%list.length;
+ const motif=list[focus],count=motif.unpairedCount;
+ counter.textContent=(focus+1)+" of "+list.length;
+ const sizeText=shown==="stem"?motif.size+" consecutive base pairs":count+" unpaired nucleotide"+(count===1?"":"s");
+ detail.textContent=info(shown).description+" Occurrence "+(focus+1)+": "+sizeText+"; residues "+(motif.start+1)+"–"+(motif.end+1)+".";
 }
 function controls(){
  TYPES.forEach(t=>{
   const button=$("seMotifShow-"+t.id);if(!button)return;
   const count=matching(t.id).length;button.textContent="Show "+t.label+" ("+count+")";
-  button.disabled=!count;button.setAttribute("aria-pressed",String(!challenge&&shown===t.id));
+  button.disabled=false;button.setAttribute("aria-pressed",String(!challenge&&shown===t.id));
  });
- const clear=$("seMotifClear");if(clear)clear.disabled=!shown;
- const types=$("seMotifType");
- if(types){
-  [...types.options].forEach(o=>o.disabled=!matching(o.value).length);
-  if(!matching(kind).length){kind=TYPES.find(t=>matching(t.id).length)?.id||"hairpin";size="any";}
-  types.value=kind;types.disabled=!motifs.length;
- }
+ if($("seMotifClear"))$("seMotifClear").disabled=!shown;
+ for(const id of ["seMotifPrev","seMotifNext"])if($(id))$(id).disabled=challenge||!shown||!matching(shown).length;
+ const select=$("seMotifType");if(select)select.value=kind;
  sizes();
- if($("seMotifStart"))$("seMotifStart").disabled=!motifs.length;
- for(const id of ["seMotifCheck","seMotifReveal","seMotifStop"])if($(id))$(id).disabled=!challenge;
+ if($("seMotifStart"))$("seMotifStart").disabled=!candidates().length;
+ for(const id of ["seMotifCheck","seMotifReveal","seMotifStop","seMotifHint"]){
+  if($(id))$(id).disabled=!challenge||(id==="seMotifHint"&&hintLevel>=3);
+ }
  if($("seMotifPractice"))$("seMotifPractice").classList.toggle("active",challenge);
  if($("scene-secondary"))$("scene-secondary").dataset.motifChallenge=String(challenge);
+ describe();
 }
 function refresh(){
  const context=SecondaryExplorer.getContext?.();if(!context)return;
  const next=context.sequence+"|"+context.structure;
  if(signature!==next){
   signature=next;motifs=identify(context.sequence,context.structure);
-  shown=null;challenge=false;solved=false;answer=[];controls();
-  setStatus(motifs.length?"Found: "+TYPES.map(t=>matching(t.id).length+" "+t.label.toLowerCase()).join(" · ")+".":"No loop motifs recognized in this secondary structure.");
+  shown=null;focus=0;challenge=false;solved=false;answer=[];hintLevel=0;controls();
+  setStatus("Available: "+TYPES.map(t=>t.label+" "+matching(t.id).length).join(" · ")+".");
  }
  paint();
 }
 function show(type){
- if(!matching(type).length)return;
- const wasChallenge=challenge;challenge=false;shown=type;solved=false;answer=[];
+ const wasChallenge=challenge;challenge=false;shown=type;focus=0;solved=false;answer=[];hintLevel=0;
  if(wasChallenge)SecondaryExplorer.clearHighlights();
  controls();paint();
- const sizes=[...new Set(matching(type).map(m=>m.size))].sort((a,b)=>a-b);
- setStatus(matching(type).length+" "+typeName(type)+(matching(type).length===1?"":"s")+" highlighted in hot pink. Unpaired loop sizes: "+sizes.join(", ")+".");
+ const count=matching(type).length;
+ setStatus(count?count+" occurrence"+(count===1?"":"s")+" of "+info(type).label+" highlighted in hot pink. Use Previous / Next or click a highlighted nucleotide to learn more.":"0 occurrences found for "+info(type).label+" in this RNA structure.");
+}
+function navigate(direction){
+ const list=shown?matching(shown):[];if(!list.length||challenge)return;
+ focus=(focus+direction+list.length)%list.length;controls();paint();
+ setStatus(info(shown).label+": occurrence "+(focus+1)+" of "+list.length+".");
 }
 function stop(){
- const wasChallenge=challenge;challenge=false;shown=null;answer=[];solved=false;
+ const wasChallenge=challenge;challenge=false;shown=null;focus=0;answer=[];solved=false;hintLevel=0;
  if(wasChallenge)SecondaryExplorer.clearHighlights();
- controls();paint();
- setStatus("Choose a motif to highlight or start another challenge.");
+ controls();paint();setStatus("Select a motif to highlight or start a learning challenge.");
 }
 function start(){
- if(!candidates().length)return;
- shown=null;challenge=true;answer=[];solved=false;
+ if(!candidates().length){setStatus("0 occurrences found for "+info(kind).label+" at this size. Choose another motif or size.");return;}
+ shown=null;challenge=true;answer=[];solved=false;hintLevel=0;
  SecondarySelectionTools?.remember?.();SecondaryExplorer.clearHighlights();
  controls();paint();
- const phrase=size==="any"?"":" containing "+size+" unpaired nucleotide"+(size==="1"?"":"s");
- setStatus("Find a "+typeName(kind)+phrase+". Select only its unpaired loop residues using single clicks, box, or lasso, then press Check answer.");
+ const phrase=size==="any"?"":kind==="stem"?" with "+size+" consecutive base pairs":" with "+size+" unpaired nucleotides";
+ setStatus("Find a "+info(kind).label+phrase+". Select all nucleotides in the motif, including closing bases for a Hairpin or Junction. Click individual residues or use box/lasso, then Check answer.");
 }
 function sameSet(a,b){return a.length===b.length&&new Set(a).size===a.length&&a.every(i=>b.includes(i));}
 function check(){
  if(!challenge)return;
  const chosen=selected(),match=candidates().find(m=>sameSet(chosen,m.indices));
- if(match){solved=true;answer=match.indices.slice();paint();setStatus("Correct! "+typeName(kind)+" with "+match.size+" unpaired nucleotide"+(match.size===1?"":"s")+".","success");}
- else{solved=false;answer=[];paint();setStatus(chosen.length?"Not quite: "+chosen.length+" residues selected. Select exactly the loop residues and try again.":"Select loop residues first, then check your answer.","error");}
+ if(match){
+  solved=true;answer=match.indices.slice();paint();
+  setStatus("Correct! You found "+info(kind).label+" ("+(kind==="stem"?match.size+" consecutive base pairs":match.unpairedCount+" unpaired nucleotides")+").","success");
+ }else{
+  solved=false;answer=[];paint();
+  setStatus(chosen.length?"Not quite: "+chosen.length+" residues selected. Check the motif boundaries and try again.":"Select motif residues first, then check your answer.","error");
+ }
 }
 function reveal(){
  if(!challenge||!candidates().length)return;
  answer=candidates()[0].indices.slice();paint();
- setStatus("One correct "+typeName(kind)+" is outlined in hot pink. Other motifs of the same size may also be valid.");
+ setStatus("One correct "+info(kind).label+" is outlined in hot pink. Other occurrences of the same size may also be valid.");
 }
-function toggleResidue(event){
- if(!challenge||event.defaultPrevented||SecondarySelectionTools?.isRegionMode?.())return;
+function hint(){
+ if(!challenge||!candidates().length||hintLevel>=3)return;
+ const motif=candidates()[0],len=SecondaryExplorer.getContext?.().sequence.length||1;
+ const zone=motif.start<len/3?"first":motif.start<2*len/3?"middle":"last";
+ const hints=[
+  info(kind).description,
+  "Look in the "+zone+" third of the RNA sequence. This challenge has "+candidates().length+" valid occurrence"+(candidates().length===1?"":"s")+".",
+  kind==="stem"?"The stem has "+motif.size+" consecutive base pairs. Look near residue "+(motif.start+1)+".":"This motif has "+motif.unpairedCount+" unpaired nucleotides. Look near residue "+(Math.floor((motif.start+motif.end)/2)+1)+"."
+ ];
+ setStatus("Hint "+(hintLevel+1)+" of 3: "+hints[hintLevel]);
+ hintLevel++;controls();
+}
+function handlePointerDown(event){
+ if((!challenge&&!shown)||SecondarySelectionTools?.isRegionMode?.()||event.button!==0)return;
+ if(event.target.closest?.("[data-index-label]"))return;
+ const node=event.target.closest?.(".se-node"),pair=event.target.closest?.(".se-pair");
+ const relevant=challenge?!!node:!!node&&matching(shown).some(m=>m.indices.includes(Number(node.dataset.residueIndex)))||!!pair&&matching(shown).some(m=>m.pairs.some(p=>pairKey(p)===pair.dataset.pair));
+ if(relevant)event.stopImmediatePropagation(); // Native editor selects on pointer-down.
+}
+function handleClick(event){
+ if((!challenge&&!shown)||SecondarySelectionTools?.isRegionMode?.())return;
  if(event.type==="keydown"&&!["Enter"," "].includes(event.key))return;
  if(event.type==="click"&&event.button!==0)return;
  if(event.target.closest?.("[data-index-label]"))return;
- const node=event.target.closest?.("[data-residue-index]");
- if(!node||!$("secondarySvg")?.contains(node))return;
- event.preventDefault();event.stopImmediatePropagation();
- const i=Number(node.dataset.residueIndex);if(!Number.isInteger(i))return;
- const next=new Set(selected());if(next.has(i))next.delete(i);else next.add(i);
- SecondarySelectionTools?.remember?.();answer=[];solved=false;
- SecondaryExplorer.highlightResidues([...next]);
- SecondarySelectionTools?.syncSelectionState?.();
- setStatus(next.size+" nucleotide"+(next.size===1?"":"s")+" selected. Check answer when ready.");
+ const node=event.target.closest?.(".se-node"),pair=event.target.closest?.(".se-pair");
+ const index=node?Number(node.dataset.residueIndex):null;
+ if(challenge){
+  if(!Number.isInteger(index))return;
+  event.preventDefault();event.stopImmediatePropagation();
+  const next=new Set(selected());if(next.has(index))next.delete(index);else next.add(index);
+  SecondarySelectionTools?.remember?.();answer=[];solved=false;
+  SecondaryExplorer.highlightResidues([...next]);SecondarySelectionTools?.syncSelectionState?.();
+  setStatus(next.size+" nucleotide"+(next.size===1?"":"s")+" selected. Check answer when ready.");
+ }else{
+  const list=matching(shown);
+  const target=list.findIndex(m=>index!==null?m.indices.includes(index):pair&&m.pairs.some(p=>pairKey(p)===pair.dataset.pair));
+  if(target<0)return;
+  event.preventDefault();event.stopImmediatePropagation();
+  focus=target;controls();paint();
+  setStatus(info(shown).label+" "+(focus+1)+" of "+list.length+" selected. Read the explanation below.");
+ }
 }
 function setup(){
  const panel=document.querySelector('#scene-secondary .rna-tool-panel[data-rna-panel="analyze"]'),svg=$("secondarySvg");
@@ -167,26 +250,38 @@ function setup(){
   '#seMotifStatus{min-height:2.8em;overflow-wrap:anywhere}',
   '#seMotifStatus[data-level="success"]{color:#74d7b6}',
   '#seMotifStatus[data-level="error"]{color:#ffc1c1}',
+  '#seMotifCounter{color:#ff8ec8;font-weight:750;align-self:center}',
+  '#seMotifLearn{margin-top:.7rem;padding:.6rem;border:1px solid var(--line);border-radius:8px}',
+  '#seMotifDetails{min-height:3em}',
+  '#secondarySvg .se-motif-ring-focus{stroke-dasharray:8 3}',
+  '#secondarySvg .se-motif-pair path:not([stroke="transparent"]){stroke:#ff1493!important;stroke-width:5!important}',
+  '#secondarySvg .se-motif-pair-focus path:not([stroke="transparent"]){stroke-width:7!important}',
   '#scene-secondary[data-motif-challenge="true"] .se-node.multi-selected>circle:first-child{stroke:#ff1493!important;stroke-width:4!important}',
   '.se-motif-ring{filter:drop-shadow(0 0 5px rgba(255,20,147,.65))}'
  ].join("\n");document.head.append(style);
  const block=document.createElement("details");block.id="seMotifTools";block.open=true;
  block.innerHTML=[
  '<summary>Learn · Identify RNA motifs</summary>',
- '<p>Motifs are identified from dot-bracket pairing topology. Pink rings mark the unpaired loop nucleotides.</p>',
+ '<p>Motifs are identified from dot-bracket pairing. A hairpin includes its closing base pair; a hairpin loop includes only unpaired nucleotides. All occurrences are highlighted in hot pink.</p>',
  '<h4>Show structural motifs</h4>',
  '<div class="se-motif-grid" id="seMotifButtons"></div>',
  '<button id="seMotifClear" type="button">Clear motif highlights</button>',
+ '<section id="seMotifLearn"><h4>Learn · Explore motifs</h4>',
+ '<div class="se-motif-actions"><button id="seMotifPrev" type="button">← Previous motif</button>',
+ '<span id="seMotifCounter" aria-live="polite"></span>',
+ '<button id="seMotifNext" type="button">Next motif →</button></div>',
+ '<p id="seMotifDetails">Select a motif to see an explanation.</p></section>',
  '<section id="seMotifPractice"><h4>Practice · Find the motif</h4>',
- '<p>Choose a motif and size. Unavailable choices are gray and disabled.</p>',
+ '<p>Choose a motif and size. Sizes not present in the current structure are disabled. Zero-occurrence motif types are still available to explore.</p>',
  '<label>Motif type<select id="seMotifType"></select></label>',
- '<label>Loop size<select id="seMotifSize"></select></label>',
+ '<label>Motif size<select id="seMotifSize"></select></label>',
  '<div class="se-motif-actions">',
  '<button id="seMotifStart" type="button">Start challenge</button>',
  '<button id="seMotifCheck" type="button" disabled>Check answer</button>',
+ '<button id="seMotifHint" type="button" disabled>Get hint</button>',
  '<button id="seMotifReveal" type="button" disabled>Show answer</button>',
  '<button id="seMotifStop" type="button" disabled>Stop</button></div>',
- '<p>During practice, click nucleotides to add or remove them. Box and lasso selection also work through the Select tab.</p>',
+ '<p>During practice, select every nucleotide belonging to the motif using single clicks or Select → box/lasso. For Hairpin and Junction, include the closing base-pair nucleotides. Hints do not reveal the answer.</p>',
  '</section><p id="seMotifStatus" role="status" aria-live="polite"></p>'
  ].join("");panel.prepend(block);
  TYPES.forEach(t=>{
@@ -194,21 +289,18 @@ function setup(){
   button.addEventListener("click",()=>show(t.id));$("seMotifButtons").append(button);
   $("seMotifType").append(new Option(t.label,t.id));
  });
- $("seMotifClear").addEventListener("click",()=>{shown=null;controls();paint();setStatus("Motif highlights cleared.");});
+ $("seMotifClear").addEventListener("click",stop);
+ $("seMotifPrev").addEventListener("click",()=>navigate(-1));
+ $("seMotifNext").addEventListener("click",()=>navigate(1));
  $("seMotifType").addEventListener("change",e=>{kind=e.target.value;size="any";stop();});
- $("seMotifSize").addEventListener("change",e=>{size=e.target.value;if(challenge)stop();});
+ $("seMotifSize").addEventListener("change",e=>{size=e.target.value;if(challenge)stop();else controls();});
  $("seMotifStart").addEventListener("click",start);
  $("seMotifCheck").addEventListener("click",check);
+ $("seMotifHint").addEventListener("click",hint);
  $("seMotifReveal").addEventListener("click",reveal);
  $("seMotifStop").addEventListener("click",stop);
- // The native editor selects on pointer-down, before click. In a challenge,
- // block only that native selection, allowing our additive click handler to run.
- svg.addEventListener("pointerdown",event=>{
-  if(!challenge||SecondarySelectionTools?.isRegionMode?.()||event.button!==0)return;
-  if(event.target.closest?.("[data-index-label]"))return;
-  if(event.target.closest?.(".se-node"))event.stopImmediatePropagation();
- },true);
- svg.addEventListener("click",toggleResidue,true);svg.addEventListener("keydown",toggleResidue,true);
+ svg.addEventListener("pointerdown",handlePointerDown,true);
+ svg.addEventListener("click",handleClick,true);svg.addEventListener("keydown",handleClick,true);
  window.addEventListener("rna-secondary-layout",refresh);window.addEventListener("rna-secondary-context",refresh);refresh();
 }
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",setup,{once:true});else setup();
