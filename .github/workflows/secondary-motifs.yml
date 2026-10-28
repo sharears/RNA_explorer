@@ -1,7 +1,7 @@
 name: Secondary motif explorer and challenges
 on:
   push:
-    branches: [feature/secondary-motif-explore-challenges-20261026]
+    branches: [feature/secondary-six-motifs-guided-20261027]
   pull_request:
     paths:
       - secondary-motifs.js
