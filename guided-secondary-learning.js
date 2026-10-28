@@ -233,7 +233,7 @@ function installStyles(){
   '.gps-motif-choices select{min-width:0;width:100%}',
   '.gps-motif-state{min-height:1.6em;color:var(--mint)}',
   'body[data-page-mode="journey"] #scene-secondary[data-guided-motif="explore"] .se-node.multi-selected>circle:first-child,body[data-page-mode="journey"] #scene-secondary[data-guided-motif="test"] .se-node.multi-selected>circle:first-child{stroke:#ff1493!important;stroke-width:5!important}',
-  'body[data-page-mode="journey"] #scene-secondary .se-pair.gps-motif-pair path,body[data-page-mode="journey"] #scene-secondary .se-pair.gps-motif-pair line{stroke:#ff1493!important;stroke-width:4!important}',
+  'body[data-page-mode="journey"] #scene-secondary .se-pair.gps-motif-pair path:not([stroke="transparent"]),body[data-page-mode="journey"] #scene-secondary .se-pair.gps-motif-pair line:not([stroke="transparent"]){stroke:#ff1493!important;stroke-width:4!important}',
   '#secondarySvg .gps-test-outline{stroke:#ff1493;stroke-width:2.5;stroke-dasharray:7 4;fill:rgba(255,20,147,.08)}',
   '@media(max-width:760px){body[data-page-mode="journey"] .gps-motif-card{padding:24px 20px}.gps-motif-choices{grid-template-columns:1fr}}'
  ].join("\n");document.head.append(el);
