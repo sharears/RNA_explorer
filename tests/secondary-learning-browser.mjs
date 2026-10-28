@@ -57,7 +57,7 @@ async function trial(settings,mobile){
   const target=await page.evaluate(()=>GuidedSecondaryLearning.getMotifs().find(m=>m.type==="hairpinLoop"&&m.size===7).indices);
   if(!mobile){
    for(const i of target)await page.locator('#secondarySvg .se-node[data-residue-index="'+i+'"]').click();
-   check((await page.locator("#secondarySvg .se-node.multi-selected").count())===target.length,"Single selection did not accumulate");
+   check((await page.locator("#secondarySvg .se-node.multi-selected").count())===target.length,"Single selection did not accumulate: "+JSON.stringify(await page.evaluate(()=>({selected:SecondaryExplorer.getContext().selectedResidues,feedback:document.getElementById("gpsTestFeedback").textContent,expected:GuidedSecondaryLearning.getMotifs().find(m=>m.type==="hairpinLoop"&&m.size===7).indices}))));
    await page.locator("#gpsTestCheck").click();
    check((await page.locator("#gpsTestFeedback").innerText()).includes("Correct!"),"Correct selection rejected");
   }else{
