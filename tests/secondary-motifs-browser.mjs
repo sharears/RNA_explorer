@@ -54,7 +54,7 @@ try {
  ok((await page.locator("#secondarySvg .se-motif-ring").count())===stemCount,"Stems highlights didn't survive changing layout");
  // Junction should remain selectable separately.
  await page.locator("#seMotifShow-junction").click();
- ok((await page.locator("#secondarySvg .se-motif-pair").count())===3,"Junction closing pairs missing");
+ ok((await page.locator("#secondarySvg .se-motif-pair").count())===motifs.find(m=>m.type==="junction").pairs.length,"Junction closing pairs missing");
  // Challenge: no answer shown until user checks or explicitly asks for it.
  await page.locator("#seMotifShow-hairpinLoop").click();
  await page.selectOption("#seMotifType","hairpinLoop");
