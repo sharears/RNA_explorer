@@ -149,6 +149,7 @@ function hint(){
  hintCount++;setText("gpsTestFeedback","Hint "+hintCount+" of 3: "+clues[hintCount-1]);renderTest();
 }
 function onClick(event){
+ window.__rnaClickTrace=(window.__rnaClickTrace||[]);window.__rnaClickTrace.push({tag:event.target.tagName,node:event.target.closest?.(".se-node")?.dataset.residueIndex,learn:isLearn(),phase,active:quizActive,selectMode});
  if(!isLearn())return;
  const node=event.target.closest?.(".se-node");
  if(!node||event.target.closest?.("[data-index-label]"))return;
