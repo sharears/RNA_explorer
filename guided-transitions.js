@@ -704,7 +704,7 @@ const GuidedStructureTransitions = (() => {
   function enter(sceneName){
     if(!isJourney())return;
     if(sceneName==="primary")buildPrimaryDirectionLesson();
-    if(sceneName==="secondary"){buildSecondaryTransition();configureLearningControls("secondary");}
+    if(sceneName==="secondary"){buildSecondaryTransition();configureLearningControls("secondary");if(typeof GuidedSecondaryLearning!=="undefined")GuidedSecondaryLearning.ensure();}
     if(sceneName==="tertiary"){buildTertiaryTransition();configureLearningControls("tertiary");if(typeof TertiaryExplorer!=="undefined")TertiaryExplorer.render();}
   }
   function resetForJourney(){state.secondaryReady=true;state.tertiaryReady=true;}
