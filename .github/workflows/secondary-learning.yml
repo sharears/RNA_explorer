@@ -1,0 +1,32 @@
+name: Secondary Learn exploration and testing
+on:
+  push:
+    branches: [main, feature/learn-secondary-explore-and-quiz-20261028]
+  pull_request:
+    paths:
+      - guided-secondary-learning.js
+      - guided-transitions.js
+      - index.html
+      - tests/secondary-learning.cjs
+      - tests/secondary-learning-browser.mjs
+      - .github/workflows/secondary-learning.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  learn-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tests/secondary-learning.cjs
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - name: Learn desktop and phone browser regression
+        run: |
+          python3 -m http.server 4173 >/tmp/rna-secondary-learning.log 2>&1 &
+          sleep 2
+          node tests/secondary-learning-browser.mjs
