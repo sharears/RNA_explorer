@@ -56,8 +56,9 @@ async function trial(settings,mobile){
   }
   const target=await page.evaluate(()=>GuidedSecondaryLearning.getMotifs().find(m=>m.type==="hairpinLoop"&&m.size===7).indices);
   if(!mobile){
+   await page.evaluate(()=>document.getElementById("secondarySvg").addEventListener("click",e=>{window.__rnaProbe=window.__rnaProbe||[];window.__rnaProbe.push({tag:e.target.tagName,node:e.target.closest?.(".se-node")?.dataset.residueIndex})},true));
    for(const i of target)await page.locator('#secondarySvg .se-node[data-residue-index="'+i+'"]').click();
-   check((await page.locator("#secondarySvg .se-node.multi-selected").count())===target.length,"Single selection did not accumulate: "+JSON.stringify(await page.evaluate(()=>({selected:SecondaryExplorer.getContext().selectedResidues,feedback:document.getElementById("gpsTestFeedback").textContent,expected:GuidedSecondaryLearning.getMotifs().find(m=>m.type==="hairpinLoop"&&m.size===7).indices,trace:window.__rnaClickTrace,mode:document.getElementById("scene-secondary").dataset.guidedMotif}))));
+   check((await page.locator("#secondarySvg .se-node.multi-selected").count())===target.length,"Single selection did not accumulate: "+JSON.stringify(await page.evaluate(()=>({selected:SecondaryExplorer.getContext().selectedResidues,feedback:document.getElementById("gpsTestFeedback").textContent,expected:GuidedSecondaryLearning.getMotifs().find(m=>m.type==="hairpinLoop"&&m.size===7).indices,trace:window.__rnaClickTrace,probe:window.__rnaProbe,mode:document.getElementById("scene-secondary").dataset.guidedMotif}))));
    await page.locator("#gpsTestCheck").click();
    check((await page.locator("#gpsTestFeedback").innerText()).includes("Correct!"),"Correct selection rejected");
   }else{
