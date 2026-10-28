@@ -250,26 +250,38 @@ function setup(){
   '#seMotifStatus{min-height:2.8em;overflow-wrap:anywhere}',
   '#seMotifStatus[data-level="success"]{color:#74d7b6}',
   '#seMotifStatus[data-level="error"]{color:#ffc1c1}',
+  '#seMotifCounter{color:#ff8ec8;font-weight:750;align-self:center}',
+  '#seMotifLearn{margin-top:.7rem;padding:.6rem;border:1px solid var(--line);border-radius:8px}',
+  '#seMotifDetails{min-height:3em}',
+  '#secondarySvg .se-motif-ring-focus{stroke-dasharray:8 3}',
+  '#secondarySvg .se-motif-pair path:not([stroke="transparent"]){stroke:#ff1493!important;stroke-width:5!important}',
+  '#secondarySvg .se-motif-pair-focus path:not([stroke="transparent"]){stroke-width:7!important}',
   '#scene-secondary[data-motif-challenge="true"] .se-node.multi-selected>circle:first-child{stroke:#ff1493!important;stroke-width:4!important}',
   '.se-motif-ring{filter:drop-shadow(0 0 5px rgba(255,20,147,.65))}'
  ].join("\n");document.head.append(style);
  const block=document.createElement("details");block.id="seMotifTools";block.open=true;
  block.innerHTML=[
  '<summary>Learn · Identify RNA motifs</summary>',
- '<p>Motifs are identified from dot-bracket pairing topology. Pink rings mark the unpaired loop nucleotides.</p>',
+ '<p>Motifs are identified from dot-bracket pairing. A hairpin includes its closing base pair; a hairpin loop includes only unpaired nucleotides. All occurrences are highlighted in hot pink.</p>',
  '<h4>Show structural motifs</h4>',
  '<div class="se-motif-grid" id="seMotifButtons"></div>',
  '<button id="seMotifClear" type="button">Clear motif highlights</button>',
+ '<section id="seMotifLearn"><h4>Learn · Explore motifs</h4>',
+ '<div class="se-motif-actions"><button id="seMotifPrev" type="button">← Previous motif</button>',
+ '<span id="seMotifCounter" aria-live="polite"></span>',
+ '<button id="seMotifNext" type="button">Next motif →</button></div>',
+ '<p id="seMotifDetails">Select a motif to see an explanation.</p></section>',
  '<section id="seMotifPractice"><h4>Practice · Find the motif</h4>',
- '<p>Choose a motif and size. Unavailable choices are gray and disabled.</p>',
+ '<p>Choose a motif and size. Sizes not present in the current structure are disabled. Zero-occurrence motif types are still available to explore.</p>',
  '<label>Motif type<select id="seMotifType"></select></label>',
- '<label>Loop size<select id="seMotifSize"></select></label>',
+ '<label>Motif size<select id="seMotifSize"></select></label>',
  '<div class="se-motif-actions">',
  '<button id="seMotifStart" type="button">Start challenge</button>',
  '<button id="seMotifCheck" type="button" disabled>Check answer</button>',
+ '<button id="seMotifHint" type="button" disabled>Get hint</button>',
  '<button id="seMotifReveal" type="button" disabled>Show answer</button>',
  '<button id="seMotifStop" type="button" disabled>Stop</button></div>',
- '<p>During practice, click nucleotides to add or remove them. Box and lasso selection also work through the Select tab.</p>',
+ '<p>During practice, select every nucleotide belonging to the motif using single clicks or Select → box/lasso. For Hairpin and Junction, include the closing base-pair nucleotides. Hints do not reveal the answer.</p>',
  '</section><p id="seMotifStatus" role="status" aria-live="polite"></p>'
  ].join("");panel.prepend(block);
  TYPES.forEach(t=>{
@@ -277,21 +289,18 @@ function setup(){
   button.addEventListener("click",()=>show(t.id));$("seMotifButtons").append(button);
   $("seMotifType").append(new Option(t.label,t.id));
  });
- $("seMotifClear").addEventListener("click",()=>{shown=null;controls();paint();setStatus("Motif highlights cleared.");});
+ $("seMotifClear").addEventListener("click",stop);
+ $("seMotifPrev").addEventListener("click",()=>navigate(-1));
+ $("seMotifNext").addEventListener("click",()=>navigate(1));
  $("seMotifType").addEventListener("change",e=>{kind=e.target.value;size="any";stop();});
- $("seMotifSize").addEventListener("change",e=>{size=e.target.value;if(challenge)stop();});
+ $("seMotifSize").addEventListener("change",e=>{size=e.target.value;if(challenge)stop();else controls();});
  $("seMotifStart").addEventListener("click",start);
  $("seMotifCheck").addEventListener("click",check);
+ $("seMotifHint").addEventListener("click",hint);
  $("seMotifReveal").addEventListener("click",reveal);
  $("seMotifStop").addEventListener("click",stop);
- // The native editor selects on pointer-down, before click. In a challenge,
- // block only that native selection, allowing our additive click handler to run.
- svg.addEventListener("pointerdown",event=>{
-  if(!challenge||SecondarySelectionTools?.isRegionMode?.()||event.button!==0)return;
-  if(event.target.closest?.("[data-index-label]"))return;
-  if(event.target.closest?.(".se-node"))event.stopImmediatePropagation();
- },true);
- svg.addEventListener("click",toggleResidue,true);svg.addEventListener("keydown",toggleResidue,true);
+ svg.addEventListener("pointerdown",handlePointerDown,true);
+ svg.addEventListener("click",handleClick,true);svg.addEventListener("keydown",handleClick,true);
  window.addEventListener("rna-secondary-layout",refresh);window.addEventListener("rna-secondary-context",refresh);refresh();
 }
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",setup,{once:true});else setup();
