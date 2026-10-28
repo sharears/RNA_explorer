@@ -3,42 +3,68 @@
    For hairpins, bulges, and internal loops, targets are unpaired loop residues. */
 const SecondaryMotifExplorer=(()=>{
 "use strict";
-const PINK="#ff1493",TYPES=[
- {id:"hairpin",label:"Hairpin loops",one:"hairpin loop"},
- {id:"bulge",label:"Bulges",one:"bulge"},
- {id:"internal",label:"Internal loops",one:"internal loop"},
- {id:"junction",label:"Multibranch junctions",one:"multibranch junction"}
+const PINK="#ff1493",NS="http://www.w3.org/2000/svg",TYPES=[
+{id:"stem",label:"Stem",one:"stem",description:"A stem is an uninterrupted run of at least three consecutive base pairs, whether or not it ends in a hairpin."},
+{id:"hairpin",label:"Hairpin",one:"hairpin",description:"A hairpin is the terminal unpaired loop together with its single closing base pair. The rest of the stem is excluded."},
+{id:"hairpinLoop",label:"Hairpin Loop",one:"hairpin loop",description:"A hairpin loop contains only the unpaired nucleotides at the end of a stem, without the closing base pair."},
+{id:"internal",label:"Internal Loop",one:"internal loop",description:"An internal loop has unpaired nucleotides on both strands between two paired regions."},
+{id:"bulge",label:"Bulge Loop",one:"bulge loop",description:"A bulge loop has unpaired nucleotides on only one strand between paired regions."},
+{id:"junction",label:"Multi-loop Junction",one:"multi-loop junction",description:"A multi-loop junction connects three or more RNA helices through a central loop, with or without unpaired nucleotides."}
 ],$=id=>document.getElementById(id),range=(a,b)=>Array.from({length:Math.max(0,b-a)},(_,i)=>a+i);
-let motifs=[],signature="",shown=null,challenge=false,kind="hairpin",size="any",answer=[],solved=false;
+const uniq=values=>[...new Set(values)].sort((a,b)=>a-b),pairKey=pair=>pair[0]+":"+pair[1],info=id=>TYPES.find(t=>t.id===id)||TYPES[0];
+let motifs=[],signature="",shown=null,focus=0,challenge=false,kind="hairpinLoop",size="any",answer=[],solved=false,hintLevel=0;
 function identify(sequence,dot){
  if(typeof sequence!=="string"||typeof dot!=="string"||sequence.length!==dot.length||!/^[ACGU]+$/.test(sequence))return [];
- const stack=[],roots=[];
+ const stack=[],roots=[],all=[];
  for(let i=0;i<dot.length;i++){
-  if(dot[i]==="("){const n={i,j:-1,children:[]};if(stack.length)stack[stack.length-1].children.push(n);else roots.push(n);stack.push(n);}
-  else if(dot[i]===")"){if(!stack.length)return [];stack.pop().j=i;}
+  if(dot[i]==="("){
+   const node={i,j:-1,children:[],parent:stack.at(-1)||null};
+   if(node.parent)node.parent.children.push(node);else roots.push(node);
+   stack.push(node);all.push(node);
+  }else if(dot[i]===")"){if(!stack.length)return [];stack.pop().j=i;}
   else if(dot[i]!==".")return [];
  }
  if(stack.length)return [];
  const out=[];
- const add=(type,n,indices,loopSize=indices.length)=>{if(indices.length)out.push({type,start:n.i,end:n.j,indices,size:loopSize});};
- function visit(n){
-  if(!n.children.length)add("hairpin",n,range(n.i+1,n.j));
-  else{
-   let cursor=n.i+1;const gaps=[];
-   n.children.forEach(c=>{gaps.push(range(cursor,c.i));cursor=c.j+1;});gaps.push(range(cursor,n.j));
-   if(n.children.length===1){
-    if(gaps[0].length&&gaps[1].length)add("internal",n,[...gaps[0],...gaps[1]]);
-    else if(gaps[0].length||gaps[1].length)add("bulge",n,[...gaps[0],...gaps[1]]);
+ function add(type,node,indices,pairs=[],size=indices.length,unpairedCount=size){
+  if(indices.length)out.push({type,start:node.i,end:node.j,indices:uniq(indices),pairs,size,unpairedCount});
+ }
+ function visit(node){
+  const kids=node.children;
+  if(!kids.length){
+   const loop=range(node.i+1,node.j);
+   if(loop.length){
+    add("hairpin",node,[node.i,...loop,node.j],[[node.i,node.j]],loop.length);
+    add("hairpinLoop",node,loop,[],loop.length);
+   }
+  }else{
+   let cursor=node.i+1;const gaps=[];
+   kids.forEach(child=>{gaps.push(range(cursor,child.i));cursor=child.j+1;});gaps.push(range(cursor,node.j));
+   const unpaired=gaps.flat();
+   if(kids.length===1){
+    if(gaps[0].length&&gaps[1].length)add("internal",node,unpaired);
+    else if(unpaired.length)add("bulge",node,unpaired);
    }else{
-    const loop=gaps.flat();
-    // Junctions with zero unpaired bases are shown using closing-pair boundaries.
-    const indices=loop.length?loop:[n.i,n.j,...n.children.flatMap(c=>[c.i,c.j])];
-    add("junction",n,[...new Set(indices)],loop.length);
+    const boundaries=[[node.i,node.j],...kids.map(child=>[child.i,child.j])];
+    add("junction",node,[...unpaired,...boundaries.flat()],boundaries,unpaired.length,unpaired.length);
    }
   }
-  n.children.forEach(visit);
+  kids.forEach(visit);
  }
- roots.forEach(visit);return out.sort((a,b)=>a.start-b.start||a.end-b.end);
+ roots.forEach(visit);
+ // Every maximal uninterrupted stack of >=3 pairs is one stem.
+ // Includes stems leading to hairpins and stems ending elsewhere.
+ all.forEach(node=>{
+  if(node.parent&&node.parent.i+1===node.i&&node.parent.j-1===node.j)return;
+  const run=[];let cur=node;
+  while(cur){
+   run.push([cur.i,cur.j]);
+   const child=cur.children.length===1?cur.children[0]:null;
+   cur=child&&child.i===cur.i+1&&child.j===cur.j-1?child:null;
+  }
+  if(run.length>=3)add("stem",node,run.flat(),run,run.length,0);
+ });
+ return out.sort((a,b)=>a.start-b.start||a.end-b.end||TYPES.findIndex(t=>t.id===a.type)-TYPES.findIndex(t=>t.id===b.type));
 }
 const matching=type=>motifs.filter(m=>m.type===type);
 const candidates=()=>matching(kind).filter(m=>size==="any"||m.size===Number(size));
@@ -48,14 +74,23 @@ function selected(){return SecondaryExplorer.getContext?.().selectedResidues||[]
 function paint(){
  const svg=$("secondarySvg");if(!svg)return;
  svg.querySelectorAll(".se-motif-ring").forEach(el=>el.remove());
- const indices=challenge?answer:shown?[...new Set(matching(shown).flatMap(m=>m.indices))]:[];
- indices.forEach(i=>{
+ svg.querySelectorAll(".se-motif-pair").forEach(el=>el.classList.remove("se-motif-pair","se-motif-pair-focus"));
+ const all=challenge?(answer.length?[{indices:answer,pairs:[]}]:[]):shown?matching(shown):[];
+ const active=!challenge&&all.length?all[Math.max(0,Math.min(focus,all.length-1))]:null;
+ const selected=new Set(active?.indices||[]);
+ new Set(all.flatMap(m=>m.indices)).forEach(i=>{
   const node=svg.querySelector('[data-residue-index="'+i+'"]');if(!node)return;
-  const ring=document.createElementNS("http://www.w3.org/2000/svg","circle");
-  ring.setAttribute("class","se-motif-ring");ring.setAttribute("r","23");ring.setAttribute("fill","none");
-  ring.setAttribute("stroke",PINK);ring.setAttribute("stroke-width","5");
-  ring.setAttribute("pointer-events","none");ring.setAttribute("data-export-remove","");
-  node.insertBefore(ring,node.firstChild);
+  const ring=document.createElementNS(NS,"circle");
+  ring.setAttribute("class","se-motif-ring"+(selected.has(i)?" se-motif-ring-focus":""));
+  ring.setAttribute("r","23");ring.setAttribute("fill","none");ring.setAttribute("stroke",PINK);
+  ring.setAttribute("stroke-width","5");ring.setAttribute("pointer-events","none");
+  ring.setAttribute("data-export-remove","");node.insertBefore(ring,node.firstChild);
+ });
+ const colored=new Set(all.flatMap(m=>m.pairs.map(pairKey)));
+ const current=new Set((active?.pairs||[]).map(pairKey));
+ svg.querySelectorAll(".se-pair[data-pair]").forEach(g=>{
+  if(!colored.has(g.dataset.pair))return;
+  g.classList.add("se-motif-pair");if(current.has(g.dataset.pair))g.classList.add("se-motif-pair-focus");
  });
 }
 function sizes(){
