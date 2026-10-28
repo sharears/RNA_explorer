@@ -61,9 +61,8 @@ async function trial(settings,mobile){
    await page.locator("#gpsTestCheck").click();
    check((await page.locator("#gpsTestFeedback").innerText()).includes("Correct!"),"Correct selection rejected");
   }else{
-   await page.evaluate(()=>{window.__tapEvents=[];document.addEventListener("pointerdown",e=>window.__tapEvents.push({tag:e.target.tagName,node:e.target.closest?.(".se-node")?.dataset.residueIndex,button:e.button,pointerType:e.pointerType}),true);});
    await page.locator('#secondarySvg .se-node[data-residue-index="'+target[0]+'"]').tap();
-   check((await page.locator("#secondarySvg .se-node.multi-selected").count())===1,"Phone tap did not select: "+JSON.stringify(await page.evaluate(()=>({events:window.__tapEvents,selected:SecondaryExplorer.getContext().selectedResidues,feedback:document.getElementById("gpsTestFeedback").textContent,phase:document.getElementById("scene-secondary").dataset.guidedMotif}))));
+   check((await page.locator("#secondarySvg .se-node.multi-selected").count())===1,"Phone tap did not select");
    await page.locator("#gpsTestReveal").tap();
    check((await page.locator("#secondarySvg .se-node.multi-selected").count())===target.length,"Phone Show answer did not work");
   }
