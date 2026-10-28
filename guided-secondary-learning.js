@@ -149,8 +149,7 @@ function hint(){
  hintCount++;setText("gpsTestFeedback","Hint "+hintCount+" of 3: "+clues[hintCount-1]);renderTest();
 }
 function onClick(event){
- window.__rnaClickTrace=(window.__rnaClickTrace||[]);window.__rnaClickTrace.push({tag:event.target.tagName,node:event.target.closest?.(".se-node")?.dataset.residueIndex,learn:isLearn(),phase,active:quizActive,selectMode});
- if(!isLearn())return;
+ if(!isLearn()||(event.type==="pointerdown"&&event.button!==0))return;
  const node=event.target.closest?.(".se-node");
  if(!node||event.target.closest?.("[data-index-label]"))return;
  const idx=Number(node.dataset.residueIndex);if(!Number.isInteger(idx))return;
@@ -291,7 +290,7 @@ function ensure(){
   selectMode=button.dataset.gpsSelect;renderTest();
   if(quizActive)setText("gpsTestFeedback",selectMode==="single"?"Tap individual nucleotides to select them.":"Drag a "+(selectMode==="box"?"rectangle":"lasso")+" around motif residues.");
  }));
- const svg=$("secondarySvg");svg.addEventListener("click",onClick,true);
+ const svg=$("secondarySvg");svg.addEventListener("pointerdown",onClick,true);svg.addEventListener("click",onClick,true);
  svg.addEventListener("pointerdown",down,true);svg.addEventListener("pointermove",drag,true);
  svg.addEventListener("pointerup",up,true);
  svg.addEventListener("pointercancel",e=>{if(gesture?.id===e.pointerId){gesture=null;draw();}},true);
