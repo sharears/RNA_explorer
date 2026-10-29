@@ -298,6 +298,10 @@ function ensure(){
  window.addEventListener("rna-secondary-layout",()=>{if(isLearn()){read();paint();}});
  setMode("explore");renderExplore();renderTest();
  setText("gpsExploreStatus","Select a motif to explore.");
+ // The homepage Practice link should land on the dynamically inserted challenge.
+ if(window.location.hash==="#gpsSecondaryLandmarks"){
+  requestAnimationFrame(()=>old.scrollIntoView({behavior:"auto",block:"start"}));
+ }
 }
 if(typeof document!=="undefined"){
  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",ensure,{once:true});else ensure();

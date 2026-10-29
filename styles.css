@@ -853,6 +853,24 @@ body[data-workspace-hub="true"] .scene-footer{
   font-size:1.15rem;
 }
 .workspace-empty-note span{line-height:1.55}
+
+/* Direct import actions appear only in the empty custom 3D viewer. */
+#tertiaryStage .te-empty-import-actions{display:grid;gap:12px;width:min(100%,370px);margin:8px auto 0;text-align:left}
+#tertiaryStage .te-empty-file-picker{position:relative;display:block;min-height:48px;padding:13px 16px;border-radius:8px;background:var(--mint);color:var(--ink);font-weight:750;text-align:center;cursor:pointer}
+#tertiaryStage .te-empty-file-picker input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+#tertiaryStage .te-empty-file-picker:focus-within{outline:3px solid var(--cream);outline-offset:3px}
+#tertiaryStage .te-empty-pdb-form{display:grid;gap:7px}
+#tertiaryStage .te-empty-pdb-form>label{color:var(--cream);font-size:.86rem}
+#tertiaryStage .te-empty-pdb-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+#tertiaryStage .te-empty-pdb-row input{min-width:0;padding:11px 10px;background:#091321;color:var(--text);border:1px solid var(--line);border-radius:8px;font:inherit}
+#tertiaryStage .te-empty-pdb-row button{padding:11px 12px;border:1px solid var(--mint);border-radius:8px;background:rgba(116,215,182,.09);color:var(--mint);font:inherit;font-weight:700;cursor:pointer}
+#tertiaryStage .te-empty-pdb-row button:hover{background:rgba(116,215,182,.17)}
+#tertiaryStage #teEmptyImportStatus{min-height:1.4em;margin:0;color:var(--cream);font-size:.82rem;line-height:1.5}
+@media(max-width:540px){
+  #tertiaryStage .workspace-empty-note{width:100%;padding:24px 18px}
+  #tertiaryStage .te-empty-pdb-row{grid-template-columns:minmax(0,1fr)}
+}
+
 body[data-workspace-blank="secondary"] #scene-secondary .secondary-stage > :not(.workspace-empty-note){display:none!important}
 body[data-workspace-blank="tertiary"] #tertiaryStage > :not(.workspace-empty-note){display:none!important}
 

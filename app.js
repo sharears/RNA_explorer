@@ -435,8 +435,37 @@ function prepareTertiaryCustomStart(){
   if(stage){
     const note=document.createElement("div");
     note.className="workspace-empty-note";
-    note.innerHTML="<strong>Load a 3D RNA structure</strong><span>Use the import controls to upload PDB/mmCIF coordinates or enter a PDB ID.</span>";
+    note.innerHTML=`
+      <strong>Load a 3D RNA structure</strong>
+      <span>Choose a file from your device or enter a PDB ID to begin.</span>
+      <div class="te-empty-import-actions">
+        <label class="te-empty-file-picker">Choose PDB / mmCIF file
+          <input id="teEmptyStructureFile" type="file" accept=".pdb,.ent,.cif,.mmcif,chemical/x-pdb,chemical/x-cif">
+        </label>
+        <form id="teEmptyPdbForm" class="te-empty-pdb-form">
+          <label for="teEmptyPdbId">Or load from RCSB PDB</label>
+          <div class="te-empty-pdb-row">
+            <input id="teEmptyPdbId" type="text" inputmode="text" maxlength="4" autocomplete="off" placeholder="PDB ID (e.g. 1EHZ)" aria-label="Four-character PDB ID">
+            <button type="submit">Load PDB ID</button>
+          </div>
+        </form>
+        <p id="teEmptyImportStatus" role="status" aria-live="polite"></p>
+      </div>`;
     stage.append(note);
+    note.querySelector("#teEmptyStructureFile")?.addEventListener("change",event=>{
+      const file=event.target.files?.[0];if(!file)return;
+      const status=note.querySelector("#teEmptyImportStatus");if(status)status.textContent="Loading "+file.name+"…";
+      TertiaryExplorer.importStructureFile(file);
+    });
+    note.querySelector("#teEmptyPdbForm")?.addEventListener("submit",event=>{
+      event.preventDefault();
+      const id=note.querySelector("#teEmptyPdbId").value.trim().toUpperCase();
+      const status=note.querySelector("#teEmptyImportStatus");
+      if(!/^[A-Z0-9]{4}$/.test(id)){status.textContent="Enter a four-character PDB ID, such as 1EHZ.";return;}
+      const input=document.getElementById("tePdbId"),button=document.getElementById("teLoadPdbId");
+      if(!input||!button){status.textContent="Import controls are unavailable. Please reload the page.";return;}
+      input.value=id;status.textContent="Loading "+id+" from RCSB PDB…";button.click();
+    });
   }
 }
 
@@ -446,11 +475,13 @@ function setupExploreWorkspaceHooks(){
     if(status&&!status.classList.contains("error")&&document.getElementById("secondarySvg")?.childNodes.length)clearSecondaryBlankState();
   },0));
   document.getElementById("restoreTrnaButton")?.addEventListener("click",()=>setTimeout(clearSecondaryBlankState,0));
-  document.getElementById("teStructureFile")?.addEventListener("change",event=>{
-    if(event.target.files?.length)setTimeout(clearTertiaryBlankState,120);
+  // Keep the empty viewer visible while an import is pending or if it fails.
+  // The existing 3D loader reports completion only after the structure parses.
+  window.addEventListener("rna-tertiary-loaded",clearTertiaryBlankState);
+  window.addEventListener("rna-tertiary-load-error",event=>{
+    const status=document.getElementById("teEmptyImportStatus");
+    if(status)status.textContent=event.detail?.message||"Unable to load the structure.";
   });
-  document.getElementById("teLoadPdbId")?.addEventListener("click",()=>setTimeout(clearTertiaryBlankState,220));
-  document.getElementById("teRestoreStructure")?.addEventListener("click",()=>setTimeout(clearTertiaryBlankState,120));
 }
 
 function setupModernWorkspaceUi(){

@@ -1667,6 +1667,22 @@ const TertiaryExplorer = (() => {
     const text=await file.text();if(!text.trim())throw new Error("The uploaded structure file is empty.");
     await ensureViewer();await setModelFromText(text,format,false,name);viewer.zoomTo({},250);viewer.render();initialView=viewer.getView?viewer.getView():null;
   }
+  // Both sidebar and empty-viewer file inputs use the same validated loader.
+  function notifyStructureLoaded(){window.dispatchEvent(new Event("rna-tertiary-loaded"));}
+  function notifyStructureError(message){window.dispatchEvent(new CustomEvent("rna-tertiary-load-error",{detail:{message}}));}
+  async function importStructureFile(file){
+    if(!file)return;
+    setStatus("Loading "+file.name+"…");
+    try{
+      await handleStructureUpload(file);
+      setStatus("");
+      notifyStructureLoaded();
+    }catch(error){
+      const message="Upload failed: "+error.message;
+      setStatus(message,"error");
+      notifyStructureError(message);
+    }
+  }
   function ensureEnhancementStyles(){
     if(document.getElementById("teEnhancementStyles"))return;
     const style=document.createElement("style");style.id="teEnhancementStyles";style.textContent=`
@@ -1754,10 +1770,10 @@ const TertiaryExplorer = (() => {
     $("teChainSelect").addEventListener("change",e=>{state.activeChain=e.target.value;state.chainNeedsChoice=false;state.sameMoleculeConfirmed=false;state.derivedSecondary=null;state.learning.geometry=null;buildResidueLookup();evaluateMapping();state.indexSelection=defaultIndices();buildIndexChoices();setupInteractions();const ds=$("teDerivedStatus");if(ds){ds.hidden=true;ds.textContent="";}const od=$("teOpenDerivedSecondary");if(od)od.hidden=true;render();});
     $("teGenerateSecondary").addEventListener("click",()=>{const button=$("teGenerateSecondary"),status=$("teDerivedStatus");button.disabled=true;if(status){status.hidden=false;status.textContent="Detecting cWW pairs from the active 3D RNA chain…";}try{generateSecondaryFrom3D();}catch(error){if(status){status.hidden=false;status.textContent="3D → 2D generation failed: "+error.message;}}finally{button.disabled=false;}});
     $("teOpenDerivedSecondary").addEventListener("click",()=>{window.location.href="?page=secondary";});
-    $("teStructureFile").addEventListener("change",async e=>{const file=e.target.files[0];if(!file)return;setStatus("Loading "+file.name+"…");try{await handleStructureUpload(file);setStatus("");}catch(error){setStatus("Upload failed: "+error.message,"error");}});
-    const loadPdbId=async()=>{const status=$("tePdbIdStatus"),button=$("teLoadPdbId");button.disabled=true;status.textContent="Loading from RCSB PDB…";setStatus("Fetching structure from RCSB PDB…");try{const id=await loadFromRcsbId($("tePdbId").value);status.textContent="Loaded RCSB PDB · "+id+" as mmCIF.";setStatus("");render();}catch(error){status.textContent=error.message;setStatus("RCSB import failed: "+error.message,"error");}finally{button.disabled=false;}};
+    $("teStructureFile").addEventListener("change",e=>importStructureFile(e.target.files?.[0]));
+    const loadPdbId=async()=>{const status=$("tePdbIdStatus"),button=$("teLoadPdbId");button.disabled=true;status.textContent="Loading from RCSB PDB…";setStatus("Fetching structure from RCSB PDB…");try{const id=await loadFromRcsbId($("tePdbId").value);status.textContent="Loaded RCSB PDB · "+id+" as mmCIF.";setStatus("");render();notifyStructureLoaded();}catch(error){status.textContent=error.message;setStatus("RCSB import failed: "+error.message,"error");notifyStructureError("RCSB import failed: "+error.message);}finally{button.disabled=false;}};
     $("teLoadPdbId").addEventListener("click",loadPdbId);$("tePdbId").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();loadPdbId();}});
-    $("teRestoreStructure").addEventListener("click",async()=>{$("teStructureFile").value="";setStatus("Restoring PDB 1EHZ…");try{await ensureViewer();await loadDefaultStructure();render();}catch(error){setStatus("Restore failed: "+error.message,"error");}});
+    $("teRestoreStructure").addEventListener("click",async()=>{$("teStructureFile").value="";setStatus("Restoring PDB 1EHZ…");try{await ensureViewer();await loadDefaultStructure();render();notifyStructureLoaded();}catch(error){setStatus("Restore failed: "+error.message,"error");notifyStructureError("Restore failed: "+error.message);}});
     $("teIndexDefault").addEventListener("click",()=>{state.indexSelection=defaultIndices();buildIndexChoices();render();});
     $("teIndexAll").addEventListener("click",()=>{const n=state.mapping.enabled?state.secondarySequence.length:activeResidues().length;state.indexSelection=new Set(Array.from({length:n},(_,i)=>i));buildIndexChoices();render();});
     $("teIndexNone").addEventListener("click",()=>{state.indexSelection.clear();buildIndexChoices();render();});
@@ -1974,7 +1990,7 @@ const TertiaryExplorer = (() => {
     render();
   }
 
-  return {setup,render,buildEmbeddedRasterSvg,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,getWorkspaceSnapshot,restoreWorkspaceSnapshot,showLearningFeature,clearLearningFeature,showLinkedRegion,clearLinkedRegion,createDistanceMeasurementFromAtomIndices,
+  return {setup,render,importStructureFile,buildEmbeddedRasterSvg,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,getWorkspaceSnapshot,restoreWorkspaceSnapshot,showLearningFeature,clearLearningFeature,showLinkedRegion,clearLinkedRegion,createDistanceMeasurementFromAtomIndices,
     getDiagnostics(){return {viewerReady:!!viewer,modelReady:!!model,atomCount:model?.selectedAtoms?model.selectedAtoms({}).length:0,representation:state.representation,colorMode:state.colorMode,split:state.split,mappingEnabled:state.mapping.enabled,source:state.currentFileName,derivedSecondary:state.derivedSecondary,
       surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
       selectionHighlightColor:state.selectionStyle.color,pairHighlightColor:HOT_PINK,selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
