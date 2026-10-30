@@ -1701,7 +1701,7 @@ const TertiaryExplorer = (() => {
       '<div class="te-controls">'+
       '<details open><summary>Import structure &amp; 2D/3D mapping</summary>'+
       '<p id="teStructureSource">PDB 1EHZ</p>'+
-      '<label>Import PDB / mmCIF<input id="teStructureFile" type="file" accept=".pdb,.ent,.cif,.mmcif,chemical/x-pdb,chemical/x-cif"></label>'+
+      '<label>Import PDB / mmCIF<input id="teStructureFile" type="file"></label>'+
       '<div class="te-pdb-id-row"><label>PDB ID<input id="tePdbId" type="text" inputmode="text" maxlength="4" placeholder="1EHZ" autocomplete="off"></label><button type="button" id="teLoadPdbId">Load from RCSB PDB</button></div><p class="te-tool-note" id="tePdbIdStatus">Enter a four-character PDB ID to fetch its mmCIF coordinates directly from RCSB PDB.</p>'+
       '<button type="button" id="teRestoreStructure">Restore example 1EHZ</button>'+
       '<label>RNA chain<select id="teChainSelect"></select></label>'+
