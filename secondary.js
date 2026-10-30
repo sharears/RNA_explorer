@@ -1356,8 +1356,7 @@ const SecondaryExplorer = (() => {
         // Mirror the complete selection from the tertiary viewer instead of
         // discarding earlier residues whenever a new 3D residue is tapped.
         if(Array.isArray(selectedIndices))selectedResidues=new Set(selectedIndices.filter(i=>Number.isInteger(i)&&i>=0&&i<seq.length));
-        else if(selectedState===true)selectedResidues.add(index);
-        else selectedResidues.delete(index);
+        else{selectedResidues.clear();if(selectedState===true)selectedResidues.add(index);} // Preserve old two-argument behavior.
         selectedPairKeys.clear();selectedPairKey=null;
         focusedObject=selectedResidues.has(index)?"residue:"+index:null;
         panel();render();
