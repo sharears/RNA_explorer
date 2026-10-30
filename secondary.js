@@ -1350,7 +1350,19 @@ const SecondaryExplorer = (() => {
       saveWorkspaceLocal();return {sequence:seq,structure:db,isDefault:false,selected,selectedPairKey,selectedResidues:[...selectedResidues],selectedPairKeys:[...selectedPairKeys],sourceNote};
     },
     followDefault(index){if(index>=0&&index<seq.length){selected=index;panel();render();}},
-    followExternal(index,selectedState){if(index>=0&&index<seq.length){commitSelectionTransform();selected=index;selectedResidues.clear();selectedPairKeys.clear();selectedPairKey=null;if(selectedState===true){selectedResidues.add(index);focusedObject="residue:"+index;}else focusedObject=null;panel();render();}},
+    followExternal(index,selectedState,selectedIndices){
+      if(index>=0&&index<seq.length){
+        commitSelectionTransform();selected=index;
+        // Mirror the complete selection from the tertiary viewer instead of
+        // discarding earlier residues whenever a new 3D residue is tapped.
+        if(Array.isArray(selectedIndices))selectedResidues=new Set(selectedIndices.filter(i=>Number.isInteger(i)&&i>=0&&i<seq.length));
+        else if(selectedState===true)selectedResidues.add(index);
+        else selectedResidues.delete(index);
+        selectedPairKeys.clear();selectedPairKey=null;
+        focusedObject=selectedResidues.has(index)?"residue:"+index:null;
+        panel();render();
+      }
+    },
     followPairExternal(a,b,selectedState){const key=keyOf(a,b);selectedResidues.clear();selectedPairKeys.clear();if(selectedState===true){selectedPairKeys.add(key);selectedPairKey=key;focusedObject="pair:"+key;}else{selectedPairKey=null;focusedObject=null;}selected=a;panel();render();},
     highlightResidues(indices=[]){
       commitSelectionTransform();
