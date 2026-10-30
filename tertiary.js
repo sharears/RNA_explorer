@@ -1290,11 +1290,16 @@ const TertiaryExplorer = (() => {
 
   function chooseResidue(index,{toggle=true,notify=true}={}){
     state.selected=clamp(index,0,Math.max(0,activeResidues().length-1));
-    if(toggle){const next=!state.selectionIndices.has(state.selected);state.selectionIndices.clear();state.selectedPairs.clear();if(next)state.selectionIndices.add(state.selected);}
+    if(toggle){
+      // Ordinary clicks/taps toggle only this residue; earlier residue picks remain selected.
+      if(state.selectionIndices.has(state.selected))state.selectionIndices.delete(state.selected);
+      else state.selectionIndices.add(state.selected);
+      state.selectedPairs.clear(); // Keep existing independent base-pair selection behavior.
+    }
     linkedPulseFocus=state.selectionIndices.has(state.selected)?[state.selected]:[];
     if(notify&&state.mapping.enabled){
       if(isCuratedDefaultPair())state.onSelect(state.selected);
-      if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.followExternal)SecondaryExplorer.followExternal(state.selected,state.selectionIndices.has(state.selected));
+      if(typeof SecondaryExplorer!=="undefined"&&SecondaryExplorer.followExternal)SecondaryExplorer.followExternal(state.selected,state.selectionIndices.has(state.selected),[...state.selectionIndices]);
     }
     render();
   }
