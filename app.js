@@ -440,7 +440,7 @@ function prepareTertiaryCustomStart(){
       <span>Choose a file from your device or enter a PDB ID to begin.</span>
       <div class="te-empty-import-actions">
         <label class="te-empty-file-picker">Choose PDB / mmCIF file
-          <input id="teEmptyStructureFile" type="file" accept=".pdb,.ent,.cif,.mmcif,chemical/x-pdb,chemical/x-cif">
+          <input id="teEmptyStructureFile" type="file">
         </label>
         <form id="teEmptyPdbForm" class="te-empty-pdb-form">
           <label for="teEmptyPdbId">Or load from RCSB PDB</label>
