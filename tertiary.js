@@ -1111,10 +1111,13 @@ const TertiaryExplorer = (() => {
   // Separate removable shapes avoid recomputing models, surfaces, and measurements every frame.
   function linkedPulseIndices(){
     const selected=new Set([...state.selectionIndices,...selectedPairResidues()]);
-    // Use the clicked focus when available; selection tools (ranges/regions)
-    // can also provide two or more selected residues without a click focus.
+    // Prioritize the most recently clicked residue, but animate every selected
+    // residue too. Previously, a click focus suppressed all earlier highlights.
+    // Cap only the animated overlays for performance; static styling still
+    // highlights every selected residue through addSelectionHighlights().
     const focused=linkedPulseFocus.filter(i=>selected.has(i)&&isVisibleIndex(i));
-    return (focused.length?focused:[...selected].filter(isVisibleIndex).slice(0,24));
+    const visible=[...selected].filter(isVisibleIndex);
+    return [...new Set([...focused,...visible])].slice(0,24);
   }
   function clearLinkedPulseShapes(){
     if(!viewer){linkedPulseShapes=[];return;}
