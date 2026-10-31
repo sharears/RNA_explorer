@@ -12,6 +12,19 @@ const MoleculeEditor = (() => {
     RIBOSE:null
   };
   const RING_NAMES={five:"cyclopentane",six:"cyclohexane",aromatic6:"benzene",fused56:null};
+  // Expandable atomic fragments; the first atom attaches to the clicked parent.
+  // Coordinates are relative to the root in a right-facing local frame.
+  const FUNCTIONAL_GROUPS={
+    hydroxyl:{name:"Hydroxyl (–OH)",atoms:[["O",0,0]],bonds:[],attachmentOrder:1},
+    amino:{name:"Amino (–NH₂)",atoms:[["N",0,0]],bonds:[],attachmentOrder:1},
+    carboxyl:{name:"Carboxyl (–COOH)",atoms:[["C",0,0],["O",34,-58],["O",34,58]],bonds:[[0,1,2],[0,2,1]],attachmentOrder:1},
+    carbonyl:{name:"Carbonyl (=O)",atoms:[["O",0,0]],bonds:[],attachmentOrder:2},
+    methyl:{name:"Methyl (–CH₃)",atoms:[["C",0,0]],bonds:[],attachmentOrder:1},
+    phosphate:{name:"Phosphate ester (–O–PO(OH)₂)",atoms:[["O",0,0],["P",68,0],["O",136,0],["O",68,-68],["O",68,68]],bonds:[[0,1,1],[1,2,2],[1,3,1],[1,4,1]],attachmentOrder:1},
+    sulfhydryl:{name:"Sulfhydryl (–SH)",atoms:[["S",0,0]],bonds:[],attachmentOrder:1},
+    methoxy:{name:"Methoxy (–OCH₃)",atoms:[["O",0,0],["C",68,0]],bonds:[[0,1,1]],attachmentOrder:1}
+  };
+
 
   const BASES={
     A:{
@@ -218,7 +231,7 @@ const MoleculeEditor = (() => {
     const groups=[
       ["History",["#chemUndoButton","#chemRedoButton"]],
       ["Select · Atoms & groups",['[data-chem-tool="select"]','[data-chem-tool="lasso"]',"#chemSelectAll"]],
-      ["Build · Atoms & bonds",['[data-chem-tool="atom"]','[data-chem-tool="bond"]','[data-chem-tool="fuse"]','[data-chem-tool="hbond"]','[data-chem-tool="delete"]',"#chemRingTemplate","#chemInsertRing","#chemSmartLayoutToggle","#chemTidy2D"]],
+      ["Build · Atoms & bonds",['[data-chem-tool="atom"]','[data-chem-tool="bond"]','[data-chem-tool="fuse"]','[data-chem-tool="hbond"]','[data-chem-tool="delete"]',"#chemFunctionalGroup","#chemAttachGroup","#chemRingTemplate","#chemInsertRing","#chemSmartLayoutToggle","#chemTidy2D"]],
       ["Display · Labels & chemistry",["#chemAtomCirclesToggle","#chemAtomLabelsToggle","#chemAtomNumbersToggle","#chemElement","#chemBondOrder","#chemChargeMinus","#chemChargePlus","#chemIupacButton","#chemIgnoreValence"]],
       ["View · Canvas",["#chemExpandCanvas","#chemFitCanvas"]]
     ];
@@ -331,6 +344,8 @@ const MoleculeEditor = (() => {
           <button type="button" data-chem-tool="bond">Add bond</button><button type="button" data-chem-tool="fuse">Fuse rings</button>
           <button type="button" data-chem-tool="hbond">H-bond</button>
           <button type="button" data-chem-tool="delete">Delete</button>
+          <label>Functional group<select id="chemFunctionalGroup"><option value="hydroxyl">Hydroxyl (–OH)</option><option value="amino">Amino (–NH₂)</option><option value="carboxyl">Carboxyl (–COOH)</option><option value="carbonyl">Carbonyl (=O)</option><option value="methyl">Methyl (–CH₃)</option><option value="phosphate">Phosphate (–O–PO(OH)₂)</option><option value="sulfhydryl">Sulfhydryl (–SH)</option><option value="methoxy">Methoxy (–OCH₃)</option></select></label>
+          <button type="button" id="chemAttachGroup" data-chem-tool="group">Attach group</button>
           <label>Ring<select id="chemRingTemplate"><option value="five">5-membered</option><option value="six">6-membered</option><option value="aromatic6">Aromatic 6-membered</option><option value="fused56">Fused 5+6</option></select></label>
           <button type="button" id="chemInsertRing">Insert ring</button>
           <button type="button" id="chemAtomCirclesToggle" aria-pressed="false">Atom circles: off</button>
@@ -461,7 +476,12 @@ const MoleculeEditor = (() => {
     dialog.querySelectorAll("[data-chem-tool]").forEach(b=>b.addEventListener("click",()=>{
       tool=b.dataset.chemTool;pendingAtom=null;pendingFuseBond=null;transformDrag=null;selectionBox=null;lasso=null;
       dialog.querySelectorAll("[data-chem-tool]").forEach(x=>x.classList.toggle("active",x===b));render();
+      if(tool==="group")status.textContent="Click or tap an existing atom to attach "+FUNCTIONAL_GROUPS[dialog.querySelector("#chemFunctionalGroup").value].name+".";
     }));
+    dialog.querySelector("#chemFunctionalGroup").addEventListener("change",()=>{
+      setActiveChemTool("group");
+      status.textContent="Click or tap an existing atom to attach "+FUNCTIONAL_GROUPS[dialog.querySelector("#chemFunctionalGroup").value].name+".";
+    });
     dialog.querySelector("#chemSelectAll").addEventListener("click",()=>{selectAtoms(graph.atoms.map(a=>a.id));render();});
     dialog.querySelector("#chemSelectLeft").addEventListener("click",()=>{selectAtoms(graph.atoms.filter(a=>a.id.startsWith("L_")).map(a=>a.id));render();});
     dialog.querySelector("#chemSelectRight").addEventListener("click",()=>{selectAtoms(graph.atoms.filter(a=>a.id.startsWith("R_")).map(a=>a.id));render();});
@@ -736,6 +756,32 @@ const MoleculeEditor = (() => {
     }
     return {x:origin.x+Math.cos(angle)*length,y:origin.y+Math.sin(angle)*length};
   }
+  function attachFunctionalGroup(hostId,key){
+    const host=atomById(hostId),fragment=FUNCTIONAL_GROUPS[key];
+    if(!host||!fragment){status.textContent="Choose a functional group and click an existing atom.";return false;}
+    const order=fragment.attachmentOrder||1,limit=standardValence[host.element]+Math.max(0,Number(host.charge)||0);
+    if(Number.isFinite(limit)&&atomValenceSum(hostId)+order>limit){
+      status.textContent="Cannot attach "+fragment.name+" to "+host.element+": this atom has no available valence for a "+(order===2?"double":"single")+" bond.";
+      return false;
+    }
+    if(graph.atoms.length+fragment.atoms.length>500||graph.bonds.length+fragment.bonds.length+1>1200){
+      status.textContent="This functional group would exceed the molecular editor's structure-size limit.";return false;
+    }
+    const root=smartAttachmentPosition(hostId),angle=Math.atan2(root.y-host.y,root.x-host.x);
+    const co=Math.cos(angle),si=Math.sin(angle),newIds=[];
+    pushUndo();
+    fragment.atoms.forEach(([element,dx,dy,charge=0])=>{
+      const id="X"+atomSerial++;newIds.push(id);
+      graph.atoms.push({id,element,x:root.x+dx*co-dy*si,y:root.y+dx*si+dy*co,charge,label:element,textStyle:{...textDefaults}});
+    });
+    graph.bonds.push({id:"b"+bondSerial++,a:hostId,b:newIds[0],order});
+    fragment.bonds.forEach(([a,b,bondOrder])=>graph.bonds.push({id:"b"+bondSerial++,a:newIds[a],b:newIds[b],order:bondOrder}));
+    ignoredValenceWarnings.delete(hostId);
+    ensureCanvasContainsDrawing();invalidateIupac();selectAtoms(newIds,newIds[0]);render();validate();
+    status.textContent="Attached "+fragment.name+". Select another atom to attach the same group, or switch tools.";
+    return true;
+  }
+
   function tidy2DGeometry(){
     if(graph.atoms.length<2)return;
     const atoms=graph.atoms;
@@ -1013,6 +1059,12 @@ const MoleculeEditor = (() => {
     if(tool==="lasso"){
       const p=point(e);lasso={pointer:e.pointerId,points:[p],additive:e.shiftKey};selectionBox=null;
       svg.setPointerCapture?.(e.pointerId);render();return;
+    }
+    if(tool==="group"){
+      const atomEl=e.target.closest?.("[data-atom-id]");
+      if(atomEl)attachFunctionalGroup(atomEl.dataset.atomId,dialog.querySelector("#chemFunctionalGroup").value);
+      else status.textContent="Click or tap an existing atom to attach the selected functional group.";
+      return;
     }
     pushUndo();
     const transformEl=e.target.closest?.("[data-transform-handle]");
