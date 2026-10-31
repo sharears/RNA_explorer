@@ -6,7 +6,7 @@ const SecondaryExplorer = (() => {
   const colors = {A:"#b55d6a", G:"#2f6b57", C:"#c89b4a", U:"#5d7fa3"};
   const settings = {backColor:"#74d7b6", backWidth:2, backOpacity:0.8,
     pairColor:"#e8bb69", pairWidth:2, pairOpacity:1, circleColor:"#c5d6e2",
-    circleWidth:1, circleVisible:true, letterColor:"#ffffff", letterSize:16, font:"monospace",
+    circleWidth:1, circleVisible:true, letterVisible:true, letterColor:"#ffffff", letterSize:16, font:"monospace",
     fontStyle:"normal", mode:"uniform", legend:true, pairVisible:true, lwLabels:false};
   let seq="", db="", defaultSeq="", defaultDb="", pairs=[], partner=[], selected=0, selectedPairKey=null;
   let selectedResidues=new Set(), selectedPairKeys=new Set(), focusedObject=null, sourceNote="";
@@ -201,6 +201,7 @@ const SecondaryExplorer = (() => {
     document.querySelectorAll("[data-setting]").forEach(el=>{
       const key=el.dataset.setting;if(key in settings)el.value=String(settings[key]);
     });
+    if($("seLetterVisible"))$("seLetterVisible").checked=settings.letterVisible!==false;
     if($("sePairVisible"))$("sePairVisible").checked=settings.pairVisible!==false;
     if($("seLWLabels"))$("seLWLabels").checked=!!settings.lwLabels;
     if($("seLegendToggle")){$("seLegendToggle").textContent=settings.legend?"Hide base-pair legend":"Show base-pair legend";$("seLegendToggle").setAttribute("aria-pressed",String(settings.legend));}
@@ -684,7 +685,7 @@ const SecondaryExplorer = (() => {
       const persistent=selectedResidues.has(i),current=persistent,pairedFocus=selectedPairKeys.size>0&&[...selectedPairKeys].some(key=>key.split(":").map(Number).includes(i));
       if(persistent||current||pairedFocus) g.append(svg("circle",{"data-export-remove":"",r:persistent?22:20,fill:"none",stroke:persistent?"#f5e9c8":"#ffffff","stroke-width":persistent?3:1.5,"stroke-dasharray":persistent||current?"none":"3 3"}));
       if(s.circleVisible!==false)g.append(svg("circle",{r:16,fill:s.fillColor,stroke:s.circleColor,"stroke-width":s.circleWidth}));
-      text(g,seq[i],{y:0,fill:s.letterColor,"font-family":s.font,"font-size":s.letterSize,"font-style":s.fontStyle==="italic"?"italic":"normal","font-weight":s.fontStyle==="bold"?"700":"400","text-anchor":"middle","dominant-baseline":"central"});
+      if(s.letterVisible!==false)text(g,seq[i],{y:0,fill:s.letterColor,"font-family":s.font,"font-size":s.letterSize,"font-style":s.fontStyle==="italic"?"italic":"normal","font-weight":s.fontStyle==="bold"?"700":"400","text-anchor":"middle","dominant-baseline":"central"});
       const prev=pos[Math.max(0,i-1)],next=pos[Math.min(pos.length-1,i+1)];
       const away=partner[i]>=0?{x:p.x-pos[partner[i]].x,y:p.y-pos[partner[i]].y}
         :{x:-(next.y-prev.y),y:next.x-prev.x};
@@ -797,6 +798,7 @@ const SecondaryExplorer = (() => {
     pa.insertAdjacentHTML("beforeend",'<button type="button" id="seStandardPairChemistry">Standard WCF / G–U chemistry</button><fieldset><legend>Base-pair probability</legend><p>Upload either an N × N probability matrix (comma- or whitespace-separated) or sparse CSV with headers Residue_i,Residue_j,Probability. Values must be 0–1. This colors pair connectors independently of residue reactivity.</p><label>Probability data<input id="sePairProbFile" type="file" accept=".csv,.txt,text/csv,text/plain"></label><label>Probability theme<select id="sePairProbTheme"><option value="viridis">Viridis</option><option value="magma">Magma</option><option value="blueRed">Blue–white–red</option><option value="cividis">Cividis</option></select></label><label><input type="checkbox" id="sePairProbEnabled">Show base-pair probability colors</label><button type="button" id="sePairProbClear">Clear pair probabilities</button><p id="sePairProbStatus" role="status">Upload a probability matrix or sparse CSV for the current sequence.</p></fieldset>');
     const fill=document.createElement("div");fill.innerHTML=input("fillColor","All circle fills (replaces heatmap)","color","#2f6b57");
     ra.append(fill.firstElementChild);
+    ra.insertAdjacentHTML("afterbegin",'<label class="se-check"><input id="seLetterVisible" type="checkbox" checked> Show residue IDs (A, U, G, C)</label>');
     [...old[1].children].filter(el=>el.tagName!=="SUMMARY").forEach(el=>ra.append(el));
     rs.innerHTML+='<strong id="seResidueSelected"></strong><p id="seResidueMetadata"></p>'+localFields(residueFields,"seResidue-")+'<button id="seResidueReset" type="button">Reset selected residue</button>';
     rs.insertAdjacentHTML("beforeend",'<label>Selected residue<select id="seResidueList"></select></label>');
@@ -1217,6 +1219,7 @@ const SecondaryExplorer = (() => {
     copy.append(controls);
     reorganizeControls(controls);
     if($("seCircleVisible")){$("seCircleVisible").checked=settings.circleVisible!==false;$("seCircleVisible").addEventListener("change",e=>{settings.circleVisible=e.target.checked;render();});}
+    if($("seLetterVisible")){$("seLetterVisible").checked=settings.letterVisible!==false;$("seLetterVisible").addEventListener("change",e=>{settings.letterVisible=e.target.checked;render();});}
     $("secondarySequence").value=sequence;$("secondaryDotBracket").value=structure;
     const stage=document.querySelector(".secondary-stage"),root=$("secondarySvg");
     const arcStyleControl=document.createElement("div");arcStyleControl.id="seArcPairStyle";arcStyleControl.className="se-arc-style";arcStyleControl.hidden=true;
