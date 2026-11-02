@@ -392,3 +392,13 @@ body[data-page-mode="tertiary"] #followButton{font-size:.78rem;padding:8px 10px;
 #scene-tertiary #teSelectionDetails>summary{color:var(--cream);font-weight:750}
 #scene-tertiary #teSelectionDetails .te-context-panel{margin:9px 0 0;padding:10px;border-color:rgba(116,215,182,.22)}
 #scene-tertiary .te-controls>details:first-child{margin-top:0}
+
+/* Informative, persistent notice for sparse/P-atom-only RNA coordinates. */
+.te-coarse-model-note{
+  position:absolute;z-index:11;left:12px;right:12px;bottom:12px;
+  padding:9px 11px;border:1px solid rgba(143,179,201,.45);
+  border-radius:8px;background:rgba(7,17,28,.88);color:#dbe9f1;
+  font:500 11px/1.55 "DM Mono",monospace;pointer-events:none;
+  max-height:32%;overflow:auto;
+}
+.te-coarse-model-note[hidden]{display:none!important}
