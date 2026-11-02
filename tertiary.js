@@ -321,6 +321,7 @@ const TertiaryExplorer = (() => {
   }
   function generateSecondaryFrom3D(){
     const chain=state.chains.find(c=>c.id===state.activeChain);if(!chain)throw new Error("Choose an RNA chain first.");
+    if(coarseGrainedProfile(chain.residues).sparse)throw new Error("Cannot detect cWW pairs from this coarse-grained RNA model: the base-atom coordinates needed for hydrogen-bond geometry are not present.");
     const derived=deriveSecondaryFromResidues(chain.residues);
     state.secondarySequence=derived.sequence;state.structure=derived.structure;state.secondaryIsDefault=false;state.sameMoleculeConfirmed=true;
     state.derivedSecondary={sequence:derived.sequence,structure:derived.structure,chainId:chain.id,source:state.currentFileName,pairCount:derived.pairs.length,detectedCwwCount:derived.detectedPairs.length,omittedPairCount:derived.omittedCount,candidateCount:derived.candidateCount};
@@ -448,6 +449,35 @@ const TertiaryExplorer = (() => {
     })).filter(c=>c.residues.length);
   }
   function extractChains(){state.chains=rnaChainsFromAtoms(model?.selectedAtoms?model.selectedAtoms({}):[]);}
+  // Classify only the *modeled coordinates*. Never synthesize absent RNA atoms.
+  function coarseGrainedProfile(residues){
+    const modeled=(residues||[]).filter(r=>(r.atoms||[]).length&&r.coord);
+    if(!modeled.length)return {sparse:false,phosphateOnly:false,count:0};
+    const heavy=r=>(r.atoms||[]).filter(a=>normalizeElement(a)!=="H");
+    const sparseCount=modeled.filter(r=>heavy(r).length<=3).length;
+    const phosphateCount=modeled.filter(r=>{const a=heavy(r);return a.length===1&&atomName(a[0])==="P";}).length;
+    // Mostly sparse chains need an explicit fallback; all-atom RNA remains untouched.
+    const fraction=sparseCount/modeled.length;
+    return {sparse:fraction>=.8,phosphateOnly:phosphateCount/modeled.length>=.8,count:modeled.length};
+  }
+  function activeCoarseProfile(){return coarseGrainedProfile(activeResidues());}
+  function updateCoarseModelNotice(){
+    const profile=activeCoarseProfile(),notice=$("teCoarseModelNote"),generate=$("teGenerateSecondary");
+    if(notice){
+      notice.hidden=!profile.sparse;
+      notice.textContent=profile.sparse
+        ?(profile.phosphateOnly?"Phosphate-only RNA model":"Sparse / coarse-grained RNA model")+
+          " · "+profile.count+" modeled residues. Showing available coordinates as markers and a backbone trace. Missing bases and sugars are not reconstructed; cWW and hydrogen-bond analysis require all-atom coordinates."
+        :"";
+    }
+    if(generate){
+      generate.disabled=profile.sparse;
+      generate.title=profile.sparse
+        ?"3D → 2D cWW detection needs complete base-atom coordinates; this model is coarse-grained."
+        :"Generate a secondary structure from detected cWW pairs in the selected 3D RNA chain.";
+    }
+  }
+
   function compareChain(chain,sequence){
     if(!chain)return {lengthMatch:false,mismatches:[],unknown:0,exact:false};
     const lengthMatch=chain.residues.length===sequence.length,mismatches=[];
@@ -598,6 +628,12 @@ const TertiaryExplorer = (() => {
   }
   function applyResidueRepresentation(r,i){
     const sel=selectorForResidue(r);
+    if(activeCoarseProfile().sparse){
+      // A P-only/low-atom residue has no modeled covalent bonds to draw as sticks.
+      // Explicit spheres stay visible for every display style (including cartoon).
+      model.setStyle(sel,{sphere:{radius:.52,color:residueColor(i,r),opacity:.98}});
+      return;
+    }
     if(guidedLearningActive()){
       // Keep the complete molecule in faint element-colored sticks while the requested feature is emphasized.
       model.setStyle(sel,{stick:{radius:.09,colorscheme:"Jmol",opacity:.18}});
@@ -620,6 +656,23 @@ const TertiaryExplorer = (() => {
     const object=state.savedObjects.find(o=>o.id===state.isolateObjectId);
     return object?object.indices.has(i):true;
   }
+
+  function addCoarseGrainedTrace(){
+    if(!viewer||!state.visibility.rna||!activeCoarseProfile().sparse)return;
+    const residues=activeResidues();
+    for(let i=0;i<residues.length-1;i++){
+      const a=residues[i],b=residues[i+1];
+      if(!a?.coord||!b?.coord||!isVisibleIndex(i)||!isVisibleIndex(i+1)||a.chain!==b.chain)continue;
+      // A large coordinate jump or numbering gap represents a chain break.
+      // Do not imply a covalent linkage where none is supported by the model.
+      const numA=Number(a.resi),numB=Number(b.resi);
+      if(Number.isFinite(numA)&&Number.isFinite(numB)&&numB-numA>1)continue;
+      const d=Math.hypot(a.coord.x-b.coord.x,a.coord.y-b.coord.y,a.coord.z-b.coord.z);
+      if(!Number.isFinite(d)||d<1||d>11)continue;
+      viewer.addCylinder({start:a.coord,end:b.coord,radius:.18,color:"#8fb3c9",opacity:.9,fromCap:1,toCap:1});
+    }
+  }
+
   function applyCategoryStyles(){
     const atoms=model?.selectedAtoms?model.selectedAtoms({}):[];if(!atoms.length)return;
     const activeKeys=new Set(activeResidues().map(r=>residueKey(r.chain,r.resi,r.icode)));
@@ -681,6 +734,10 @@ const TertiaryExplorer = (() => {
     const r=activeResidues()[index];if(!r||!isVisibleIndex(index))return;
     nucleotideAtoms(r).forEach(atom=>{
       if(!Number.isFinite(Number(atom.serial)))return;
+      if(activeCoarseProfile().sparse){
+        model.addStyle({serial:atom.serial},{sphere:{radius:Math.max(.75,thickness*2),color,opacity:1}});
+        return;
+      }
       model.addStyle({serial:atom.serial},{stick:{radius:thickness,color,opacity:1},
         sphere:{radius:Math.max(.26,thickness*.95),color,opacity:.55}});
     });
@@ -1282,6 +1339,7 @@ const TertiaryExplorer = (() => {
     const residues=activeResidues();
     if(state.visibility.rna)residues.forEach((r,i)=>{if(isVisibleIndex(i))safe("residue style "+(i+1),()=>applyResidueRepresentation(r,i));});
     safe("component styles",applyCategoryStyles);
+    safe("coarse-grained RNA trace",addCoarseGrainedTrace);
     if(state.comparison.model&&state.comparison.visible)safe("comparison style",()=>state.comparison.model.setStyle({},{line:{linewidth:2,color:"#f0a36f",opacity:.8}}));
     safe("selection highlights",addSelectionHighlights);safe("selected pair highlights",addSelectedPairHighlights);safe("object highlights",addObjectHighlights);
     safe("optional pair guides",addPairs);safe("selected pair hydrogen bonds",addSelectedPairHydrogenBonds);
@@ -1493,7 +1551,7 @@ const TertiaryExplorer = (() => {
   }
 
   function updateControls(){
-    evaluateMapping();const focusDetails=$("teFocusDetails");if(focusDetails)focusDetails.hidden=!state.secondaryIsDefault||!state.mapping.enabled;updateSourceCopy();
+    evaluateMapping();const focusDetails=$("teFocusDetails");if(focusDetails)focusDetails.hidden=!state.secondaryIsDefault||!state.mapping.enabled;updateSourceCopy();updateCoarseModelNotice();
   }
   function render(selected){
     if(selected!==undefined)state.selected=clamp(selected,0,Math.max(0,(state.mapping.enabled?state.secondarySequence.length:activeResidues().length)-1));
