@@ -450,15 +450,21 @@ const TertiaryExplorer = (() => {
   }
   function extractChains(){state.chains=rnaChainsFromAtoms(model?.selectedAtoms?model.selectedAtoms({}):[]);}
   // Classify only the *modeled coordinates*. Never synthesize absent RNA atoms.
+  // Cache each loaded chain's immutable residue array: styling may run thousands
+  // of times for large structures, and should not reclassify the entire chain.
+  const coarseProfileCache=new WeakMap();
   function coarseGrainedProfile(residues){
-    const modeled=(residues||[]).filter(r=>(r.atoms||[]).length&&r.coord);
+    const list=Array.isArray(residues)?residues:[];
+    if(coarseProfileCache.has(list))return coarseProfileCache.get(list);
+    const modeled=list.filter(r=>(r.atoms||[]).length&&r.coord);
     if(!modeled.length)return {sparse:false,phosphateOnly:false,count:0};
     const heavy=r=>(r.atoms||[]).filter(a=>normalizeElement(a)!=="H");
     const sparseCount=modeled.filter(r=>heavy(r).length<=3).length;
     const phosphateCount=modeled.filter(r=>{const a=heavy(r);return a.length===1&&atomName(a[0])==="P";}).length;
     // Mostly sparse chains need an explicit fallback; all-atom RNA remains untouched.
     const fraction=sparseCount/modeled.length;
-    return {sparse:fraction>=.8,phosphateOnly:phosphateCount/modeled.length>=.8,count:modeled.length};
+    const result={sparse:fraction>=.8,phosphateOnly:phosphateCount/modeled.length>=.8,count:modeled.length};
+    coarseProfileCache.set(list,result);return result;
   }
   function activeCoarseProfile(){return coarseGrainedProfile(activeResidues());}
   function updateCoarseModelNotice(){
