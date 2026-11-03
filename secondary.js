@@ -203,7 +203,8 @@ const SecondaryExplorer = (() => {
     box.append(grid);
   }
   async function copySecondaryText(kind){
-    const value=kind==="sequence"?seq:db,label=kind==="sequence"?"RNA sequence":"dot-bracket structure";
+    const input=$(kind==="sequence"?"secondarySequence":"secondaryDotBracket");
+    const value=input?input.value:(kind==="sequence"?seq:db),label=kind==="sequence"?"RNA sequence":"dot-bracket structure";
     const status=$("secondaryInputStatus");
     try{
       if(!value)throw Error("There is no "+label+" to copy.");
