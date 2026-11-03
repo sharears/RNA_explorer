@@ -177,6 +177,81 @@ const SecondaryExplorer = (() => {
     });
     const structure=chars.join("");parse(sequence,structure);return {sequence,structure};
   }
+
+  // Six quality-of-life tools share the current parsed RNA structure.
+  function secondaryStatistics(){
+    const paired=partner.filter(i=>i>=0).length;
+    const pairKeys=new Set(pairs.map(([a,b])=>keyOf(a,b)));
+    const stems=pairs.filter(([a,b])=>!pairKeys.has(keyOf(a-1,b+1))).length;
+    const gc=[...seq].filter(base=>base==="G"||base==="C").length;
+    return {residues:seq.length,basePairs:pairs.length,paired,unpaired:seq.length-paired,
+      stems,gcPercent:seq.length?Math.round(gc/seq.length*1000)/10:0};
+  }
+  function renderSecondaryStatistics(){
+    const box=$("seStructureStats");if(!box)return;
+    const data=secondaryStatistics();
+    const items=[["Residues",data.residues],["Base pairs",data.basePairs],
+      ["Paired nt",data.paired],["Unpaired nt",data.unpaired],
+      ["Stems / isolated pairs",data.stems],["GC content",data.gcPercent+"%"]];
+    box.replaceChildren();
+    const heading=document.createElement("strong");heading.textContent="Secondary structure statistics";box.append(heading);
+    const grid=document.createElement("dl");grid.className="se-stats-grid";
+    items.forEach(([label,value])=>{
+      const item=document.createElement("div"),dt=document.createElement("dt"),dd=document.createElement("dd");
+      dt.textContent=label;dd.textContent=String(value);item.append(dt,dd);grid.append(item);
+    });
+    box.append(grid);
+  }
+  async function copySecondaryText(kind){
+    const value=kind==="sequence"?seq:db,label=kind==="sequence"?"RNA sequence":"dot-bracket structure";
+    const status=$("secondaryInputStatus");
+    try{
+      if(!value)throw Error("There is no "+label+" to copy.");
+      if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(value);
+      else {
+        const field=document.createElement("textarea");field.value=value;
+        field.style.position="fixed";field.style.left="-9999px";document.body.append(field);
+        field.select();
+        const ok=document.execCommand?.("copy");field.remove();
+        if(!ok)throw Error("Copy permission is unavailable in this browser.");
+      }
+      if(status){status.textContent="Copied "+label+" to clipboard.";status.classList.remove("error");}
+    }catch(error){if(status){status.textContent="Could not copy "+label+": "+error.message;status.classList.add("error");}}
+  }
+  function downloadSecondaryCsvTemplate(kind){
+    const note=$("seMetadataStatus"),probNote=$("sePairProbStatus");
+    if(kind==="reactivity"){
+      // Blank values remain NA; one sample numeric value makes this a valid import.
+      const rows=["Residue_Index,Residue_ID,Residue_Information",
+        ...[...seq].map((base,i)=>(i+1)+","+base+","+(i===0?"0.5":"NA"))];
+      ExportTools.downloadText(rows.join("\n")+"\n","rna-residue-reactivity-template-"+seq.length+"nt.csv","text/csv;charset=utf-8");
+      if(note)note.textContent="Downloaded a "+seq.length+"-residue CSV template. The first value (0.5) is illustrative; replace NA with measurements.";
+      return;
+    }
+    if(!pairs.length){if(probNote)probNote.textContent="Add base pairs to the secondary structure before downloading a pair-probability template.";return;}
+    const rows=["Residue_i,Residue_j,Probability",...pairs.map(([a,b])=>(a+1)+","+(b+1)+",0.5")];
+    ExportTools.downloadText(rows.join("\n")+"\n","rna-pair-probability-template-"+seq.length+"nt.csv","text/csv;charset=utf-8");
+    if(probNote)probNote.textContent="Downloaded a template with "+pairs.length+" current base pairs. All 0.5 probabilities are placeholders, not calculated predictions.";
+  }
+  function secondaryFigureStem(){
+    return "rna-secondary-"+seq.length+"nt-"+pairs.length+"bp-"+layout;
+  }
+  function appendStrandEndLabels(root,pos){
+    if(!pos.length)return;
+    const draw=(point,neighbor,caption,alternateX)=>{
+      let dx=point.x-(neighbor?.x??point.x-alternateX),dy=point.y-(neighbor?.y??point.y);
+      const norm=Math.hypot(dx,dy)||1;
+      if(norm<1.01){dx=alternateX;dy=0;}
+      const norm2=Math.hypot(dx,dy)||1,x=point.x+dx/norm2*51,y=point.y+dy/norm2*51;
+      const g=svg("g",{class:"se-strand-end",transform:"translate("+x+" "+y+")",role:"img","aria-label":caption});
+      g.append(svg("rect",{x:-33,y:-14,width:66,height:28,rx:13,fill:"#08111e",stroke:"#74d7b6","stroke-width":1.5}));
+      text(g,caption,{x:0,y:1,fill:"#e9fff4","font-size":13,"font-weight":700,"font-family":"monospace","text-anchor":"middle","dominant-baseline":"central"});
+      root.append(g);
+    };
+    draw(pos[0],pos[1],"5′ end",-1);
+    draw(pos.at(-1),pos.length>1?pos.at(-2):null,"3′ end",1);
+  }
+
   function serializeDbn(){return ">RNA_Structure_Explorer\n"+seq+"\n"+db+"\n";}
   function serializeCt(){
     const lines=[seq.length+" ENERGY = 0 RNA Structure Explorer"];
@@ -660,7 +735,7 @@ const SecondaryExplorer = (() => {
     const root=$("secondarySvg");root.replaceChildren();
     const pos=coordinates();
     const xs=pos.map(p=>p.x),ys=pos.map(p=>p.y);
-    let minX=Math.min(...xs)-52,maxX=Math.max(...xs)+52,minY=Math.min(...ys)-55,maxY=Math.max(...ys)+55;
+    let minX=Math.min(...xs)-95,maxX=Math.max(...xs)+95,minY=Math.min(...ys)-95,maxY=Math.max(...ys)+95;
     if(layout==="arc") for(const [a,b] of pairs) minY=Math.min(minY,Math.min(pos[a].y,pos[b].y)-Math.abs(pos[b].x-pos[a].x)*(arcPairStyle==="arc"?arcRoundness/2:.42)-65);
     root.dataset.fullViewBox=`${minX} ${minY} ${Math.max(150,maxX-minX)} ${Math.max(150,maxY-minY)}`;
     root.setAttribute("aria-label",`${layout} RNA secondary structure with ${seq.length} nucleotides`);
@@ -701,10 +776,9 @@ const SecondaryExplorer = (() => {
       g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select(i);openSettingsFor("residue");}});
       root.append(g);
     });
-    text(root,"5′",{x:pos[0].x-30,y:pos[0].y,fill:"#74d7b6","font-size":16,"text-anchor":"end"});
-    text(root,"3′",{x:pos.at(-1).x+30,y:pos.at(-1).y,fill:"#74d7b6","font-size":16});
+    appendStrandEndLabels(root,pos);
     $("secondaryStageNote").textContent=`${layout[0].toUpperCase()+layout.slice(1)} · ${seq.length} residues · ${pairs.length} pairs · Select a residue index or pair`;
-    renderLegend();renderHeatLegend();renderPairProbabilityLegend();updateLayerSummary();saveWorkspaceLocal();
+    renderLegend();renderHeatLegend();renderPairProbabilityLegend();renderSecondaryStatistics();updateLayerSummary();saveWorkspaceLocal();
     if(typeof window!=="undefined"&&typeof CustomEvent!=="undefined")window.dispatchEvent(new CustomEvent("rna-secondary-layout",{detail:{sequence:seq,structure:db,layout,positions:pos.map(p=>({x:p.x,y:p.y}))}}));
   }
   function broadcastContext() {
@@ -853,7 +927,9 @@ const SecondaryExplorer = (() => {
     $("sePairVisible").addEventListener("change",e=>{settings.pairVisible=e.target.checked;render();});
     $("seLWLabels").addEventListener("change",e=>{settings.lwLabels=e.target.checked;render();});
     $("seMetadataFile").closest("fieldset").insertAdjacentHTML("afterbegin",'<button type="button" id="seExample">Load example reactivity CSV</button><p><a href="data/rna_residue_reactivity.csv" download>Download example CSV</a> · Values supplied for the default tRNA.</p>');
+    $("seMetadataFile").closest("fieldset").insertAdjacentHTML("afterbegin",'<button type="button" id="seMetadataTemplate">Download template for current sequence</button>');
     $("sePairProbFile").closest("fieldset").insertAdjacentHTML("afterbegin",'<button type="button" id="sePairProbExample">Load example base-pair probabilities</button><p><a href="data/rna_base_pair_probability_example.csv" download>Download example probability CSV</a> · Synthetic demonstration data for the default tRNA.</p>');
+    $("sePairProbFile").closest("fieldset").insertAdjacentHTML("afterbegin",'<button type="button" id="sePairProbTemplate">Download template for current pairs</button>');
     $("seBackList").addEventListener("change",e=>{selectedBackbone=Number(e.target.value);panel();});
     const bindLocal=(fields,prefix,target,index)=>fields.forEach(([k])=>$(prefix+k).addEventListener("input",e=>{
       if(!e.target.checkValidity())return;
@@ -904,6 +980,8 @@ const SecondaryExplorer = (() => {
       const [a,b]=key.split(":").map(Number);
       if(typeof MoleculeEditor!=="undefined")MoleculeEditor.openPair(seq[a],seq[b],drawing=>{pairChemistry[key]=drawing;panel();});
     });
+    $("seMetadataTemplate").addEventListener("click",()=>downloadSecondaryCsvTemplate("reactivity"));
+    $("sePairProbTemplate").addEventListener("click",()=>downloadSecondaryCsvTemplate("pairs"));
     $("sePairProbTheme").addEventListener("change",e=>{pairProbTheme=e.target.value;render();});
     $("sePairProbEnabled").addEventListener("change",e=>{
       pairProbEnabled=e.target.checked&&Object.keys(pairProbabilities).length>0;
@@ -1080,6 +1158,13 @@ const SecondaryExplorer = (() => {
   function renderPairProbabilityLegend(){
     const box=$("sePairProbLegend");if(!box)return;
     renderScaleLegend(box,"pair","Base-pair probability",palettes[pairProbTheme],0,1,pairProbEnabled);
+    if(box.hidden)return;
+    const matched=pairs.filter(([a,b])=>Object.prototype.hasOwnProperty.call(pairProbabilities,keyOf(a,b))).length;
+    const interpretation=document.createElement("p");interpretation.className="se-prob-legend-guide";
+    interpretation.textContent="0 = low probability · 1 = high probability. Colors come from the uploaded data, not from RNA Explorer predictions.";
+    const coverage=document.createElement("p");coverage.className="se-prob-legend-coverage";
+    coverage.textContent=matched+" of "+pairs.length+" displayed base pairs have probability values. Missing values keep their regular pair color.";
+    box.append(interpretation,coverage);
   }
   function renderHeatLegend(){
     const box=$("seHeatLegend");if(!box)return;
@@ -1121,7 +1206,7 @@ const SecondaryExplorer = (() => {
       const png=await new Promise(resolve=>canvas.toBlob(resolve,"image/png"));
       if(!png)throw Error("PNG creation failed. Try a smaller structure.");
       const downloadUrl=URL.createObjectURL(png),link=document.createElement("a");
-      link.href=downloadUrl;link.download="rna-secondary-"+layout+".png";document.body.append(link);link.click();link.remove();
+      link.href=downloadUrl;link.download=secondaryFigureStem()+".png";document.body.append(link);link.click();link.remove();
       setTimeout(()=>URL.revokeObjectURL(downloadUrl),10000);
       status.textContent="PNG downloaded ("+width+" × "+height+"). Transparent background; selection highlights and side-panel legends excluded.";
     }catch(error){status.textContent="Export failed: "+error.message;}finally{button.disabled=false;}
@@ -1217,6 +1302,9 @@ const SecondaryExplorer = (() => {
       <p class="se-disclaimer">Custom secondary input can be linked to a 3D structure in the Tertiary tab only after sequence/length validation and user confirmation that the inputs represent the same molecule. Layouts are schematic, not a folding prediction.</p>
       <a href="https://rnajournal.cshlp.org/content/7/4/499.long" target="_blank" rel="noreferrer">Leontis & Westhof (2001)</a>`;
     copy.append(controls);
+    const statsBox=document.createElement("section");statsBox.id="seStructureStats";
+    statsBox.className="se-structure-stats";statsBox.setAttribute("aria-label","Secondary structure statistics");
+    document.querySelector("#scene-secondary .secondary-inputs")?.insertAdjacentElement("afterend",statsBox);
     reorganizeControls(controls);
     if($("seCircleVisible")){$("seCircleVisible").checked=settings.circleVisible!==false;$("seCircleVisible").addEventListener("change",e=>{settings.circleVisible=e.target.checked;render();});}
     if($("seLetterVisible")){$("seLetterVisible").checked=settings.letterVisible!==false;$("seLetterVisible").addEventListener("change",e=>{settings.letterVisible=e.target.checked;render();});}
@@ -1240,8 +1328,10 @@ const SecondaryExplorer = (() => {
     setupToolbar(viewport,stage);
     installNodeDragging(root);
     const fileTools=document.createElement("div");fileTools.className="secondary-file-tools";
-    fileTools.innerHTML='<label class="secondary-action">Import DBN / CT<input id="seStructureImport" type="file" accept=".dbn,.ct,.txt,text/plain" hidden></label><button class="secondary-action" id="seClearAutosave" type="button">Clear browser autosave</button>';
+    fileTools.innerHTML='<button class="secondary-action" id="seCopySequence" type="button">Copy sequence</button><button class="secondary-action" id="seCopyDotBracket" type="button">Copy dot-bracket</button><label class="secondary-action">Import DBN / CT<input id="seStructureImport" type="file" accept=".dbn,.ct,.txt,text/plain" hidden></label><button class="secondary-action" id="seClearAutosave" type="button">Clear browser autosave</button>';
     document.querySelector(".secondary-workspace-actions")?.insertAdjacentElement("afterend",fileTools);
+    $("seCopySequence").addEventListener("click",()=>copySecondaryText("sequence"));
+    $("seCopyDotBracket").addEventListener("click",()=>copySecondaryText("structure"));
     const exportDialog=document.createElement("dialog");exportDialog.id="seExportDialog";exportDialog.className="se-export-dialog";
     exportDialog.innerHTML='<button type="button" class="dialog-close" id="seExportClose" aria-label="Close">×</button><h3>Export Secondary Structure</h3><label>Export type<select id="seExportType"><option value="image">Image</option><option value="structure">Structure</option></select></label><div id="seImageExportOptions"><label>Format<select id="seImageFormat"><option value="png">PNG</option><option value="svg">SVG</option><option value="pdf">PDF</option></select></label><label>Resolution / scale<input id="seImageScale" type="range" min="1" max="6" step=".5" value="2"><output id="seImageScaleValue">2×</output></label><label>DPI target<select id="seImageDpi"><option value="96">96</option><option value="150">150</option><option value="300" selected>300</option><option value="600">600</option></select></label><label>Background<select id="seImageBackground"><option value="transparent">Transparent</option><option value="#ffffff">White</option><option value="#0b1220">Dark</option></select></label></div><div id="seStructureExportOptions" hidden><label>Format<select id="seStructureFormat"><option value="dbn">DBN</option><option value="ct">CT</option></select></label></div><button type="button" class="primary-action" id="seExportNow">Export</button><p id="seExportDialogStatus" role="status"></p>';
     document.body.append(exportDialog);
@@ -1253,11 +1343,11 @@ const SecondaryExplorer = (() => {
       try{
         if($("seExportType").value==="structure"){
           const fmt=$("seStructureFormat").value;
-          ExportTools.downloadText(fmt==="ct"?serializeCt():serializeDbn(),"rna-secondary."+(fmt==="ct"?"ct":"dbn"),"text/plain;charset=utf-8");
+          ExportTools.downloadText(fmt==="ct"?serializeCt():serializeDbn(),"rna-secondary-"+seq.length+"nt-"+pairs.length+"bp."+(fmt==="ct"?"ct":"dbn"),"text/plain;charset=utf-8");
           out.textContent=(fmt==="ct"?"CT":"DBN")+" structure exported.";
         }else{
           const fmt=$("seImageFormat").value,dpi=Number($("seImageDpi").value)||96,scale=(Number($("seImageScale").value)||1)*(dpi/96),bg=$("seImageBackground").value;
-          const result=await ExportTools.exportSvgElement(root,{format:fmt,filename:"rna-secondary-"+layout,scale,background:bg,viewBox:root.dataset.fullViewBox});
+          const result=await ExportTools.exportSvgElement(root,{format:fmt,filename:secondaryFigureStem(),scale,background:bg,viewBox:root.dataset.fullViewBox});
           out.textContent=fmt.toUpperCase()+" image exported"+(result?.width?" · "+result.width+" × "+result.height:"")+".";
         }
       }catch(error){out.textContent="Export failed: "+error.message;}
