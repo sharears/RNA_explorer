@@ -530,7 +530,7 @@ const MoleculeEditor = (() => {
         const dpi=Number(exportDialog.querySelector("#chemExportDpi").value)||96;
         const scale=(Number(exportDialog.querySelector("#chemExportScale").value)||1)*(dpi/96);
         const format=exportDialog.querySelector("#chemExportFormat").value,background=exportDialog.querySelector("#chemExportBackground").value;
-        const filename=mode==="pair"?"rna-base-pair-chemistry":mode==="blank"?"rna-molecular-drawing":"rna-"+base.toLowerCase()+"-chemistry";
+        const filename=molecularFigureStem();
         const result=await ExportTools.exportSvgElement(svg,{format,filename,scale,background,viewBox:canvasViewBox()});
         out.textContent=format.toUpperCase()+" exported"+(result?.width?" · "+result.width+" × "+result.height:"")+".";
       }catch(error){out.textContent="Export failed: "+error.message;}
@@ -1269,13 +1269,18 @@ const MoleculeEditor = (() => {
     if(threeDVisible)schedule3DRender();
   }
 
+  function molecularFigureStem(){
+    const kind=mode==="pair"?"base-pair-"+leftBase+"-"+rightBase:mode==="blank"?"molecular-drawing":"nucleobase-"+String(base).toLowerCase();
+    return "rna-"+kind+"-"+graph.atoms.length+"atoms-"+graph.bonds.length+"bonds";
+  }
+
   async function exportCurrentDrawing(){
     if(typeof ExportTools==="undefined")throw new Error("Export tools are unavailable.");
     const format=dialog.querySelector("#chemExportFormat").value,scale=Number(dialog.querySelector("#chemExportScale").value)||2,background=dialog.querySelector("#chemExportBackground").value;
     const oldSelected=new Set(selectedAtoms),oldAtom=selectedAtom,oldPending=pendingAtom,oldBox=selectionBox,oldLasso=lasso;
     selectedAtoms.clear();selectedAtom=null;pendingAtom=null;selectionBox=null;lasso=null;render();
     try{
-      const label=mode==="pair"?"rna-base-pair-"+leftBase+"-"+rightBase:mode==="blank"?"rna-molecular-drawing":"rna-template-"+String(base).toLowerCase();
+      const label=molecularFigureStem();
       await ExportTools.exportSvgElement(svg,{format,filename:label,scale,background,viewBox:canvasViewBox()});
       status.textContent=format.toUpperCase()+" image exported.";
     }finally{
