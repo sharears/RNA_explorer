@@ -239,11 +239,11 @@ const SecondaryExplorer = (() => {
   }
   function appendStrandEndLabels(root,pos){
     if(!pos.length)return;
-    const draw=(point,neighbor,caption,alternateX)=>{
-      let dx=point.x-(neighbor?.x??point.x-alternateX),dy=point.y-(neighbor?.y??point.y);
-      const norm=Math.hypot(dx,dy)||1;
-      if(norm<1.01){dx=alternateX;dy=0;}
-      const norm2=Math.hypot(dx,dy)||1,x=point.x+dx/norm2*51,y=point.y+dy/norm2*51;
+    const draw=(point,neighbor,caption,horizontalDirection)=>{
+      // Preserve the established reading direction: 5′ left, 3′ right.
+      // A modest vertical offset follows the local backbone without covering it.
+      const offsetY=Math.max(-12,Math.min(12,(point.y-(neighbor?.y??point.y))*.45));
+      const x=point.x+horizontalDirection*53,y=point.y+offsetY;
       const g=svg("g",{class:"se-strand-end",transform:"translate("+x+" "+y+")",role:"img","aria-label":caption});
       g.append(svg("rect",{x:-33,y:-14,width:66,height:28,rx:13,fill:"#08111e",stroke:"#74d7b6","stroke-width":1.5}));
       text(g,caption,{x:0,y:1,fill:"#e9fff4","font-size":13,"font-weight":700,"font-family":"monospace","text-anchor":"middle","dominant-baseline":"central"});
