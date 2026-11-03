@@ -1649,6 +1649,13 @@ const TertiaryExplorer = (() => {
     setStatus("Exported "+atoms.length+" atoms as "+(format==="cif"?"mmCIF":"PDB")+".");
   }
 
+  function tertiaryFigureStem(){
+    const source=String(state.currentFileName||"structure").replace(/^RCSB PDB\s*·\s*/i,"").replace(/^PDB\s+/i,"").replace(/\.(?:pdb|ent|cif|mmcif)$/i,"");
+    const safe=source.replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase().slice(0,64)||"structure";
+    const chain=String(state.activeChain??"all").replace(/[^a-z0-9]+/gi,"-").toLowerCase()||"blank";
+    return "rna-tertiary-"+safe+"-chain-"+chain+"-"+state.representation;
+  }
+
   async function exportPng(){
     const button=$("teDownload"),status=$("teExportStatus");if(!viewer||!button||!status)return;
     button.disabled=true;status.textContent="Rendering PNG…";
@@ -1658,7 +1665,7 @@ const TertiaryExplorer = (() => {
     try{
       viewer.setWidth(width);viewer.setHeight(height);if(view)viewer.setView(view);viewer.render();
       await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-      const uri=viewer.pngURI(),link=document.createElement("a");link.href=uri;link.download="rna-tertiary-"+(state.currentFileName.replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase()||"structure")+".png";
+      const uri=viewer.pngURI(),link=document.createElement("a");link.href=uri;link.download=tertiaryFigureStem()+".png";
       document.body.append(link);link.click();link.remove();status.textContent="PNG downloaded ("+width+" × "+height+").";
     }catch(error){status.textContent="Export failed: "+error.message;}
     finally{viewer.setWidth(baseW);viewer.setHeight(baseH);if(view)viewer.setView(view);viewer.render();button.disabled=false;}
@@ -1878,7 +1885,7 @@ const TertiaryExplorer = (() => {
       viewer.setWidth(width);viewer.setHeight(height);if(view)viewer.setView(view);
       if(background==="transparent")viewer.setBackgroundColor("#000000",0);else viewer.setBackgroundColor(background,1);
       viewer.render();await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-      const dataUrl=viewer.pngURI(),base="rna-tertiary-"+(state.currentFileName.replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase()||"structure");
+      const dataUrl=viewer.pngURI(),base=tertiaryFigureStem();
       if(format==="pdf")await ExportTools.exportRasterPdf(dataUrl,width,height,base);
       else if(format==="svg"){
         const svg=buildEmbeddedRasterSvg(dataUrl,width,height);
