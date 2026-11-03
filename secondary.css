@@ -339,3 +339,19 @@ body[data-page-mode="secondary"] .workspace-advanced-panel .se-controls{margin-t
  #secondarySvg .se-node.multi-selected>circle:first-child,
  #secondarySvg .se-pair.selected path:not([stroke="transparent"]){animation:none!important;opacity:1!important}
 }
+
+/* Quick secondary-structure statistics and data/clipboard helpers. */
+.se-structure-stats{
+  margin:13px 0 16px;padding:12px 13px;border:1px solid var(--line);
+  border-radius:9px;background:rgba(10,24,37,.65);
+}
+.se-structure-stats>strong{display:block;color:var(--cream);font-size:13px;margin-bottom:10px}
+.se-stats-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;margin:0}
+.se-stats-grid>div{min-width:0}
+.se-stats-grid dt{font-size:11px;color:var(--muted);line-height:1.35}
+.se-stats-grid dd{font:700 15px/1.4 "DM Mono",monospace;color:var(--mint);margin:2px 0 0}
+.secondary-file-tools button{cursor:pointer}
+.se-prob-legend-guide,.se-prob-legend-coverage{font-size:11px!important;line-height:1.5;margin:8px 0 0!important}
+.se-prob-legend-coverage{color:var(--cream)!important}
+.se-strand-end{pointer-events:none}
+@media(max-width:420px){.se-stats-grid{gap:8px}}
