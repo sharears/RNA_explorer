@@ -783,6 +783,7 @@ function initialize() {
   MoleculeEditor.setup();
   renderPrimary();
   setupPrimaryAnimation();
+  if(typeof LearningStructureEdit!=="undefined")LearningStructureEdit.setup();
   if(typeof GuidedStructureTransitions!=="undefined")GuidedStructureTransitions.setup();
   setupSecondaryWorkspace();
   renderSecondary();
