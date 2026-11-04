@@ -70,6 +70,7 @@ function chooseJourneyBase(base) {
   document.getElementById('chosenBase').textContent=`Selected: ${chemicalNames[base][0]}. Carry this base into Nucleoside, then Nucleotide.`;
   reactionView('nucleoside');
   reactionView('nucleotide');
+  if(typeof CustomEvent!=='undefined')window.dispatchEvent(new CustomEvent('rna-journey-base-changed'));
 }
 
 function setupChemicalJourney() {
@@ -82,10 +83,11 @@ function setupChemicalJourney() {
   picker.after(chosen);
   const chooser=document.createElement('div');chooser.className='component-picker';
   [['phosphate','Phosphoric acid'],['ribose','Ribose'],['base','Base']].forEach(([key,name])=>{
-    const button=document.createElement('button');button.type='button';button.textContent=name;
+    const button=document.createElement('button');button.type='button';button.textContent=name;button.dataset.component=key;
     button.setAttribute('aria-pressed',String(key==='ribose'));
     button.addEventListener('click',()=>{
       chooser.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
+      if(typeof CustomEvent!=='undefined')window.dispatchEvent(new CustomEvent('rna-journey-component-changed'));
       const panel=document.getElementById('blockFact');
       panel.querySelector('h3').textContent=name;
       panel.querySelector('p').textContent=key==='phosphate'?'Phosphoric acid (H₃PO₄) is shown in its neutral form for these condensation schemes. Phosphate groups usually carry negative charge in cells.':blockFacts[key].copy;
