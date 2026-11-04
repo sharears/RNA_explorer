@@ -1,0 +1,44 @@
+/* Optional molecular editing: lessons retain their original visuals until Edit Structure. */
+body:not([data-page-mode="journey"]) .lesson-edit-actions,
+body:not([data-page-mode="journey"]) .lesson-custom-preview,
+body:not([data-page-mode="journey"]) .lesson-edit-status{display:none!important}
+#scene-blocks .visual-stage,#scene-nucleoside .visual-stage,
+#scene-nucleotide .visual-stage,#scene-primary .visual-stage{position:relative}
+.lesson-edit-actions{
+  position:absolute;top:12px;right:14px;z-index:12;
+  display:flex;align-items:center;justify-content:flex-end;gap:6px;
+  max-width:calc(100% - 28px);
+}
+.lesson-edit-actions button{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:7px 10px;border:1px solid rgba(159,182,204,.28);
+  border-radius:9px;background:rgba(8,22,37,.91);
+  color:var(--text);font:650 12px/1.35 "Manrope",sans-serif;
+  cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.14);
+}
+.lesson-edit-actions button:hover,.lesson-edit-actions button:focus-visible{
+  border-color:var(--mint);color:var(--mint);background:rgba(12,36,55,.98)
+}
+.lesson-edit-actions .lesson-edit-button>span{font-size:15px;line-height:1}
+.lesson-edit-actions .lesson-edit-reset{color:var(--muted)}
+.lesson-edit-actions button[hidden],.lesson-custom-preview[hidden]{display:none!important}
+.lesson-custom-preview{
+  display:grid;align-content:center;justify-items:center;gap:6px;
+  width:min(100%,960px);min-height:220px;margin:44px auto 6px;
+  padding:14px 12px;border:1px solid rgba(88,217,247,.23);
+  border-radius:12px;background:rgba(6,20,38,.6);
+}
+.lesson-custom-svg{display:block;width:100%;height:auto;max-height:470px;cursor:pointer}
+.lesson-custom-svg:hover{filter:drop-shadow(0 0 5px rgba(88,217,247,.12))}
+.lesson-custom-svg:focus-visible{outline:3px solid var(--mint);outline-offset:4px;border-radius:8px}
+.lesson-custom-bonds line{stroke:#bcd8e8;stroke-width:2.5;stroke-linecap:round}
+.lesson-custom-atoms circle{fill:#0d2137;stroke:#89b2c6;stroke-width:1.2}
+.lesson-custom-atoms text{fill:#f0f8ff;font:650 14px "DM Mono",monospace;pointer-events:none}
+.lesson-edit-preview-note{margin:5px 0 0!important;color:var(--muted);font-size:12px!important;line-height:1.5;text-align:center}
+.lesson-edit-status{min-height:0;margin:0!important;font-size:12px!important;line-height:1.5;color:var(--mint)!important}
+.lesson-edit-status:empty{display:none}
+@media(max-width:600px){
+  .lesson-edit-actions{top:8px;right:8px;gap:4px}
+  .lesson-edit-actions button{font-size:11px;padding:6px 8px}
+  .lesson-custom-preview{margin-top:48px;min-height:170px}
+}

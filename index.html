@@ -12,10 +12,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=modern-ui-5" />
-  <link rel="stylesheet" href="secondary.css?v=secondary-six-27" />
+  <link rel="stylesheet" href="secondary.css?v=secondary-copy-icons-28" />
   <link rel="stylesheet" href="tertiary.css?v=tertiary-coarse-21" />
   <link rel="stylesheet" href="guided-transitions.css?v=guided-6" />
   <link rel="stylesheet" href="chemistry-editor.css?v=chem-editor-11" />
+  <link rel="stylesheet" href="learning-structure-edit.css?v=lesson-edit-1" />
   <link rel="stylesheet" href="learning-tools.css?v=learning-tools-1" />
   <link rel="stylesheet" href="secondary-selection-tools.css?v=6">
   <link rel="stylesheet" href="readability.css?v=readability-1" />
@@ -288,9 +289,19 @@
             <p>Enter an RNA sequence and its dot-bracket structure, then compare three ways of viewing the same base pairs.</p>
             <div class="secondary-inputs" aria-label="RNA secondary-structure input">
               <label for="secondarySequence">RNA sequence</label>
-              <textarea id="secondarySequence" rows="3" spellcheck="false" aria-describedby="secondaryInputHelp"></textarea>
+              <div class="se-copy-field"><textarea id="secondarySequence" rows="3" spellcheck="false" aria-describedby="secondaryInputHelp"></textarea>
+                <button type="button" class="se-copy-icon-button" id="seCopySequence" aria-label="Copy RNA sequence" title="Copy RNA sequence">
+                  <svg class="se-copy-glyph" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>
+                  <svg class="se-check-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"></path></svg>
+                </button>
+              </div>
               <label for="secondaryDotBracket">Dot-bracket structure</label>
-              <textarea id="secondaryDotBracket" rows="3" spellcheck="false" aria-describedby="secondaryInputHelp"></textarea>
+              <div class="se-copy-field"><textarea id="secondaryDotBracket" rows="3" spellcheck="false" aria-describedby="secondaryInputHelp"></textarea>
+                <button type="button" class="se-copy-icon-button" id="seCopyDotBracket" aria-label="Copy dot-bracket structure" title="Copy dot-bracket structure">
+                  <svg class="se-copy-glyph" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>
+                  <svg class="se-check-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"></path></svg>
+                </button>
+              </div>
               <p class="input-help" id="secondaryInputHelp">Use <code>(</code> and <code>)</code> for paired residues and <code>.</code> for unpaired residues.</p>
               <div class="secondary-workspace-actions">
                 <button class="primary-action" id="renderSecondaryButton" type="button">Render structure</button>
@@ -443,18 +454,19 @@
   </dialog>
 
   <script src="export-tools.js?v=1"></script>
-  <script src="chemistry.js?v=chemistry-2"></script>
+  <script src="chemistry.js?v=chemistry-learning-graph-3"></script>
   <script src="chemistry-3d-openbabel.js?v=3"></script>
   <script src="amino-acid-stock.js?v=1"></script>
-  <script src="chemistry-editor.js?v=chem-editor-figure-names-20"></script>
-  <script src="journey.js?v=guided-2"></script>
+  <script src="chemistry-editor.js?v=chem-editor-lesson-graph-21"></script>
+  <script src="journey.js?v=guided-lesson-events-3"></script>
   <script src="primary-animation.js?v=primary-5"></script>
+  <script src="learning-structure-edit.js?v=lesson-edit-1"></script>
   <script src="guided-transitions.js?v=guided-8"></script>
-  <script src="secondary.js?v=secondary-six-tools-32"></script>
+  <script src="secondary.js?v=secondary-inline-copy-33"></script>
   <script src="tertiary.js?v=tertiary-figure-names-29"></script>
   <script src="project-session.js?v=project-1"></script>
   <script src="learning-tools.js?v=learning-tools-4"></script>
-  <script src="app.js?v=modern-ui-ipados-6"></script>
+  <script src="app.js?v=lesson-edit-initialize-7"></script>
   <script src="secondary-selection-tools.js?v=7"></script>
   <script src="workspace-organizer.js?v=3"></script>
   <script src="secondary-motifs.js?v=1"></script>

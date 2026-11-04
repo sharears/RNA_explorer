@@ -202,10 +202,11 @@ const SecondaryExplorer = (() => {
     });
     box.append(grid);
   }
+  const copyResetTimers=new WeakMap();
   async function copySecondaryText(kind){
     const input=$(kind==="sequence"?"secondarySequence":"secondaryDotBracket");
     const value=input?input.value:(kind==="sequence"?seq:db),label=kind==="sequence"?"RNA sequence":"dot-bracket structure";
-    const status=$("secondaryInputStatus");
+    const status=$("secondaryInputStatus"),button=$(kind==="sequence"?"seCopySequence":"seCopyDotBracket");
     try{
       if(!value)throw Error("There is no "+label+" to copy.");
       if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(value);
@@ -216,8 +217,23 @@ const SecondaryExplorer = (() => {
         const ok=document.execCommand?.("copy");field.remove();
         if(!ok)throw Error("Copy permission is unavailable in this browser.");
       }
+      if(button){
+        const previous=copyResetTimers.get(button);if(previous)clearTimeout(previous);
+        button.classList.add("is-copied");
+        button.setAttribute("aria-label",label+" copied");
+        button.title="Copied!";
+        copyResetTimers.set(button,setTimeout(()=>{
+          button.classList.remove("is-copied");
+          button.setAttribute("aria-label","Copy "+label);
+          button.title="Copy "+label;
+          copyResetTimers.delete(button);
+        },1800));
+      }
       if(status){status.textContent="Copied "+label+" to clipboard.";status.classList.remove("error");}
-    }catch(error){if(status){status.textContent="Could not copy "+label+": "+error.message;status.classList.add("error");}}
+    }catch(error){
+      if(button){button.classList.remove("is-copied");button.title="Copy "+label;}
+      if(status){status.textContent="Could not copy "+label+": "+error.message;status.classList.add("error");}
+    }
   }
   function downloadSecondaryCsvTemplate(kind){
     const note=$("seMetadataStatus"),probNote=$("sePairProbStatus");
@@ -1329,7 +1345,7 @@ const SecondaryExplorer = (() => {
     setupToolbar(viewport,stage);
     installNodeDragging(root);
     const fileTools=document.createElement("div");fileTools.className="secondary-file-tools";
-    fileTools.innerHTML='<button class="secondary-action" id="seCopySequence" type="button">Copy sequence</button><button class="secondary-action" id="seCopyDotBracket" type="button">Copy dot-bracket</button><label class="secondary-action">Import DBN / CT<input id="seStructureImport" type="file" accept=".dbn,.ct,.txt,text/plain" hidden></label><button class="secondary-action" id="seClearAutosave" type="button">Clear browser autosave</button>';
+    fileTools.innerHTML='<label class="secondary-action">Import DBN / CT<input id="seStructureImport" type="file" accept=".dbn,.ct,.txt,text/plain" hidden></label><button class="secondary-action" id="seClearAutosave" type="button">Clear browser autosave</button>';
     document.querySelector(".secondary-workspace-actions")?.insertAdjacentElement("afterend",fileTools);
     $("seCopySequence").addEventListener("click",()=>copySecondaryText("sequence"));
     $("seCopyDotBracket").addEventListener("click",()=>copySecondaryText("structure"));
