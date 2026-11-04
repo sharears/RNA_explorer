@@ -9,7 +9,11 @@ const LearningStructureEdit=(()=>{
     return document.querySelector('#scene-blocks .component-picker button[aria-pressed="true"]')?.dataset.component||"ribose";
   }
   function modelKey(scene){
-    if(scene==="blocks")return scene+":"+chemistry.base+":"+currentPart();
+    if(scene==="blocks"){
+      const part=currentPart();
+      // Ribose/phosphate are the same building blocks for every selected base.
+      return scene+":"+part+(part==="base"?":"+chemistry.base:"");
+    }
     if(scene==="primary")return scene+":first-three-nucleotides";
     return scene+":"+chemistry.base;
   }
