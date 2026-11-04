@@ -355,3 +355,23 @@ body[data-page-mode="secondary"] .workspace-advanced-panel .se-controls{margin-t
 .se-prob-legend-coverage{color:var(--cream)!important}
 .se-strand-end{pointer-events:none}
 @media(max-width:420px){.se-stats-grid{gap:8px}}
+
+
+/* Copy controls: an unobtrusive circular button inside each RNA input. */
+#scene-secondary .se-copy-field{position:relative;width:100%}
+#scene-secondary .se-copy-field textarea{padding-right:52px;padding-bottom:43px}
+#scene-secondary .se-copy-icon-button{
+  position:absolute;right:10px;bottom:10px;z-index:2;
+  display:grid;place-items:center;width:34px;height:34px;padding:0;
+  border:1px solid rgba(159,182,204,.3);border-radius:50%;
+  background:rgba(12,28,44,.91);color:var(--muted);
+  box-shadow:0 2px 8px rgba(0,0,0,.18);cursor:pointer;
+  transition:background .15s,border-color .15s,color .15s;
+}
+#scene-secondary .se-copy-icon-button:hover,
+#scene-secondary .se-copy-icon-button:focus-visible{border-color:var(--mint);color:var(--text);background:rgba(27,54,74,.98)}
+#scene-secondary .se-copy-icon-button.is-copied{color:var(--mint);border-color:var(--mint)}
+#scene-secondary .se-copy-icon-button svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+#scene-secondary .se-copy-icon-button .se-check-glyph{display:none}
+#scene-secondary .se-copy-icon-button.is-copied .se-copy-glyph{display:none}
+#scene-secondary .se-copy-icon-button.is-copied .se-check-glyph{display:block}
