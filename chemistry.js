@@ -8,7 +8,7 @@ const chemicalNames = {
   C: ['Cytosine', 'Cytidine', 'Cytidine 5′-monophosphate (CMP)'],
   U: ['Uracil', 'Uridine', 'Uridine 5′-monophosphate (UMP)']
 };
-function chemicalDiagram(base, step, overview = false, hidePhosphate = false) {
+function chemicalDiagram(base, step, overview = false, hidePhosphate = false, graphSelection = null) {
   const linked = step >= 1, phosphorylated = step >= 2;
   const purine = base === 'A' || base === 'G';
   const attach = purine ? 'N9' : 'N1';
@@ -50,6 +50,27 @@ function chemicalDiagram(base, step, overview = false, hidePhosphate = false) {
   if(!hidePhosphate) labels.push(`<text x="120" y="340" class="chem-label">${phosphorylated?'5′-phosphate':'Phosphoric acid'}</text>`);
   labels.push(`<text x="690" y="385" class="chem-label">${chemicalNames[base][0]} · ${purine?'purine':'pyrimidine'}</text>`);
   const hidden = hidePhosphate ? ['p','po','poh','poh2','leaveP'] : [];
+  if(graphSelection){
+    // Use the SAME atoms, connectivity and bond orders as the teaching drawing.
+    // This is an editable 2D chemical graph, not a stereochemical 3D assignment.
+    const phosphate=new Set(['p','po','poh','poh2','leaveP']);
+    const selected=atoms.filter(atom=>{
+      if(hidden.includes(atom.id))return false;
+      if(graphSelection==="phosphate")return phosphate.has(atom.id);
+      const isBase=atom.kind==="base"||atom.id==="n"||atom.id==="hn";
+      if(graphSelection==="base")return isBase;
+      if(graphSelection==="ribose")return !phosphate.has(atom.id)&&!isBase;
+      return true;
+    });
+    const ids=new Set(selected.map(atom=>atom.id));
+    const elementOf=label=>label==="HO"||label==="OH"?"O":(String(label).match(/^(Cl|Br|[A-Z][a-z]?)/)?.[1]||"C");
+    return {
+      atoms:selected.map(atom=>({id:atom.id,element:elementOf(atom.text),x:atom.x,y:atom.y,charge:0,label:atom.text})),
+      bonds:bonds.filter(bond=>ids.has(bond.from)&&ids.has(bond.to))
+        .map((bond,i)=>({id:"b"+(i+1),a:bond.from,b:bond.to,order:bond.order})),
+      hbonds:[],iupac:null
+    };
+  }
   const lines = bonds.filter(p=>!hidden.includes(p.from)&&!hidden.includes(p.to)).map(({from,to,order,kind})=>{
     const p=atoms.find(v=>v.id===from), q=atoms.find(v=>v.id===to);
     const dx=q.x-p.x,dy=q.y-p.y,len=Math.hypot(dx,dy), ox=-dy/len*3,oy=dx/len*3;
