@@ -1,0 +1,44 @@
+name: Inline copy and optional Learn editing
+on:
+  pull_request:
+    paths:
+      - index.html
+      - secondary.js
+      - secondary.css
+      - chemistry.js
+      - chemistry-editor.js
+      - journey.js
+      - learning-structure-edit.js
+      - learning-structure-edit.css
+      - app.js
+      - tests/lesson-edit-copy-browser.mjs
+      - .github/workflows/lesson-edit-copy-browser.yml
+  push:
+    branches: [main]
+    paths:
+      - index.html
+      - secondary.js
+      - chemistry.js
+      - chemistry-editor.js
+      - journey.js
+      - learning-structure-edit.js
+      - tests/lesson-edit-copy-browser.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - name: Test inline copy and optional molecular lesson editing
+        run: |
+          python3 -m http.server 4173 >/tmp/rna-lesson-edit.log 2>&1 &
+          sleep 2
+          node tests/lesson-edit-copy-browser.mjs
