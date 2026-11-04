@@ -188,6 +188,7 @@ const MoleculeEditor = (() => {
   }
 
   let dialog=null,svg=null,status=null,title=null,mode="base",base="A",leftBase="G",rightBase="C";
+  let initialLearningGraph=null;
   let graph={atoms:[],bonds:[],hbonds:[]},tool="select",element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,lasso=null,transformDrag=null,selectionZoom=1,pendingFuseBond=null,onSave=null;
   let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false,showAtomLabels=true,showAtomNumbers=false;
   let ignoredValenceWarnings=new Set(),smartLayoutEnabled=true,threeDVisible=false,threeDMode="ideal";
@@ -1028,7 +1029,7 @@ const MoleculeEditor = (() => {
   }
 
   function loadCurrent(){
-    graph=mode==="base"?graphFromBase(base):mode==="pair"?mergePair(leftBase,rightBase):{atoms:[],bonds:[],hbonds:[],iupac:null};
+    graph=mode==="base"?graphFromBase(base):mode==="pair"?mergePair(leftBase,rightBase):mode==="learning"&&initialLearningGraph?clone(initialLearningGraph):{atoms:[],bonds:[],hbonds:[],iupac:null};
     resetCanvasView();renumber();fitCanvasToDrawing(false);render();validate();
   }
   function changeCharge(delta){
@@ -1306,6 +1307,36 @@ const MoleculeEditor = (() => {
   }
 
   function syncCircleButton(){syncDisplayButtons();}
+
+  // Open a lesson's *real* atom/bond model in the existing editor, rather
+  // than trying to edit its simplified illustrative SVG in place.
+  function openGraph(template,{name="Learning structure",onSave:callback=null}={}){
+    if(!template||!Array.isArray(template.atoms)||!Array.isArray(template.bonds))
+      throw Error("A molecular model with atoms and bonds is required.");
+    if(!template.atoms.length||template.atoms.length>500||template.bonds.length>1200)
+      throw Error("This lesson molecule exceeds the supported editor size.");
+    const candidate=clone(template),ids=new Set();
+    candidate.atoms.forEach(atom=>{
+      if(!atom||typeof atom.id!=="string"||!atom.id||ids.has(atom.id)||
+        !Object.prototype.hasOwnProperty.call(standardValence,atom.element)||
+        !Number.isFinite(atom.x)||!Number.isFinite(atom.y)||
+        !Number.isInteger(atom.charge??0)||Math.abs(atom.charge??0)>8)
+        throw Error("Invalid atom in the lesson molecular model.");
+      ids.add(atom.id);
+    });
+    candidate.bonds.forEach(bond=>{
+      if(!bond||!ids.has(bond.a)||!ids.has(bond.b)||bond.a===bond.b||![1,2,3].includes(bond.order))
+        throw Error("Invalid bond in the lesson molecular model.");
+    });
+    candidate.hbonds=Array.isArray(candidate.hbonds)?candidate.hbonds.filter(h=>ids.has(h.a)&&ids.has(h.b)):[];
+    ensureDialog();mode="learning";onSave=callback;initialLearningGraph=clone(candidate);
+    graph=clone(candidate);showAtomCircles=false;showAtomLabels=true;showAtomNumbers=false;
+    syncDisplayButtons();syncTextControls(textDefaults);
+    title.textContent="Edit "+String(name).slice(0,90);
+    dialog.querySelector("#chemStockStructures").open=false;
+    resetCanvasView();renumber();fitCanvasToDrawing(false);resetUndoHistory();render();validate();showEditorWindow();
+  }
+
   function openBase(selectedBase,callback){
     ensureDialog();mode="base";base=selectedBase||"A";onSave=callback||null;showAtomCircles=false;showAtomLabels=true;showAtomNumbers=false;syncDisplayButtons();syncTextControls(textDefaults);
     title.textContent="Edit "+((BASES[base]||{}).name||base);
@@ -1375,7 +1406,7 @@ const MoleculeEditor = (() => {
     return getSessionSnapshot();
   }
 
-  return {setup,openBase,openPair,openBlank,openAminoAcid,getBaseGraph:graphFromBase,getCurrentGraph:()=>clone(graph),getSavedBase:b=>savedBases[b]?clone(savedBases[b]):null,pairTemplate,
+  return {setup,openBase,openPair,openBlank,openAminoAcid,openGraph,getBaseGraph:graphFromBase,getCurrentGraph:()=>clone(graph),getSavedBase:b=>savedBases[b]?clone(savedBases[b]):null,pairTemplate,
     getSessionSnapshot,restoreSessionSnapshot,
     get3DDiagnostics:()=>({visible:threeDVisible,mode:threeDMode,view:{...threeDView},fullscreen:document.fullscreenElement===threeDPanel||Boolean(threeDPanel?.classList.contains("chem-3d-expanded")),atomCount:threeDCoords.length}),
     idealize2D:idealize2DGeometry,
