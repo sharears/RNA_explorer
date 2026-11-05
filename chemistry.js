@@ -67,7 +67,7 @@ function chemicalDiagram(base, step, overview = false, hidePhosphate = false, gr
       // align that nitrogen with the lesson's existing C1′ attachment site.
       const scale=.85;
       modifiedBase.atoms.forEach(atom=>{
-        const numberMatch=/^[A-Z][0-9]+$/.test(atom.id);
+        const numberMatch=/^(?:C[0-9]+|N[0-9]+|O[0-9]+|P[0-9]+)$/.test(atom.id);
         const label=numberMatch?atom.element+atom.id.replace(/^[A-Za-z]+/,""):atom.element;
         const charge=Number(atom.charge)||0;
         const suffix=charge>0?(charge===1?"⁺":"⁺"+charge):charge<0?(charge===-1?"⁻":"⁻"+Math.abs(charge)):"";
@@ -76,9 +76,9 @@ function chemicalDiagram(base, step, overview = false, hidePhosphate = false, gr
       modifiedBase.bonds.forEach(bond=>b(mapping.get(bond.a),mapping.get(bond.b),bond.order||1));
     }
   }
-  labels.push(`<text x="390" y="487" class="chem-label">${linked ? chemicalNames[base][1] + ' · nucleoside' : 'Ribofuranose (ribose)'}</text>`);
+  labels.push(`<text x="390" y="487" class="chem-label">${linked ? chemicalNames[base][1] + (modifiedBase?' (edited base)':'') + ' · nucleoside' : 'Ribofuranose (ribose)'}</text>`);
   if(!hidePhosphate) labels.push(`<text x="120" y="340" class="chem-label">${phosphorylated?'5′-phosphate':'Phosphoric acid'}</text>`);
-  labels.push(`<text x="690" y="385" class="chem-label">${chemicalNames[base][0]} · ${purine?'purine':'pyrimidine'}</text>`);
+  labels.push(`<text x="690" y="385" class="chem-label">${chemicalNames[base][0]}${modifiedBase?' (edited)':''} · ${purine?'purine':'pyrimidine'}</text>`);
   const hidden = hidePhosphate ? ['p','po','poh','poh2','leaveP'] : [];
   if(graphSelection){
     // Use the SAME atoms, connectivity and bond orders as the teaching drawing.
