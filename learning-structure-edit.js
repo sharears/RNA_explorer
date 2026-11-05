@@ -43,7 +43,7 @@ const LearningStructureEdit=(()=>{
     return out;
   }
   function initialGraph(scene){
-    if(scene==="blocks")return chemicalDiagram(chemistry.base,0,false,false,currentPart());
+    if(scene==="blocks")return currentPart()==="base"?MoleculeEditor.getBaseGraph(chemistry.base):chemicalDiagram(chemistry.base,0,false,false,currentPart());
     if(scene==="nucleoside")return chemicalDiagram(chemistry.base,1,false,true,"full");
     if(scene==="nucleotide")return chemicalDiagram(chemistry.base,2,false,false,"full");
     return primaryFragmentGraph();
@@ -102,19 +102,55 @@ const LearningStructureEdit=(()=>{
     widget.preview.hidden=!saved;
     if(saved)drawGraph(widget.preview,saved,modelName(scene));
     else widget.preview.replaceChildren();
-    widget.status.textContent=saved?"Edited molecular model saved for this lesson. Reset Structure restores its original illustration.":"";
+    widget.status.textContent=saved?(scene==="blocks"&&currentPart()==="base"?"Modified nucleobase saved. Continue to Nucleoside to see it join ribose.":"Edited molecular model saved for this lesson. Reset Structure restores its original illustration."):"";
+  }
+  // The glycosidic link must retain a valid N9 (purines) or N1 (pyrimidines).
+  // Reject edits that remove the attachment site or overfill its simple valence.
+  function validateNucleobaseAttachment(base,graph){
+    const anchorId=base==="A"||base==="G"?"N9":"N1";
+    const anchor=graph.atoms?.find(atom=>atom.id===anchorId);
+    if(!anchor||anchor.element!=="N")throw Error("Keep the "+anchorId+" nitrogen: it connects this base to ribose at C1′.");
+    const bondOrder=(graph.bonds||[]).filter(b=>b.a===anchorId||b.b===anchorId).reduce((n,b)=>n+Number(b.order||1),0);
+    if(bondOrder+1>3+Math.max(0,Number(anchor.charge)||0))
+      throw Error(anchorId+" needs one available single bond for the N-glycosidic link. Remove an extra bond before saving.");
+    return true;
+  }
+  function refreshAssembly(){
+    // Reset the staged reaction and redraw it from the saved graph so the
+    // modified nucleobase participates in both assembly animations.
+    if(typeof cancelChemicalAnimation==="function")cancelChemicalAnimation();
+    if(typeof journey!=="undefined"){journey.nucleoside=false;journey.nucleotide=false;}
+    const overview=document.getElementById("chemicalOverview");
+    if(overview)overview.innerHTML=chemicalDiagram(chemistry.base,0,true);
+    if(typeof reactionView==="function"){
+      reactionView("nucleoside");
+      reactionView("nucleotide");
+    }
   }
   function edit(scene){
     const key=modelKey(scene),name=modelName(scene);
+    const editingBase=scene==="blocks"&&currentPart()==="base",base=chemistry.base;
     try{
       MoleculeEditor.openGraph(graphFor(scene),{name,onSave:edited=>{
+        if(editingBase)validateNucleobaseAttachment(base,edited);
         savedGraphs.set(key,clone(edited));
-        refresh(scene);
+        if(editingBase)refreshAssembly();
+        LESSONS.forEach(refresh);
       }});
     }catch(error){
       const widget=widgets.get(scene);
       if(widget)widget.status.textContent="Could not open the molecular editor: "+error.message;
     }
+  }
+  function editBase(){
+    // The prominent 'Edit selected nucleobase' control and the lesson's Edit
+    // Structure control must open exactly the same saved base model.
+    document.querySelector('#scene-blocks [data-component="base"]')?.click();
+    edit("blocks");
+  }
+  function getModifiedBaseGraph(base){
+    const result=savedGraphs.get("blocks:base:"+base);
+    return result?clone(result):null;
   }
   function setup(){
     if(typeof MoleculeEditor==="undefined"||typeof chemicalDiagram!=="function")return;
@@ -133,7 +169,7 @@ const LearningStructureEdit=(()=>{
       stage.append(preview,status);
       widgets.set(scene,{button,reset,preview,status});
       button.addEventListener("click",()=>edit(scene));
-      reset.addEventListener("click",()=>{savedGraphs.delete(modelKey(scene));refresh(scene);});
+      reset.addEventListener("click",()=>{const wasBase=scene==="blocks"&&currentPart()==="base";savedGraphs.delete(modelKey(scene));if(wasBase)refreshAssembly();LESSONS.forEach(refresh);});
       preview.addEventListener("click",event=>{if(event.target.closest?.("svg"))edit(scene);});
       preview.addEventListener("keydown",event=>{
         if((event.key==="Enter"||event.key===" ")&&event.target.closest?.("svg")){
@@ -147,5 +183,5 @@ const LearningStructureEdit=(()=>{
     });
     window.addEventListener("rna-journey-component-changed",()=>refresh("blocks"));
   }
-  return {setup,primaryFragmentGraph,initialGraph,modelKey};
+  return {setup,editBase,getModifiedBaseGraph,validateNucleobaseAttachment,primaryFragmentGraph,initialGraph,modelKey};
 })();
