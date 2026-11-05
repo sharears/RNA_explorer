@@ -188,7 +188,7 @@ const MoleculeEditor = (() => {
   }
 
   let dialog=null,svg=null,status=null,title=null,mode="base",base="A",leftBase="G",rightBase="C";
-  let initialLearningGraph=null;
+  let initialLearningGraph=null,learningReturnTarget=null,learningReturnScrollY=0;
   let graph={atoms:[],bonds:[],hbonds:[]},tool="select",element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,lasso=null,transformDrag=null,selectionZoom=1,pendingFuseBond=null,onSave=null;
   let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false,showAtomLabels=true,showAtomNumbers=false;
   let ignoredValenceWarnings=new Set(),smartLayoutEnabled=true,threeDVisible=false,threeDMode="ideal";
@@ -320,6 +320,8 @@ const MoleculeEditor = (() => {
     if(!dialog)return;
     try{window.scrollTo({top:0,left:0,behavior:"instant"});}catch(_){window.scrollTo(0,0);}
     document.body.classList.add("chem-editor-open");
+    const saveButton=dialog.querySelector("#chemEditorSave");
+    if(saveButton)saveButton.textContent=mode==="learning"?"Save & Return":"Save structure";
     if(!dialog.open)dialog.show();
     positionEditorWindow();
     if(dialog.dataset.headerResizeBound!=="1"){
@@ -537,9 +539,27 @@ const MoleculeEditor = (() => {
       }catch(error){out.textContent="Export failed: "+error.message;}
     });
     dialog.querySelector("#chemEditorSave").addEventListener("click",()=>{
-      if(mode==="base")storeBase(base,graph);
-      if(onSave)onSave(clone(graph));
-      status.textContent=mode==="base"?"Saved edited "+base+" structure for this session.":mode==="pair"?"Saved custom base-pair drawing for this session.":"Drawing is ready in this session.";
+      try{
+        // A lesson edit is a round trip: validate through the lesson callback,
+        // then close this editor and restore the exact learning position.
+        if(mode==="learning"){
+          if(onSave)onSave(clone(graph));
+          status.textContent="Saved changes to the learning module.";
+          dialog.close();
+          const focusTarget=learningReturnTarget,scrollY=learningReturnScrollY;
+          requestAnimationFrame(()=>{
+            window.scrollTo({top:scrollY,left:0,behavior:"instant"});
+            focusTarget?.focus?.({preventScroll:true});
+          });
+          return;
+        }
+        if(mode==="base")storeBase(base,graph);
+        if(onSave)onSave(clone(graph));
+        status.textContent=mode==="base"?"Saved edited "+base+" structure for this session.":mode==="pair"?"Saved custom base-pair drawing for this session.":"Drawing is ready in this session.";
+      }catch(error){
+        status.textContent="Could not save: "+error.message;
+        status.classList.add("warning");
+      }
     });
     dialog.querySelector("#chemLeftBase").addEventListener("change",e=>leftBase=e.target.value);
     dialog.querySelector("#chemRightBase").addEventListener("change",e=>rightBase=e.target.value);
@@ -1329,7 +1349,8 @@ const MoleculeEditor = (() => {
         throw Error("Invalid bond in the lesson molecular model.");
     });
     candidate.hbonds=Array.isArray(candidate.hbonds)?candidate.hbonds.filter(h=>ids.has(h.a)&&ids.has(h.b)):[];
-    ensureDialog();mode="learning";onSave=callback;initialLearningGraph=clone(candidate);
+    ensureDialog();learningReturnTarget=document.activeElement;learningReturnScrollY=window.scrollY||0;
+    mode="learning";onSave=callback;initialLearningGraph=clone(candidate);
     graph=clone(candidate);showAtomCircles=false;showAtomLabels=true;showAtomNumbers=false;
     syncDisplayButtons();syncTextControls(textDefaults);
     title.textContent="Edit "+String(name).slice(0,90);
@@ -1389,9 +1410,14 @@ const MoleculeEditor = (() => {
       const button=document.createElement("button");button.type="button";button.id="editNucleobaseButton";button.className="secondary-action";button.textContent="Edit selected nucleobase";
       const note=document.createElement("p");note.id="customBaseStatus";note.className="input-help";note.textContent="Open the molecular editor to add/delete atoms or bonds, change bond orders, charges, or atom types.";
       chosen.insertAdjacentElement("afterend",button);button.insertAdjacentElement("afterend",note);
-      button.addEventListener("click",()=>openBase(chemistry.base,()=>{
-        note.textContent="Custom "+chemistry.base+" structure saved for this session. Reopen the editor to continue editing.";
-      }));
+      button.addEventListener("click",()=>{
+        if(typeof LearningStructureEdit!=="undefined"){
+          LearningStructureEdit.editBase();
+          note.textContent="Edit the selected base, then click Save & Return. Its updated structure will appear in the Nucleoside and Nucleotide lessons.";
+        }else openBase(chemistry.base,()=>{
+          note.textContent="Custom "+chemistry.base+" structure saved for this session.";
+        });
+      });
     }
   }
 
