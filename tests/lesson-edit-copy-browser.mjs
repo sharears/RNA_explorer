@@ -51,8 +51,9 @@ try{
     if(scene==="nucleotide")assert.ok(graph.bonds.some(b=>
       [b.a,b.b].includes("p")&&[b.a,b.b].includes("o5")),"5' phosphate connected");
     if(scene==="primary")assert.equal(graph.bonds.filter(b=>b.a.endsWith("_oh3")&&b.b.endsWith("_p")).length,2);
+    assert.equal(await page.locator("#chemEditorSave").innerText(),"Save & Return",scene+" offers Save & Return");
     await page.click("#chemEditorSave");
-    await page.click("#chemEditorClose");
+    // Saving a lesson edit returns to the scene automatically; no Close click.
     await page.waitForFunction(()=>document.querySelector("#chemEditorDialog")?.open===false);
     assert.equal(await page.locator(root+" .lesson-custom-preview").isVisible(),true,scene+" saved model appears");
     assert.equal(await defaultModel.isVisible(),false,scene+" original hidden after edit");
@@ -61,7 +62,7 @@ try{
     assert.equal(await page.locator(root+" .lesson-custom-preview").isVisible(),false,scene+" saved preview hidden after reset");
   }
   if(problems.length)throw Error("Browser JavaScript errors:\n"+problems.join("\n"));
-  console.log("PASS: Secondary inline copy/checkmark and optional Learn molecular editing in four scenes.");
+  console.log("PASS: Secondary inline copy/checkmark and optional Learn molecular editing with Save & Return in four scenes.");
 }finally{
   await context.close();
   await browser.close();

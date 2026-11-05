@@ -46,9 +46,39 @@ function chemicalDiagram(base, step, overview = false, hidePhosphate = false, gr
   }
   if (!linked) { a('hn',555,260,'H','leaving'); b('n','hn'); }
   else b('c1','n',1,step===1?'formed glycosidic-bond step-new':'formed glycosidic-bond prior-formed');
-  labels.push(`<text x="390" y="487" class="chem-label">${linked ? chemicalNames[base][1] + ' · nucleoside' : 'Ribofuranose (ribose)'}</text>`);
+  // Reuse the student's saved nucleobase as the actual reaction component.
+  // Only the base changes; the ribose/phosphate reaction steps stay schematic.
+  const modifiedBase=typeof LearningStructureEdit!=="undefined"
+    ?LearningStructureEdit.getModifiedBaseGraph?.(base):null;
+  if(modifiedBase?.atoms?.length){
+    const anchorId=purine?"N9":"N1";
+    const anchorAtom=modifiedBase.atoms.find(atom=>atom.id===anchorId&&atom.element==="N");
+    if(anchorAtom){
+      const oldBase=new Set(atoms.filter(atom=>atom.kind==="base").map(atom=>atom.id));
+      const remainingAtoms=atoms.filter(atom=>!oldBase.has(atom.id));
+      const remainingBonds=bonds.filter(bond=>
+        (!oldBase.has(bond.from)&&!oldBase.has(bond.to))||
+        (bond.from==="c1"&&bond.to==="n")||
+        (bond.from==="n"&&bond.to==="hn"));
+      atoms.splice(0,atoms.length,...remainingAtoms);
+      bonds.splice(0,bonds.length,...remainingBonds);
+      const mapping=new Map(modifiedBase.atoms.map(atom=>[atom.id,atom.id===anchorId?"n":"edited_"+atom.id]));
+      // The stock atom coordinates put the glycosidic nitrogen at the left;
+      // align that nitrogen with the lesson's existing C1′ attachment site.
+      const scale=.85;
+      modifiedBase.atoms.forEach(atom=>{
+        const numberMatch=/^(?:C[0-9]+|N[0-9]+|O[0-9]+|P[0-9]+)$/.test(atom.id);
+        const label=numberMatch?atom.element+atom.id.replace(/^[A-Za-z]+/,""):atom.element;
+        const charge=Number(atom.charge)||0;
+        const suffix=charge>0?(charge===1?"⁺":"⁺"+charge):charge<0?(charge===-1?"⁻":"⁻"+Math.abs(charge)):"";
+        a(mapping.get(atom.id),600+(atom.x-anchorAtom.x)*scale,230+(atom.y-anchorAtom.y)*scale,label+suffix,"base");
+      });
+      modifiedBase.bonds.forEach(bond=>b(mapping.get(bond.a),mapping.get(bond.b),bond.order||1));
+    }
+  }
+  labels.push(`<text x="390" y="487" class="chem-label">${linked ? chemicalNames[base][1] + (modifiedBase?' (edited base)':'') + ' · nucleoside' : 'Ribofuranose (ribose)'}</text>`);
   if(!hidePhosphate) labels.push(`<text x="120" y="340" class="chem-label">${phosphorylated?'5′-phosphate':'Phosphoric acid'}</text>`);
-  labels.push(`<text x="690" y="385" class="chem-label">${chemicalNames[base][0]} · ${purine?'purine':'pyrimidine'}</text>`);
+  labels.push(`<text x="690" y="385" class="chem-label">${chemicalNames[base][0]}${modifiedBase?' (edited)':''} · ${purine?'purine':'pyrimidine'}</text>`);
   const hidden = hidePhosphate ? ['p','po','poh','poh2','leaveP'] : [];
   if(graphSelection){
     // Use the SAME atoms, connectivity and bond orders as the teaching drawing.
@@ -80,5 +110,11 @@ function chemicalDiagram(base, step, overview = false, hidePhosphate = false, gr
     return `<g class="chem-bonds ${kind} ${leaving?'departing-bond':''}" ${title?`role="button" tabindex="0" data-bond="${title}" aria-label="${title}"`:''}>${title?`<title>${title}</title><line class="bond-hit" x1="${p.x}" y1="${p.y}" x2="${q.x}" y2="${q.y}"/>`:''}${order===2?line(-1)+line(1):line(0)}</g>`;
   }).join('');
   const texts=atoms.filter(p=>!hidden.includes(p.id)).map(p=>`<text x="${p.x}" y="${p.y}" style="--travel-x:${(p.text==='H'?810:775)-p.x}px;--travel-y:${455-p.y}px" class="chem-atom ${p.kind}">${p.text}</text>`).join('');
-  return `<svg class="reaction-svg" viewBox="${hidePhosphate?'190 0 710 520':'0 0 900 520'}" role="img" aria-label="${chemicalNames[base][step]}: numbered chemical connectivity diagram. ${linked?`C1′ joined to ${attach}.`:'Highlighted ribose OH and base H form water.'} ${phosphorylated?'5′ oxygen bonded to phosphorus.':''}" style="--base-color:${BASE_COLORS[base]}">${lines}${texts}${labels.join('')}${!overview&&step>0?`<g class="water-product"><text x="785" y="455">+ H₂O</text><text x="785" y="485" class="chem-label">released this step</text></g>`:''}</svg>`;
+  const standardBox=hidePhosphate?[190,0,710,520]:[0,0,900,520];
+  const xmin=modifiedBase?Math.min(standardBox[0],...atoms.map(a=>a.x-45)):standardBox[0];
+  const ymin=modifiedBase?Math.min(standardBox[1],...atoms.map(a=>a.y-45)):standardBox[1];
+  const xmax=modifiedBase?Math.max(standardBox[0]+standardBox[2],...atoms.map(a=>a.x+45)):standardBox[0]+standardBox[2];
+  const ymax=modifiedBase?Math.max(standardBox[1]+standardBox[3],...atoms.map(a=>a.y+45)):standardBox[1]+standardBox[3];
+  const viewBox=[xmin,ymin,xmax-xmin,ymax-ymin].join(" ");
+  return `<svg class="reaction-svg" viewBox="${viewBox}" role="img" aria-label="${chemicalNames[base][step]}: numbered chemical connectivity diagram. ${linked?`C1′ joined to ${attach}.`:'Highlighted ribose OH and base H form water.'} ${phosphorylated?'5′ oxygen bonded to phosphorus.':''}" style="--base-color:${BASE_COLORS[base]}">${lines}${texts}${labels.join('')}${!overview&&step>0?`<g class="water-product"><text x="785" y="455">+ H₂O</text><text x="785" y="485" class="chem-label">released this step</text></g>`:''}</svg>`;
 }
