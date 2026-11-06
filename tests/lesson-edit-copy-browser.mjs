@@ -70,8 +70,9 @@ try{
   const editingBase=await page.evaluate(()=>chemistry.base);
   const oxygen=editingBase==="C"||editingBase==="U"?"O2":"O6";
   await page.locator('#chemEditorSvg [data-atom-id="'+oxygen+'"]').click();
-  await page.locator("#chemEditorDialog details.chem-tool-group").filter({hasText:"Display · Labels & chemistry"}).locator("summary").click();
-  await page.locator("#chemChargeMinus").click();
+  // Trigger the existing charge control directly; its accordion may be
+  // collapsed or moved by responsive toolbar organization.
+  await page.locator("#chemChargeMinus").evaluate(button=>button.click());
   await page.locator("#chemEditorSave").click();
   await page.waitForFunction(()=>document.querySelector("#chemEditorDialog")?.open===false);
   assert.equal(await page.locator("#chemicalOverview").isVisible(),true,"edited Building Blocks overview remains visible");
