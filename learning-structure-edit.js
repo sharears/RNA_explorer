@@ -98,11 +98,14 @@ const LearningStructureEdit=(()=>{
     const widget=widgets.get(scene);if(!widget)return;
     const key=modelKey(scene),saved=savedGraphs.get(key);
     widget.reset.hidden=!saved;
-    originalDiagrams(scene).forEach(el=>{el.hidden=Boolean(saved);});
-    widget.preview.hidden=!saved;
-    if(saved)drawGraph(widget.preview,saved,modelName(scene));
+    // Building Blocks is a three-component lesson. Editing the base must not
+    // replace the whole phosphate + ribose + nucleobase illustration.
+    const showComposite=scene==="blocks"&&currentPart()==="base"&&Boolean(saved);
+    originalDiagrams(scene).forEach(el=>{el.hidden=Boolean(saved)&&!showComposite;});
+    widget.preview.hidden=!saved||showComposite;
+    if(saved&&!showComposite)drawGraph(widget.preview,saved,modelName(scene));
     else widget.preview.replaceChildren();
-    widget.status.textContent=saved?(scene==="blocks"&&currentPart()==="base"?"Modified nucleobase saved. Continue to Nucleoside to see it join ribose.":"Edited molecular model saved for this lesson. Reset Structure restores its original illustration."):"";
+    widget.status.textContent=saved?(scene==="blocks"&&currentPart()==="base"?"Modified nucleobase is shown with ribose and phosphoric acid. Continue to Nucleoside to see the C1′–N linkage.":"Edited molecular model saved for this lesson. Reset Structure restores its original illustration."):"";
   }
   // The glycosidic link must retain a valid N9 (purines) or N1 (pyrimidines).
   // Reject edits that remove the attachment site or overfill its simple valence.
