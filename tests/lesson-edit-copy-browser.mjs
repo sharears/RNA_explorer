@@ -91,6 +91,7 @@ try{
 
   // Selected secondary structure can be copied/exported without flattening.
   await page.goto(base+"?page=secondary&start=example",{waitUntil:"domcontentloaded"});
+  await page.locator('#scene-secondary [data-rna-tab="select"]').click();
   await page.waitForSelector("#seCopySelectedSvg");
   assert.equal(await page.locator("#seCopySelectedSvg").isDisabled(),true,"copy disabled without selection");
   const pair=await page.evaluate(()=>{
