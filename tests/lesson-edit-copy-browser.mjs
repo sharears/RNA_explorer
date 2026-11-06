@@ -70,6 +70,7 @@ try{
   const editingBase=await page.evaluate(()=>chemistry.base);
   const oxygen=editingBase==="C"||editingBase==="U"?"O2":"O6";
   await page.locator('#chemEditorSvg [data-atom-id="'+oxygen+'"]').click();
+  await page.locator("#chemEditorDialog details.chem-tool-group").filter({hasText:"Display · Labels & chemistry"}).locator("summary").click();
   await page.locator("#chemChargeMinus").click();
   await page.locator("#chemEditorSave").click();
   await page.waitForFunction(()=>document.querySelector("#chemEditorDialog")?.open===false);
