@@ -7,10 +7,14 @@
 .se-tool-group button.active,.se-tool-group button[aria-pressed="true"]{border-color:var(--mint);background:rgba(116,215,182,.12);color:var(--mint)}
 .se-tool-group button:disabled{opacity:.42;cursor:default}
 #seSelectionStatus{margin:0;padding:0 11px 10px;color:var(--muted);font-size:.75rem;line-height:1.45}
-#seCopySelectedSvg:disabled,#seDownloadSelectedSvg:disabled{opacity:.48;cursor:not-allowed}
-#seSelectionExportStatus{margin:2px 11px 10px;color:var(--muted);font-size:.73rem;line-height:1.5}
-#seSelectionExportStatus.error{color:#f4a3a3}
-#seCopySelectedSvg,#seDownloadSelectedSvg{white-space:normal;text-align:center}
+/* Match the small circular copy icons already used in the RNA inputs. */
+#scene-secondary .se-viewport{position:relative}
+#scene-secondary .se-viewport .se-structure-copy-button{
+  position:absolute;right:12px;bottom:12px;z-index:5;
+  flex-shrink:0;opacity:.94;
+}
+#scene-secondary .se-viewport .se-structure-copy-button:disabled{opacity:.5;cursor:wait}
+#scene-secondary .se-export-status.error{color:#f3a8a8}
 
 .se-whole-rotation-dock{display:block;width:100%;min-width:0;max-width:100%;box-sizing:border-box;margin:9px 0 4px;padding:9px 12px;border:1px solid rgba(116,215,182,.2);border-radius:10px;background:rgba(116,215,182,.025)}
 .se-whole-rotation-dock label{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:9px;min-width:0;width:100%;box-sizing:border-box;margin:0;color:var(--muted);font-size:.8rem}
