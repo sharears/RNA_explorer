@@ -89,41 +89,104 @@ try{
   assert.equal(await page.locator("#chemicalOverview").isVisible(),true,"reset restores complete Building Blocks illustration");
   assert.ok(!(await page.locator("#chemicalOverview").textContent()).includes("⁻"),"reset removes the base modification");
 
-  // Selected secondary structure can be copied/exported without flattening.
+  // The *viewer* copy control and Ctrl/Cmd+C use real SVG vectors, not XML text.
   await page.goto(base+"?page=secondary&start=example",{waitUntil:"domcontentloaded"});
-  await page.locator('#scene-secondary [data-rna-tab="select"]').click();
-  await page.waitForSelector("#seCopySelectedSvg");
-  assert.equal(await page.locator("#seCopySelectedSvg").isDisabled(),true,"copy disabled without selection");
+  await page.waitForSelector("#seCopyStructure");
+  assert.equal(await page.locator("#seCopySelectedSvg,#seDownloadSelectedSvg").count(),0,
+    "redundant selected-SVG buttons removed from Select tab");
+  const viewport=await page.locator("#scene-secondary .se-viewport").boundingBox();
+  const copyButton=await page.locator("#seCopyStructure").boundingBox();
+  assert.ok(copyButton.x>=viewport.x+viewport.width-65&&copyButton.y>=viewport.y+viewport.height-65,
+    "copy icon sits inside bottom-right of RNA viewer");
   const pair=await page.evaluate(()=>{
     const c=SecondaryExplorer.getContext();
     return SecondaryExplorer.parse(c.sequence,c.structure).pairs[0];
   });
   await page.evaluate(([a,b])=>SecondaryExplorer.highlightResidues([a,b]),pair);
-  assert.equal(await page.locator("#seCopySelectedSvg").isEnabled(),true,"copy enabled after selecting residues");
   const region=await page.evaluate(()=>SecondarySelectionTools.selectedRegionSvg());
-  const parserRegion=await page.evaluate(svgText=>{
-    const xml=new DOMParser().parseFromString(svgText,"image/svg+xml");
+  const parsed=await page.evaluate(s=>{
+    const xml=new DOMParser().parseFromString(s,"image/svg+xml"),svg=xml.documentElement;
     return {
+      valid:!xml.querySelector("parsererror"),
       nodes:xml.querySelectorAll(".se-node").length,
       pairs:xml.querySelectorAll(".se-pair").length,
+      wires:xml.querySelectorAll(".se-backbone").length,
       removed:xml.querySelectorAll("[data-export-remove],.se-selected-transform-overlay").length,
-      width:Number(xml.documentElement.getAttribute("width")),
-      text:xml.documentElement.textContent
+      viewBox:svg.getAttribute("viewBox"),
+      width:Number(svg.getAttribute("width")),
+      letters:xml.querySelectorAll(".se-node text").length,
+      vector:xml.querySelectorAll("path,line,circle,text").length
     };
   },region.svgText);
-  assert.equal(parserRegion.nodes,2,"only selected residues exported");
-  assert.equal(parserRegion.pairs,1,"selected base pair remains editable");
-  assert.equal(parserRegion.removed,0,"selection handles and invisible controls excluded");
-  assert.ok(parserRegion.width>0&&region.svgText.includes("<svg"),"valid vector SVG generated");
-  await page.locator("#seCopySelectedSvg").click();
-  await page.waitForFunction(()=>/Copied |Copy failed:/.test(document.querySelector("#seSelectionExportStatus")?.textContent||""));
-  const copiedStatus=await page.locator("#seSelectionExportStatus").textContent();
-  assert.ok(copiedStatus.includes("Copied"),"vector-copy clipboard attempted successfully: "+copiedStatus);
-  await page.locator("#seDownloadSelectedSvg").click();
-  assert.ok((await page.locator("#seSelectionExportStatus").textContent()).includes("Downloaded editable SVG"),
-    "vector SVG download offered for Illustrator");
+  assert.ok(parsed.valid,"valid standalone XML");
+  assert.equal(parsed.nodes,2,"two selected residues and no others");
+  assert.equal(parsed.pairs,1,"the connecting pair remains a vector");
+  assert.equal(parsed.removed,0,"no invisible hit targets or selection UI");
+  assert.ok(parsed.letters>=2&&parsed.vector>2,"letters and line elements remain editable");
+  assert.ok(parsed.viewBox.startsWith("0 0 ")&&parsed.width>0,
+    "normalized 0-origin viewBox improves Illustrator import");
+
+  await page.locator("#seCopyStructure").click();
+  await page.waitForFunction(()=>document.querySelector("#seCopyStructure")?.classList.contains("is-copied"));
+  const copied=await page.evaluate(async()=>{
+    const items=await navigator.clipboard.read();
+    const formats=items.flatMap(item=>item.types);
+    const imageItem=items.find(item=>item.types.includes("image/svg+xml"));
+    return {formats,svgText:imageItem?await (await imageItem.getType("image/svg+xml")).text():""};
+  });
+  assert.ok(copied.formats.includes("image/svg+xml"),"native SVG clipboard MIME used");
+  assert.ok(!copied.formats.includes("text/plain"),"never replace vector artwork with raw XML source");
+  assert.ok(copied.svgText.includes('fill="#0b1220"'),"dark vector backing retains pale-letter contrast");
+  assert.equal((copied.svgText.match(/class="se-node/g)||[]).length,2,
+    "copy icon places only selected residues on clipboard");
+
+  // On desktop, keyboard copy must use the same artwork and leave typing alone.
+  await page.evaluate(()=>navigator.clipboard.writeText("SENTINEL"));
+  await page.locator("#seCopyStructure").focus();
+  await page.keyboard.press("Control+c");
+  await page.waitForFunction(async()=>{
+    const items=await navigator.clipboard.read();
+    return items.some(item=>item.types.includes("image/svg+xml"));
+  });
+  const keyed=await page.evaluate(async()=>{
+    const item=(await navigator.clipboard.read()).find(item=>item.types.includes("image/svg+xml"));
+    return (await item.getType("image/svg+xml")).text();
+  });
+  assert.equal((keyed.match(/class="se-node/g)||[]).length,2,
+    "Ctrl+C uses same selected vector artwork");
+  await page.locator("#secondarySequence").focus();
+  await page.keyboard.press("Control+a");
+  await page.keyboard.press("Control+c");
+  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),
+    await page.locator("#secondarySequence").inputValue(),
+    "Ctrl+C inside sequence textbox retains normal text copying");
+
+  // Without a selection the icon copies the *whole* secondary structure.
+  await page.evaluate(()=>SecondaryExplorer.clearHighlights());
+  await page.locator("#seCopyStructure").click();
+  const whole=await page.evaluate(async()=>{
+    const items=await navigator.clipboard.read(),item=items.find(i=>i.types.includes("image/svg+xml"));
+    return (await item.getType("image/svg+xml")).text();
+  });
+  assert.equal((whole.match(/class="se-node/g)||[]).length,76,
+    "copy icon uses entire rendered tRNA when nothing is selected");
+
+  // Existing Export… dialog offers selected-only SVG without duplicate buttons.
+  await page.evaluate(([a,b])=>SecondaryExplorer.highlightResidues([a,b]),pair);
+  await page.locator("#seExportDialogButton").click();
+  assert.equal(await page.locator("#seExportSelectedOnly").isChecked(),true,
+    "export dialog defaults to selected region when a selection exists");
+  await page.selectOption("#seImageFormat","svg");
+  const downloadPromise=page.waitForEvent("download");
+  await page.locator("#seExportNow").click();
+  const download=await downloadPromise;
+  const exported=await (await import("node:fs/promises")).readFile(await download.path(),"utf8");
+  assert.equal((exported.match(/class="se-node/g)||[]).length,2,
+    "selected SVG download contains only chosen residues");
+  assert.ok(exported.includes("<svg")&&exported.includes("<text"),
+    "download retains editable vector paths/text");
   if(problems.length)throw Error("Browser JavaScript errors:\n"+problems.join("\n"));
-  console.log("PASS: Inline copy, four lesson editors, composite edited nucleobase, and selected SVG vector copy/export.");
+  console.log("PASS: Inline copy, four lesson editors, viewer SVG copy, Ctrl+C vectors, full selection and Illustrator-friendly selected Export.");
 }finally{
   await context.close();
   await browser.close();
