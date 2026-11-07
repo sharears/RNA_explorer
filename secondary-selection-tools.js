@@ -107,7 +107,7 @@ const SecondarySelectionTools=(()=>{
     return indices;
   }
   function hasSelection(){return selectedIndices().size>0;}
-  function artworkSvgElement({selectedOnly=true}={}){
+  function artworkSvgElement({selectedOnly=true,includeBackground=false}={}){
     const source=$("secondarySvg");
     if(!source?.children.length||typeof ExportTools==="undefined")
       throw Error("Render a secondary structure before copying.");
@@ -163,6 +163,16 @@ const SecondarySelectionTools=(()=>{
     const art=document.createElementNS(svgNS,"g");
     art.setAttribute("transform","translate("+(-x)+" "+(-y)+")");
     while(clone.firstChild)art.append(clone.firstChild);
+    if(includeBackground){
+      // Pale nucleotide labels need their native dark canvas when the artwork
+      // is pasted into Illustrator's normally white artboard. Background is a
+      // plain editable SVG rectangle; Export remains configurable.
+      const backdrop=document.createElementNS(svgNS,"rect");
+      backdrop.setAttribute("x","0");backdrop.setAttribute("y","0");
+      backdrop.setAttribute("width",String(w));backdrop.setAttribute("height",String(h));
+      backdrop.setAttribute("fill","#0b1220");backdrop.setAttribute("data-copy-background","");
+      clone.append(backdrop);
+    }
     clone.append(art);
     clone.setAttribute("viewBox","0 0 "+w+" "+h);
     clone.setAttribute("width",String(w));clone.setAttribute("height",String(h));
@@ -177,8 +187,8 @@ const SecondarySelectionTools=(()=>{
     });
     return clone;
   }
-  function selectedRegionSvg({selectedOnly=true}={}){
-    const element=artworkSvgElement({selectedOnly});
+  function selectedRegionSvg({selectedOnly=true,includeBackground=false}={}){
+    const element=artworkSvgElement({selectedOnly,includeBackground});
     const count=selectedOnly?selectedIndices().size:SecondaryExplorer.getContext().sequence.length;
     return {svgText:new XMLSerializer().serializeToString(element),
       count,filename:"rna-"+(selectedOnly?"selected-region-":"secondary-")+count+"nt.svg"};
@@ -197,7 +207,7 @@ const SecondarySelectionTools=(()=>{
     const button=$("seCopyStructure");
     if(button)button.disabled=true;
     try{
-      const selectedOnly=hasSelection(),region=selectedRegionSvg({selectedOnly});
+      const selectedOnly=hasSelection(),region=selectedRegionSvg({selectedOnly,includeBackground:true});
       // No text/plain or HTML fallback: those previously gave distorted or
       // literal SVG text in Illustrator. Only report success for true SVG MIME.
       if(!navigator.clipboard?.write||typeof ClipboardItem==="undefined"||
