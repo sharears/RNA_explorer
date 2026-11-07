@@ -1374,7 +1374,7 @@ const SecondaryExplorer = (() => {
             ?SecondarySelectionTools.artworkSvgElement({selectedOnly:true}):root;
           const viewBox=selectedOnly?artwork.getAttribute("viewBox"):root.dataset.fullViewBox;
           const filename=selectedOnly
-            ?"rna-selected-region-"+SecondaryExplorer.getContext().selectedResidues.length+"nt"
+            ?"rna-selected-region-"+SecondarySelectionTools.selectedCount()+"nt"
             :secondaryFigureStem();
           const result=await ExportTools.exportSvgElement(artwork,{format:fmt,filename,scale,background:bg,viewBox});
           out.textContent=(selectedOnly?"Selected-region ":"")+fmt.toUpperCase()+" exported"+(result?.width?" · "+result.width+" × "+result.height:"")+".";
