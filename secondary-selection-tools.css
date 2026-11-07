@@ -15,6 +15,10 @@
 }
 #scene-secondary .se-viewport .se-structure-copy-button:disabled{opacity:.5;cursor:wait}
 #scene-secondary .se-export-status.error{color:#f3a8a8}
+#seExportDialog .se-export-selection-choice{display:flex;align-items:center;gap:8px;font-size:.8rem}
+#seExportDialog .se-export-selection-choice input{width:17px;height:17px;accent-color:var(--mint)}
+#seExportDialog .se-export-selection-choice input:disabled{opacity:.5}
+#seExportDialog .se-svg-export-help{font-size:.75rem;color:var(--muted);line-height:1.45;margin:8px 0 0}
 
 .se-whole-rotation-dock{display:block;width:100%;min-width:0;max-width:100%;box-sizing:border-box;margin:9px 0 4px;padding:9px 12px;border:1px solid rgba(116,215,182,.2);border-radius:10px;background:rgba(116,215,182,.025)}
 .se-whole-rotation-dock label{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:9px;min-width:0;width:100%;box-sizing:border-box;margin:0;color:var(--muted);font-size:.8rem}
