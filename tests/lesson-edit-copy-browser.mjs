@@ -140,6 +140,35 @@ try{
   assert.equal((copied.svgText.match(/class="se-node/g)||[]).length,2,
     "copy icon places only selected residues on clipboard");
 
+  // A standalone vector SVG must render independently of RNA Explorer CSS,
+  // as a vector editor opens it outside the website.
+  const vectorRender=await page.evaluate(async svgText=>{
+    const blob=new Blob([svgText],{type:"image/svg+xml"}),url=URL.createObjectURL(blob);
+    const img=new Image();
+    try{
+      await new Promise((resolve,reject)=>{
+        img.onload=resolve;
+        img.onerror=()=>reject(Error("Clipboard SVG is not independently renderable"));
+        img.src=url;
+      });
+      const canvas=document.createElement("canvas");
+      canvas.width=Math.max(1,Math.min(320,img.naturalWidth));
+      canvas.height=Math.max(1,Math.min(320,img.naturalHeight));
+      const ctx=canvas.getContext("2d");
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+      let colorful=0;
+      for(let i=0;i<pixels.length;i+=16){
+        const delta=Math.abs(pixels[i]-11)+Math.abs(pixels[i+1]-18)+Math.abs(pixels[i+2]-32);
+        if(pixels[i+3]>128&&delta>24)colorful++;
+      }
+      return {width:img.naturalWidth,height:img.naturalHeight,colorful};
+    }finally{URL.revokeObjectURL(url);}
+  },copied.svgText);
+  assert.ok(vectorRender.width>40&&vectorRender.height>40&&vectorRender.colorful>12,
+    "standalone copied vector is visibly colored beyond its dark editable background");
+
+
   // On desktop, keyboard copy must use the same artwork and leave typing alone.
   await page.evaluate(()=>navigator.clipboard.writeText("SENTINEL"));
   await page.locator("#seCopyStructure").focus();
