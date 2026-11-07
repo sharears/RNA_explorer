@@ -15,7 +15,7 @@ const SecondarySelectionTools=(()=>{
   function setMode(next){mode=mode===next?"":next;[["seBoxSelectTool","box"],["seLassoSelectTool","lasso"]].forEach(([id,key])=>{const b=$(id);if(!b)return;const active=mode===key;b.classList.toggle("active",active);b.setAttribute("aria-pressed",String(active));});const root=$("secondarySvg");if(root)root.classList.add("se-selecting");syncSelectionState();if($("seSelectionStatus"))$("seSelectionStatus").textContent=mode==="lasso"?"Drag on empty space to draw a freeform lasso. Clicking a residue or bond still opens its editor.":"Drag on empty space to box-select. Click residues, pairs, or backbone lines to edit them normally.";drawSelectedTransformOverlay();}
   function isRegionMode(){return mode==="box"||mode==="lasso";}
   function selectionMessage(){const n=SecondaryExplorer?.getContext?.().selectedResidues?.length||0;return n?`${n} residue${n===1?"":"s"} selected. Use the handles on the selection box to rotate or zoom that region.`:"No region selected.";}
-  function syncSelectionState(){const n=SecondaryExplorer?.getContext?.().selectedResidues?.length||0;const reset=$("seResetSelectedTransform");if(reset)reset.disabled=n===0;const selectedRotation=$("seSelectedRotation");if(selectedRotation)selectedRotation.disabled=n<2;const hasSelection=n>0||(SecondaryExplorer?.getContext?.().selectedPairKeys?.length||0)>0;["seCopySelectedSvg","seDownloadSelectedSvg"].forEach(id=>{const b=$(id);if(b)b.disabled=!hasSelection;});if(!mode&&$("seSelectionStatus"))$("seSelectionStatus").textContent=n?selectionMessage():"Drag on empty space to box-select; click an individual residue or bond to edit.";drawSelectedTransformOverlay();}
+  function syncSelectionState(){const n=SecondaryExplorer?.getContext?.().selectedResidues?.length||0;const reset=$("seResetSelectedTransform");if(reset)reset.disabled=n===0;const selectedRotation=$("seSelectedRotation");if(selectedRotation)selectedRotation.disabled=n<2;if(!mode&&$("seSelectionStatus"))$("seSelectionStatus").textContent=n?selectionMessage():"Drag on empty space to box-select; click an individual residue or bond to edit.";drawSelectedTransformOverlay();}
   function syncTransformControls(){const state=SecondaryExplorer?.getTransformState?.();if(!state)return;const whole=$("seWholeRotation");if(whole){whole.value=String(state.wholeRotation);$("seWholeRotationValue").textContent=Math.round(state.wholeRotation)+"°";}const selected=$("seSelectedRotation");if(selected){selected.value=String(state.selectionRotation);$("seSelectedRotationValue").textContent=Math.round(state.selectionRotation)+"°";}}
   function removeOverlay(){overlay?.remove();overlay=null;}
   function drawGestureOverlay(){const root=$("secondarySvg");if(!root||!gesture)return;root.querySelectorAll(".se-selected-transform-overlay").forEach(el=>el.remove());removeOverlay();if(gesture.kind==="box"){const a=gesture.start,b=gesture.points.at(-1)||a,x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),w=Math.abs(a.x-b.x),h=Math.abs(a.y-b.y);overlay=document.createElementNS(svgNS,"rect");Object.entries({x,y,width:w,height:h}).forEach(([k,v])=>overlay.setAttribute(k,v));}else{overlay=document.createElementNS(svgNS,"path");const pts=gesture.points;overlay.setAttribute("d",pts.map((p,i)=>(i?"L":"M")+p.x+" "+p.y).join(" ")+(pts.length>2?" Z":""));}overlay.classList.add("se-selection-overlay");overlay.setAttribute("data-export-remove","");overlay.setAttribute("pointer-events","none");root.append(overlay);}
@@ -94,101 +94,162 @@ const SecondarySelectionTools=(()=>{
     if($("seSelectionStatus"))$("seSelectionStatus").textContent=indices.length?`${indices.length} residue${indices.length===1?"":"s"} selected.`:"Nothing was inside the selection.";
   }
   function cancel(){gesture=null;transformGesture=null;indexGesture=null;removeOverlay();drawSelectedTransformOverlay();}
-  // Build a standalone SVG from the CURRENT selected residues. Connections are
-  // included only when both endpoints belong to the selected region; unselected
-  // residues and interactive selection handles are excluded from Illustrator.
-  function selectedRegionSvg(){
-    const context=SecondaryExplorer.getContext(),snap=SecondaryExplorer.getWorkspaceSnapshot();
-    const indices=new Set((context.selectedResidues||[]).filter(i=>Number.isInteger(i)&&i>=0&&i<context.sequence.length));
-    const pairKeys=context.selectedPairKeys||[];
-    pairKeys.forEach(key=>{const p=String(key).split(":").map(Number);if(p.length===2&&p.every(Number.isInteger)){indices.add(p[0]);indices.add(p[1]);}});
-    if(!indices.size)throw Error("Select one or more residues with box/lasso selection before copying a region.");
+  // One vector-export path for Ctrl/Cmd+C, the in-viewer copy icon and Export.
+  // Never copy SVG *source text*: Illustrator may paste it as XML, not artwork.
+  function selectedIndices(){
+    const context=SecondaryExplorer.getContext(),indices=new Set((context.selectedResidues||[])
+      .filter(i=>Number.isInteger(i)&&i>=0&&i<context.sequence.length));
+    (context.selectedPairKeys||[]).forEach(key=>{
+      const ends=String(key).split(":").map(Number);
+      if(ends.length===2&&ends.every(i=>Number.isInteger(i)&&i>=0&&i<context.sequence.length))
+        ends.forEach(i=>indices.add(i));
+    });
+    return indices;
+  }
+  function hasSelection(){return selectedIndices().size>0;}
+  function artworkSvgElement({selectedOnly=true,includeBackground=false}={}){
     const source=$("secondarySvg");
-    if(!source||!source.children.length||typeof ExportTools==="undefined")throw Error("Render a secondary structure before exporting.");
-    const pos=SecondaryExplorer.getCurrentPositions(),bounds=[];
-    indices.forEach(i=>{const p=pos[i];if(p)bounds.push({x:p.x-48,y:p.y-52,w:96,h:104});});
+    if(!source?.children.length||typeof ExportTools==="undefined")
+      throw Error("Render a secondary structure before copying.");
+    const indices=selectedIndices();
+    if(selectedOnly&&!indices.size)throw Error("Select residues before exporting a selected region.");
     const keep=el=>{
-      if(el.matches(".se-node"))return indices.has(Number(el.getAttribute("data-residue-index")));
-      if(el.matches(".se-backbone")){const i=Number(el.getAttribute("data-backbone"));return indices.has(i)&&indices.has(i+1);}
-      if(el.matches(".se-pair")){
-        const match=String(el.getAttribute("data-pair")||"").split(":").map(Number);
-        return match.length===2&&match.every(Number.isInteger)&&indices.has(match[0])&&indices.has(match[1]);
+      if(el.matches(".se-node"))return !selectedOnly||indices.has(Number(el.getAttribute("data-residue-index")));
+      if(el.matches(".se-backbone")){
+        const i=Number(el.getAttribute("data-backbone"));
+        return !selectedOnly||(indices.has(i)&&indices.has(i+1));
       }
-      return false;
+      if(el.matches(".se-pair")){
+        const p=String(el.getAttribute("data-pair")||"").split(":").map(Number);
+        return !selectedOnly||(p.length===2&&p.every(i=>Number.isInteger(i)&&indices.has(i)));
+      }
+      return !selectedOnly&&el.matches(".se-strand-end");
     };
-    Array.from(source.children).filter(keep).forEach(el=>{
-      if(el.matches(".se-node"))return; // residue labels are covered by the per-residue margin above
-      try{
-        const r=el.getBBox();if([r.x,r.y,r.width,r.height].every(Number.isFinite))
-          bounds.push({x:r.x,y:r.y,w:r.width,h:r.height});
-      }catch(_){}
-    });
-    if(!bounds.length)throw Error("Nothing is visible in the selected region.");
-    const padding=16,minX=Math.min(...bounds.map(b=>b.x))-padding,minY=Math.min(...bounds.map(b=>b.y))-padding;
-    const maxX=Math.max(...bounds.map(b=>b.x+b.w))+padding,maxY=Math.max(...bounds.map(b=>b.y+b.h))+padding;
-    const width=Math.max(100,maxX-minX),height=Math.max(100,maxY-minY);
-    const box=[minX,minY,width,height].map(v=>Number(v.toFixed(2))).join(" ");
-    // Prepared SVG copies computed paint and text styles into the elements,
-    // so the result doesn't depend on RNA Explorer stylesheets when opened.
-    const {clone}=ExportTools.preparedSvg(source,{viewBox:box});
-    Array.from(clone.children).forEach(el=>{if(!keep(el))el.remove();});
-    clone.setAttribute("viewBox",box);
-    clone.setAttribute("width",String(Math.ceil(width)));
-    clone.setAttribute("height",String(Math.ceil(height)));
+    const kept=[...source.children].filter(keep);
+    if(!kept.length)throw Error("No visible artwork in this selection.");
+    // Copy explicit computed paint and type styles, eliminating any dependency
+    // on the site's CSS when this SVG is imported by a vector editor.
+    const {clone}=ExportTools.preparedSvg(source);
+    [...clone.children].forEach(el=>{if(!keep(el))el.remove();});
+    let x,y,w,h;
+    if(selectedOnly){
+      const positions=SecondaryExplorer.getCurrentPositions(),bounds=[];
+      kept.forEach(el=>{
+        try{
+          const b=el.getBBox();
+          if(![b.x,b.y,b.width,b.height].every(Number.isFinite))return;
+          let dx=0,dy=0;
+          if(el.matches(".se-node")){
+            const p=positions[Number(el.getAttribute("data-residue-index"))];
+            if(!p)return;dx=p.x;dy=p.y;
+          }
+          bounds.push({x:b.x+dx,y:b.y+dy,w:b.width,h:b.height});
+        }catch(_){}
+      });
+      indices.forEach(i=>{const p=positions[i];if(p)bounds.push({x:p.x-24,y:p.y-24,w:48,h:48});});
+      if(!bounds.length)throw Error("Could not calculate selected artwork bounds.");
+      const pad=20;
+      x=Math.min(...bounds.map(b=>b.x))-pad;
+      y=Math.min(...bounds.map(b=>b.y))-pad;
+      w=Math.max(...bounds.map(b=>b.x+b.w))+pad-x;
+      h=Math.max(...bounds.map(b=>b.y+b.h))+pad-y;
+    }else{
+      [x,y,w,h]=String(source.dataset.fullViewBox||source.getAttribute("viewBox")||"0 0 720 520")
+        .trim().split(/\s+/).map(Number);
+    }
+    const rounded=n=>Number(n.toFixed(3));
+    [x,y,w,h]=[x,y,Math.max(1,w),Math.max(1,h)].map(rounded);
+    // Normalized zero-origin coordinates avoid importer-specific viewBox offsets.
+    const art=document.createElementNS(svgNS,"g");
+    art.setAttribute("transform","translate("+(-x)+" "+(-y)+")");
+    while(clone.firstChild)art.append(clone.firstChild);
+    if(includeBackground){
+      // Pale nucleotide labels need their native dark canvas when the artwork
+      // is pasted into Illustrator's normally white artboard. Background is a
+      // plain editable SVG rectangle; Export remains configurable.
+      const backdrop=document.createElementNS(svgNS,"rect");
+      backdrop.setAttribute("x","0");backdrop.setAttribute("y","0");
+      backdrop.setAttribute("width",String(w));backdrop.setAttribute("height",String(h));
+      backdrop.setAttribute("fill","#0b1220");backdrop.setAttribute("data-copy-background","");
+      clone.append(backdrop);
+    }
+    clone.append(art);
+    clone.setAttribute("viewBox","0 0 "+w+" "+h);
+    clone.setAttribute("width",String(w));clone.setAttribute("height",String(h));
+    clone.setAttribute("preserveAspectRatio","xMidYMid meet");
     clone.setAttribute("xmlns",svgNS);
-    clone.setAttribute("aria-label","Selected RNA secondary structure, "+indices.size+" residues");
-    clone.querySelectorAll("[role],[aria-label],[aria-pressed],[data-residue-index],[data-backbone],[data-pair],[data-index-label],[data-backbone-visible]").forEach(el=>{
-      ["role","aria-label","aria-pressed","data-residue-index","data-backbone","data-pair","data-index-label","data-backbone-visible"].forEach(a=>el.removeAttribute(a));
+    clone.removeAttribute("role");clone.removeAttribute("aria-label");
+    clone.querySelectorAll("*").forEach(el=>{
+      ["role","aria-label","aria-pressed","tabindex","pointer-events"].forEach(a=>el.removeAttribute(a));
+      [...el.attributes].filter(a=>a.name.startsWith("data-")).forEach(a=>el.removeAttribute(a.name));
+      el.style?.removeProperty("pointer-events");el.style?.removeProperty("cursor");
+      el.style?.removeProperty("filter");
     });
-    const svgText=new XMLSerializer().serializeToString(clone);
-    return {svgText,count:indices.size,filename:"rna-selected-region-"+indices.size+"nt.svg"};
+    return clone;
   }
-  function selectionExportStatus(message,error=false){
-    const out=$("seSelectionExportStatus");if(!out)return;
-    out.textContent=message;out.classList.toggle("error",error);
+  function selectedRegionSvg({selectedOnly=true,includeBackground=false}={}){
+    const element=artworkSvgElement({selectedOnly,includeBackground});
+    const count=selectedOnly?selectedIndices().size:SecondaryExplorer.getContext().sequence.length;
+    return {svgText:new XMLSerializer().serializeToString(element),
+      count,filename:"rna-"+(selectedOnly?"selected-region-":"secondary-")+count+"nt.svg"};
   }
-  async function copySelectedSvg(){
-    const button=$("seCopySelectedSvg");
+  function copyStatus(message,error=false){
+    const output=$("seExportStatus");if(!output)return;
+    output.textContent=message;output.classList.toggle("error",error);
+  }
+  let checkTimer=null;
+  function markCopied(){
+    const button=$("seCopyStructure");if(!button)return;
+    clearTimeout(checkTimer);button.classList.add("is-copied");
+    checkTimer=setTimeout(()=>button.classList.remove("is-copied"),1800);
+  }
+  async function copyArtwork(){
+    const button=$("seCopyStructure");
     if(button)button.disabled=true;
     try{
-      const {svgText,count}=selectedRegionSvg();
-      if(!navigator.clipboard?.write||typeof ClipboardItem==="undefined"){
-        if(navigator.clipboard?.writeText){
-          await navigator.clipboard.writeText(svgText);
-          selectionExportStatus("Copied SVG source for "+count+" residues. To preserve editable vector artwork in Illustrator, use Download selected SVG and open that file.");
-        }else throw Error("Clipboard copying is unavailable here. Use Download selected SVG instead.");
-        return;
-      }
-      const blob=(value,type)=>new Blob([value],{type});
-      const html=blob(svgText,"text/html"),plain=blob(svgText,"text/plain"),image=blob(svgText,"image/svg+xml");
-      // Raw SVG clipboard support differs by browser. HTML SVG is attempted
-      // separately rather than silently treating copied source as artwork.
-      let vectorCopied=false;
-      try{
-        await navigator.clipboard.write([new ClipboardItem({"image/svg+xml":image,"text/html":html,"text/plain":plain})]);
-        vectorCopied=true;
-      }catch(_){
-        await navigator.clipboard.write([new ClipboardItem({"text/html":html,"text/plain":plain})]);
-      }
-      selectionExportStatus(vectorCopied
-        ?"Copied "+count+" residues as SVG vector artwork. Illustrator paste support depends on your browser; Download selected SVG is the reliable alternative."
-        :"Copied "+count+" residues as SVG/HTML. Illustrator may paste text rather than editable shapes; Download selected SVG and open it in Illustrator for reliable editing.");
-    }catch(error){selectionExportStatus("Copy failed: "+error.message,true);}
-    finally{if(button)button.disabled=false;syncSelectionState();}
+      const selectedOnly=hasSelection(),region=selectedRegionSvg({selectedOnly,includeBackground:true});
+      // No text/plain or HTML fallback: those previously gave distorted or
+      // literal SVG text in Illustrator. Only report success for true SVG MIME.
+      if(!navigator.clipboard?.write||typeof ClipboardItem==="undefined"||
+        (typeof ClipboardItem.supports==="function"&&!ClipboardItem.supports("image/svg+xml")))
+        throw Error("Native SVG clipboard is unavailable in this browser. Use Export… → Image → SVG (Selected region only if needed).");
+      const item=new ClipboardItem({"image/svg+xml":new Blob([region.svgText],{type:"image/svg+xml"})});
+      await navigator.clipboard.write([item]);
+      markCopied();
+      copyStatus("Copied "+(selectedOnly?region.count+" selected residues":"the entire RNA structure")+
+        " as SVG vectors. Illustrator's paste behavior may vary; Export → SVG is the reliable fallback.");
+      return true;
+    }catch(error){copyStatus("Vector copy unavailable: "+error.message,true);return false;}
+    finally{if(button)button.disabled=false;}
   }
-  function downloadSelectedSvg(){
-    try{
-      const {svgText,count,filename}=selectedRegionSvg();
-      ExportTools.downloadText(svgText,filename,"image/svg+xml;charset=utf-8");
-      selectionExportStatus("Downloaded editable SVG for "+count+" residues. Open the SVG file in Adobe Illustrator to edit vectors and text.");
-    }catch(error){selectionExportStatus("Export failed: "+error.message,true);}
+  function onCopyShortcut(event){
+    if(!((event.metaKey||event.ctrlKey)&&!event.altKey&&!event.shiftKey&&
+      String(event.key).toLowerCase()==="c"))return;
+    const scene=$("scene-secondary");
+    if(!scene||scene.hidden||document.querySelector("dialog[open]"))return;
+    if(event.target?.closest?.('input,textarea,select,[contenteditable],[contenteditable="true"]'))return;
+    if(document.activeElement?.isContentEditable)return;
+    if(window.getSelection?.()?.toString())return; // Preserve native copying of highlighted instructional text.
+    event.preventDefault();copyArtwork();
   }
-  function buildToolbar(){const stage=document.querySelector("#scene-secondary .secondary-stage"),existing=stage?.querySelector(".se-toolbar");if(!stage||!existing||$("seTransformToolbar"))return;const bar=document.createElement("div");bar.id="seTransformToolbar";bar.className="se-transform-toolbar";bar.innerHTML=`<details class="se-tool-group" open><summary>History</summary><div class="se-tool-group-body"><button id="seUndo" type="button" disabled title="Undo (Ctrl+Z / ⌘Z)">Undo</button><button id="seRedo" type="button" disabled title="Redo (Ctrl+Y / Ctrl+Shift+Z / ⌘Shift+Z)">Redo</button></div></details><details class="se-tool-group" open><summary>Select · Residues & regions</summary><div class="se-tool-group-body"><button id="seBoxSelectTool" type="button" aria-pressed="false">Box select · default</button><button id="seLassoSelectTool" type="button" aria-pressed="false">Lasso select</button><button id="seClearRegionSelection" type="button">Clear selection</button><button id="seCopySelectedSvg" type="button" disabled title="Copy selected residues as SVG vectors for Illustrator">Copy selected SVG</button><button id="seDownloadSelectedSvg" type="button" disabled title="Download editable SVG artwork (recommended for Adobe Illustrator)">Download selected SVG</button><button id="seResetSelectedTransform" type="button" disabled>Reset selected transform</button><label class="se-region-rotation">Rotate selected region <input id="seSelectedRotation" type="range" min="-180" max="180" step="1" value="0" disabled><output id="seSelectedRotationValue">0°</output></label></div><p id="seSelectionStatus" role="status">Drag on empty space to box-select; click a residue or bond to edit.</p><p id="seSelectionExportStatus" class="se-selection-export-status" role="status" aria-live="polite">SVG keeps residues, lines, and labels as editable vector artwork. Open a downloaded SVG in Illustrator if clipboard paste is unsupported.</p></details>`;existing.before(bar);const viewport=stage.querySelector(".se-viewport");const dock=document.createElement("div");dock.className="se-whole-rotation-dock";dock.innerHTML=`<label><span class="se-whole-rotation-label">Rotate whole structure</span><input id="seWholeRotation" type="range" min="-180" max="180" step="1" value="0"><output id="seWholeRotationValue">0°</output></label>`;(viewport||$("secondarySvg")).insertAdjacentElement("afterend",dock);
-    $("seUndo").addEventListener("click",undo);$("seRedo").addEventListener("click",redo);$("seBoxSelectTool").addEventListener("click",()=>setMode("box"));$("seLassoSelectTool").addEventListener("click",()=>setMode("lasso"));$("seCopySelectedSvg").addEventListener("click",copySelectedSvg);$("seDownloadSelectedSvg").addEventListener("click",downloadSelectedSvg);$("seClearRegionSelection").addEventListener("click",()=>{remember();SecondaryExplorer.clearHighlights();SecondaryExplorer.setSelectionTransform({rotation:0,scale:1});syncSelectionState();});$("seResetSelectedTransform").addEventListener("click",()=>{remember();resetSelectedTransform();});
+  function installCopyControl(){
+    const viewport=document.querySelector("#scene-secondary .se-viewport");
+    if(!viewport||$("seCopyStructure"))return;
+    const button=document.createElement("button");
+    button.type="button";button.id="seCopyStructure";
+    button.className="se-copy-icon-button se-structure-copy-button";
+    button.setAttribute("aria-label","Copy selected RNA vector structure, or entire structure if none selected");
+    button.title="Copy RNA structure vectors (Ctrl+C / ⌘C)";
+    button.innerHTML='<svg class="se-copy-glyph" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg><svg class="se-check-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"></path></svg>';
+    viewport.append(button);button.addEventListener("click",copyArtwork);
+    document.addEventListener("keydown",onCopyShortcut,true);
+  }
+  function buildToolbar(){const stage=document.querySelector("#scene-secondary .secondary-stage"),existing=stage?.querySelector(".se-toolbar");if(!stage||!existing||$("seTransformToolbar"))return;const bar=document.createElement("div");bar.id="seTransformToolbar";bar.className="se-transform-toolbar";bar.innerHTML=`<details class="se-tool-group" open><summary>History</summary><div class="se-tool-group-body"><button id="seUndo" type="button" disabled title="Undo (Ctrl+Z / ⌘Z)">Undo</button><button id="seRedo" type="button" disabled title="Redo (Ctrl+Y / Ctrl+Shift+Z / ⌘Shift+Z)">Redo</button></div></details><details class="se-tool-group" open><summary>Select · Residues & regions</summary><div class="se-tool-group-body"><button id="seBoxSelectTool" type="button" aria-pressed="false">Box select · default</button><button id="seLassoSelectTool" type="button" aria-pressed="false">Lasso select</button><button id="seClearRegionSelection" type="button">Clear selection</button><button id="seResetSelectedTransform" type="button" disabled>Reset selected transform</button><label class="se-region-rotation">Rotate selected region <input id="seSelectedRotation" type="range" min="-180" max="180" step="1" value="0" disabled><output id="seSelectedRotationValue">0°</output></label></div><p id="seSelectionStatus" role="status">Drag on empty space to box-select; click a residue or bond to edit.</p></details>`;existing.before(bar);const viewport=stage.querySelector(".se-viewport");const dock=document.createElement("div");dock.className="se-whole-rotation-dock";dock.innerHTML=`<label><span class="se-whole-rotation-label">Rotate whole structure</span><input id="seWholeRotation" type="range" min="-180" max="180" step="1" value="0"><output id="seWholeRotationValue">0°</output></label>`;(viewport||$("secondarySvg")).insertAdjacentElement("afterend",dock);
+    $("seUndo").addEventListener("click",undo);$("seRedo").addEventListener("click",redo);$("seBoxSelectTool").addEventListener("click",()=>setMode("box"));$("seLassoSelectTool").addEventListener("click",()=>setMode("lasso"));$("seClearRegionSelection").addEventListener("click",()=>{remember();SecondaryExplorer.clearHighlights();SecondaryExplorer.setSelectionTransform({rotation:0,scale:1});syncSelectionState();});$("seResetSelectedTransform").addEventListener("click",()=>{remember();resetSelectedTransform();});
     const selectedRotation=$("seSelectedRotation");selectedRotation.addEventListener("pointerdown",beginContinuousEdit);selectedRotation.addEventListener("pointerup",endContinuousEdit);selectedRotation.addEventListener("change",endContinuousEdit);selectedRotation.addEventListener("input",e=>{beginContinuousEdit();SecondaryExplorer.setSelectionTransform({rotation:Number(e.target.value)});syncTransformControls();});
     const whole=$("seWholeRotation");whole.addEventListener("pointerdown",beginContinuousEdit);whole.addEventListener("pointerup",endContinuousEdit);whole.addEventListener("change",endContinuousEdit);whole.addEventListener("blur",endContinuousEdit);whole.addEventListener("keydown",event=>{if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End","PageUp","PageDown"].includes(event.key))beginContinuousEdit();});whole.addEventListener("input",e=>{beginContinuousEdit();const value=Number(e.target.value);$("seWholeRotationValue").textContent=value+"°";SecondaryExplorer.setWholeRotation(value);});
     const root=$("secondarySvg");root.addEventListener("pointerdown",begin,true);root.addEventListener("pointermove",move,true);root.addEventListener("pointerup",finish,true);root.addEventListener("pointercancel",finish,true);document.addEventListener("keydown",event=>{if(event.key==="Escape"){cancel();setMode("");return;}const target=event.target,typing=target?.matches?.("input:not([type=range]),textarea,[contenteditable=true]");if(typing)return;const mod=event.ctrlKey||event.metaKey;if(!mod)return;if(event.key.toLowerCase()==="z"){event.preventDefault();event.shiftKey?redo():undo();}else if(event.ctrlKey&&event.key.toLowerCase()==="y"){event.preventDefault();redo();}});window.addEventListener("rna-secondary-history-checkpoint",remember);window.addEventListener("rna-secondary-layout",()=>{syncSelectionState();syncTransformControls();});window.addEventListener("rna-secondary-select",syncSelectionState);syncTransformControls();setMode("");}
-  function setup(){if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",buildToolbar,{once:true});else buildToolbar();}
-  return{setup,setMode,isRegionMode,syncSelectionState,remember,selectedRegionSvg,copySelectedSvg,downloadSelectedSvg};
+  function setup(){const ready=()=>{buildToolbar();installCopyControl();};if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",ready,{once:true});else ready();}
+  return{setup,setMode,isRegionMode,syncSelectionState,remember,artworkSvgElement,selectedRegionSvg,copyArtwork,hasSelection,selectedCount:()=>selectedIndices().size};
 })();
 SecondarySelectionTools.setup();

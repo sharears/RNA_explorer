@@ -1268,7 +1268,12 @@ const SecondaryExplorer = (() => {
     });
     $("seResetManualLayout").addEventListener("click",()=>{if(typeof window!=="undefined"&&typeof Event!=="undefined")window.dispatchEvent(new Event("rna-secondary-history-checkpoint"));pushLayoutHistory();manualOffsets={};pinnedResidues.clear();$("seDragStatus").textContent="Manual layout edits cleared.";render();});
     $("seGoToButton").addEventListener("click",()=>{const i=Number($("seGoToResidue").value)-1;if(i>=0&&i<seq.length){select(i);$("seDragStatus").textContent="Selected residue "+(i+1)+"."; }else $("seDragStatus").textContent="Residue number must be between 1 and "+seq.length+".";});
-    $("seExportDialogButton").addEventListener("click",()=>$("seExportDialog")?.showModal());
+    $("seExportDialogButton").addEventListener("click",()=>{
+      const choice=$("seExportSelectedOnly");
+      const selected=typeof SecondarySelectionTools!=="undefined"&&SecondarySelectionTools.hasSelection();
+      if(choice){choice.disabled=!selected;choice.checked=selected;}
+      $("seExportDialog")?.showModal();
+    });
     if(typeof ResizeObserver!=="undefined")new ResizeObserver(()=>{if(seq)applyZoom();}).observe(viewport);
   }
 
@@ -1350,7 +1355,7 @@ const SecondaryExplorer = (() => {
     $("seCopySequence").addEventListener("click",()=>copySecondaryText("sequence"));
     $("seCopyDotBracket").addEventListener("click",()=>copySecondaryText("structure"));
     const exportDialog=document.createElement("dialog");exportDialog.id="seExportDialog";exportDialog.className="se-export-dialog";
-    exportDialog.innerHTML='<button type="button" class="dialog-close" id="seExportClose" aria-label="Close">×</button><h3>Export Secondary Structure</h3><label>Export type<select id="seExportType"><option value="image">Image</option><option value="structure">Structure</option></select></label><div id="seImageExportOptions"><label>Format<select id="seImageFormat"><option value="png">PNG</option><option value="svg">SVG</option><option value="pdf">PDF</option></select></label><label>Resolution / scale<input id="seImageScale" type="range" min="1" max="6" step=".5" value="2"><output id="seImageScaleValue">2×</output></label><label>DPI target<select id="seImageDpi"><option value="96">96</option><option value="150">150</option><option value="300" selected>300</option><option value="600">600</option></select></label><label>Background<select id="seImageBackground"><option value="transparent">Transparent</option><option value="#ffffff">White</option><option value="#0b1220">Dark</option></select></label></div><div id="seStructureExportOptions" hidden><label>Format<select id="seStructureFormat"><option value="dbn">DBN</option><option value="ct">CT</option></select></label></div><button type="button" class="primary-action" id="seExportNow">Export</button><p id="seExportDialogStatus" role="status"></p>';
+    exportDialog.innerHTML='<button type="button" class="dialog-close" id="seExportClose" aria-label="Close">×</button><h3>Export Secondary Structure</h3><label>Export type<select id="seExportType"><option value="image">Image</option><option value="structure">Structure</option></select></label><div id="seImageExportOptions"><label>Format<select id="seImageFormat"><option value="png">PNG</option><option value="svg">SVG</option><option value="pdf">PDF</option></select></label><label>Resolution / scale<input id="seImageScale" type="range" min="1" max="6" step=".5" value="2"><output id="seImageScaleValue">2×</output></label><label>DPI target<select id="seImageDpi"><option value="96">96</option><option value="150">150</option><option value="300" selected>300</option><option value="600">600</option></select></label><label>Background<select id="seImageBackground"><option value="transparent">Transparent</option><option value="#ffffff">White</option><option value="#0b1220">Dark</option></select></label><label class="se-export-selection-choice"><input type="checkbox" id="seExportSelectedOnly" disabled> Selected region only (when residues are selected)</label><p class="se-svg-export-help">For editable artwork in Adobe Illustrator, export SVG. Choose a dark background to retain contrast with pale residue letters.</p></div><div id="seStructureExportOptions" hidden><label>Format<select id="seStructureFormat"><option value="dbn">DBN</option><option value="ct">CT</option></select></label></div><button type="button" class="primary-action" id="seExportNow">Export</button><p id="seExportDialogStatus" role="status"></p>';
     document.body.append(exportDialog);
     $("seExportClose").addEventListener("click",()=>exportDialog.close());
     $("seExportType").addEventListener("change",e=>{$("seImageExportOptions").hidden=e.target.value!=="image";$("seStructureExportOptions").hidden=e.target.value!=="structure";});
@@ -1364,8 +1369,15 @@ const SecondaryExplorer = (() => {
           out.textContent=(fmt==="ct"?"CT":"DBN")+" structure exported.";
         }else{
           const fmt=$("seImageFormat").value,dpi=Number($("seImageDpi").value)||96,scale=(Number($("seImageScale").value)||1)*(dpi/96),bg=$("seImageBackground").value;
-          const result=await ExportTools.exportSvgElement(root,{format:fmt,filename:secondaryFigureStem(),scale,background:bg,viewBox:root.dataset.fullViewBox});
-          out.textContent=fmt.toUpperCase()+" image exported"+(result?.width?" · "+result.width+" × "+result.height:"")+".";
+          const selectedOnly=Boolean($("seExportSelectedOnly")?.checked);
+          const artwork=selectedOnly&&typeof SecondarySelectionTools!=="undefined"
+            ?SecondarySelectionTools.artworkSvgElement({selectedOnly:true}):root;
+          const viewBox=selectedOnly?artwork.getAttribute("viewBox"):root.dataset.fullViewBox;
+          const filename=selectedOnly
+            ?"rna-selected-region-"+SecondarySelectionTools.selectedCount()+"nt"
+            :secondaryFigureStem();
+          const result=await ExportTools.exportSvgElement(artwork,{format:fmt,filename,scale,background:bg,viewBox});
+          out.textContent=(selectedOnly?"Selected-region ":"")+fmt.toUpperCase()+" exported"+(result?.width?" · "+result.width+" × "+result.height:"")+".";
         }
       }catch(error){out.textContent="Export failed: "+error.message;}
     });
