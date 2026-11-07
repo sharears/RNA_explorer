@@ -229,6 +229,7 @@ const SecondarySelectionTools=(()=>{
     if(!scene||scene.hidden||document.querySelector("dialog[open]"))return;
     if(event.target?.closest?.('input,textarea,select,[contenteditable],[contenteditable="true"]'))return;
     if(document.activeElement?.isContentEditable)return;
+    if(window.getSelection?.()?.toString())return; // Preserve native copying of highlighted instructional text.
     event.preventDefault();copyArtwork();
   }
   function installCopyControl(){
@@ -249,6 +250,6 @@ const SecondarySelectionTools=(()=>{
     const whole=$("seWholeRotation");whole.addEventListener("pointerdown",beginContinuousEdit);whole.addEventListener("pointerup",endContinuousEdit);whole.addEventListener("change",endContinuousEdit);whole.addEventListener("blur",endContinuousEdit);whole.addEventListener("keydown",event=>{if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End","PageUp","PageDown"].includes(event.key))beginContinuousEdit();});whole.addEventListener("input",e=>{beginContinuousEdit();const value=Number(e.target.value);$("seWholeRotationValue").textContent=value+"°";SecondaryExplorer.setWholeRotation(value);});
     const root=$("secondarySvg");root.addEventListener("pointerdown",begin,true);root.addEventListener("pointermove",move,true);root.addEventListener("pointerup",finish,true);root.addEventListener("pointercancel",finish,true);document.addEventListener("keydown",event=>{if(event.key==="Escape"){cancel();setMode("");return;}const target=event.target,typing=target?.matches?.("input:not([type=range]),textarea,[contenteditable=true]");if(typing)return;const mod=event.ctrlKey||event.metaKey;if(!mod)return;if(event.key.toLowerCase()==="z"){event.preventDefault();event.shiftKey?redo():undo();}else if(event.ctrlKey&&event.key.toLowerCase()==="y"){event.preventDefault();redo();}});window.addEventListener("rna-secondary-history-checkpoint",remember);window.addEventListener("rna-secondary-layout",()=>{syncSelectionState();syncTransformControls();});window.addEventListener("rna-secondary-select",syncSelectionState);syncTransformControls();setMode("");}
   function setup(){const ready=()=>{buildToolbar();installCopyControl();};if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",ready,{once:true});else ready();}
-  return{setup,setMode,isRegionMode,syncSelectionState,remember,artworkSvgElement,selectedRegionSvg,copyArtwork,hasSelection};
+  return{setup,setMode,isRegionMode,syncSelectionState,remember,artworkSvgElement,selectedRegionSvg,copyArtwork,hasSelection,selectedCount:()=>selectedIndices().size};
 })();
 SecondarySelectionTools.setup();
