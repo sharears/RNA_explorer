@@ -17,7 +17,7 @@ assert.equal(lengths(runs(baseline)),"5","Covalently continuous RNA should form 
 const missingP=clone(baseline);missingP[2].atoms=missingP[2].atoms.filter(a=>a.atom!=="P");
 assert.equal(lengths(runs(missingP)),"2,3","Missing P cannot be bridged");
 const missingO3=clone(baseline);missingO3[1].atoms=missingO3[1].atoms.filter(a=>a.atom!=="O3'");
-assert.equal(lengths(runs(missingO3)),"3","Missing O3' must break the trace");
+assert.equal(lengths(runs(missingO3)),"2,3","Missing O3' must split the trace into two valid runs");
 const wide=clone(baseline);wide[3].atoms.find(a=>a.atom==="P").x+=30;
 assert.equal(lengths(runs(wide)),"3,2","Large O3'-P gap must not be bridged");
 const chain=clone(baseline);chain[3].chain="B";
