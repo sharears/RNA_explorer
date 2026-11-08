@@ -27,7 +27,7 @@ try{
   await page.waitForFunction(()=>{
     const d=TertiaryExplorer.getDiagnostics();
     return d.representation==="cartoon"&&d.cartoonTraceEdges>5;
-  },{timeout:15000});
+  },undefined,{timeout:15000});
   const cartoon=await page.evaluate(()=>TertiaryExplorer.getDiagnostics());
   if(cartoon.cartoonTraceRuns<1||cartoon.cartoonTraceEdges<=5)
     throw new Error("Connected RNA cartoon backbone trace was not built: "+JSON.stringify(cartoon));
