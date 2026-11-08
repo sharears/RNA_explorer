@@ -20,7 +20,20 @@ try{
   const status=await page.locator("#teMolecularStatus").textContent();
   if(status&&/could not load|could not initialize/i.test(status))throw new Error("False molecular-viewer error remained visible: "+status);
 
+  // RNA cartoon adds a continuous underlying backbone only for chemically
+  // connected residues. Unlike 3Dmol's built-in cartoon, modified bases do
+  // not break the verified C4′ backbone trace.
+  await page.selectOption("#teRepresentation","cartoon");
+  await page.waitForFunction(()=>{
+    const d=TertiaryExplorer.getDiagnostics();
+    return d.representation==="cartoon"&&d.cartoonTraceEdges>5;
+  },undefined,{timeout:15000});
+  const cartoon=await page.evaluate(()=>TertiaryExplorer.getDiagnostics());
+  if(cartoon.cartoonTraceRuns<1||cartoon.cartoonTraceEdges<=5)
+    throw new Error("Connected RNA cartoon backbone trace was not built: "+JSON.stringify(cartoon));
   await page.selectOption("#teRepresentation","spheres");
+  await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().cartoonTraceEdges===0);
+
   await page.waitForFunction(()=>TertiaryExplorer.getDiagnostics().representation==="spheres");
   d=await page.evaluate(()=>TertiaryExplorer.getDiagnostics());
   if(d.representation!=="spheres")throw new Error("Representation control did not update 3D state.");

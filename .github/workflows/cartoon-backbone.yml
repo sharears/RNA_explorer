@@ -1,0 +1,25 @@
+name: RNA cartoon backbone connectivity
+on:
+  pull_request:
+    paths:
+      - tertiary.js
+      - tests/tertiary-cartoon-backbone.cjs
+      - .github/workflows/cartoon-backbone.yml
+  push:
+    branches: [main]
+    paths:
+      - tertiary.js
+      - tests/tertiary-cartoon-backbone.cjs
+      - .github/workflows/cartoon-backbone.yml
+permissions:
+  contents: read
+jobs:
+  cartoon-connectivity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tests/tertiary-cartoon-backbone.cjs

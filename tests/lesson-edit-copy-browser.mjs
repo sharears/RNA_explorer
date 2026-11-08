@@ -136,7 +136,7 @@ try{
   });
   assert.ok(copied.formats.includes("image/svg+xml"),"native SVG clipboard MIME used");
   assert.ok(!copied.formats.includes("text/plain"),"never replace vector artwork with raw XML source");
-  assert.ok(copied.svgText.includes('fill="#0b1220"'),"dark vector backing retains pale-letter contrast");
+  assert.ok(!copied.svgText.includes('fill="#0b1220"'),"clipboard has no dark backdrop rectangle");
   assert.equal((copied.svgText.match(/class="se-node/g)||[]).length,2,
     "copy icon places only selected residues on clipboard");
 
@@ -162,11 +162,12 @@ try{
         const delta=Math.abs(pixels[i]-11)+Math.abs(pixels[i+1]-18)+Math.abs(pixels[i+2]-32);
         if(pixels[i+3]>128&&delta>24)colorful++;
       }
-      return {width:img.naturalWidth,height:img.naturalHeight,colorful};
+      return {width:img.naturalWidth,height:img.naturalHeight,colorful,cornerAlpha:pixels[3]};
     }finally{URL.revokeObjectURL(url);}
   },copied.svgText);
   assert.ok(vectorRender.width>40&&vectorRender.height>40&&vectorRender.colorful>12,
-    "standalone copied vector is visibly colored beyond its dark editable background");
+    "transparent copied SVG retains independently rendered nucleotide artwork");
+  assert.equal(vectorRender.cornerAlpha,0,"SVG clipboard artwork has a transparent corner/background");
 
 
   // On desktop, keyboard copy must use the same artwork and leave typing alone.
