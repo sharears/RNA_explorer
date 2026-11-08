@@ -207,7 +207,7 @@ const SecondarySelectionTools=(()=>{
     const button=$("seCopyStructure");
     if(button)button.disabled=true;
     try{
-      const selectedOnly=hasSelection(),region=selectedRegionSvg({selectedOnly,includeBackground:true});
+      const selectedOnly=hasSelection(),region=selectedRegionSvg({selectedOnly,includeBackground:false});
       // No text/plain or HTML fallback: those previously gave distorted or
       // literal SVG text in Illustrator. Only report success for true SVG MIME.
       if(!navigator.clipboard?.write||typeof ClipboardItem==="undefined"||
