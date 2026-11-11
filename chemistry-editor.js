@@ -196,7 +196,7 @@ const MoleculeEditor = (() => {
   const DEFAULT_3D_VIEW={rx:-0.38,ry:0.58,zoom:1,panX:0,panY:0};
   const threeDView={...DEFAULT_3D_VIEW};
   let textDefaults={...DEFAULT_TEXT_STYLE};
-  let undoStack=[],redoStack=[];
+  let undoStack=[],redoStack=[],copyFeedbackTimer=null;
   const HISTORY_LIMIT=80;
   const DEFAULT_CANVAS_VIEW={x:0,y:0,width:820,height:470};
   let canvasView={...DEFAULT_CANVAS_VIEW};
@@ -406,6 +406,10 @@ const MoleculeEditor = (() => {
         <div class="chem-editor-workspace">
           <div class="chem-editor-canvas-wrap">
             <svg id="chemEditorSvg" viewBox="0 0 820 470" aria-label="Editable molecular structure"></svg>
+            <button id="chemCopyArtwork" class="chem-copy-icon-button" type="button" title="Copy editable vector artwork (Ctrl+C / ⌘C)" aria-label="Copy selected molecular structure as editable SVG">
+              <svg class="chem-copy-glyph" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>
+              <svg class="chem-check-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"></path></svg>
+            </button>
           </div>
           <aside class="chem-3d-panel" id="chem3DPanel" hidden aria-label="Interactive 3D molecular preview">
             <div class="chem-3d-heading">
@@ -572,6 +576,7 @@ const MoleculeEditor = (() => {
       dialog.querySelector("#chemLeftBase").value=leftBase;dialog.querySelector("#chemRightBase").value=rightBase;
       pushUndo();mode="pair";title.textContent="Base-pair chemistry editor";graph=pairTemplate(k,leftBase,rightBase);renumber();fitCanvasToDrawing(false);render();validate();
     }));
+    dialog.querySelector("#chemCopyArtwork").addEventListener("click",copyVectorArtwork);
     svg.addEventListener("pointerdown",canvasPointerDown);
     svg.addEventListener("pointermove",canvasPointerMove);
     svg.addEventListener("pointerup",canvasPointerUp);
@@ -583,6 +588,12 @@ const MoleculeEditor = (() => {
     dialog.addEventListener("keydown",e=>{
       const modifier=e.metaKey||e.ctrlKey,key=String(e.key).toLowerCase();
       if(modifier&&!e.altKey){
+        if(key==="c"&&!e.shiftKey){
+          if(e.target?.closest?.('input,textarea,select,[contenteditable]')||
+            document.querySelector("#chemExportDialog[open]")||
+            window.getSelection?.()?.toString())return;
+          e.preventDefault();copyVectorArtwork();return;
+        }
         if(key==="z"&&e.shiftKey){e.preventDefault();redo();return;}
         if(key==="z"){e.preventDefault();undo();return;}
         if(!e.metaKey&&key==="y"){e.preventDefault();redo();return;}
