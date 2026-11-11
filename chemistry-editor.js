@@ -196,7 +196,7 @@ const MoleculeEditor = (() => {
   const DEFAULT_3D_VIEW={rx:-0.38,ry:0.58,zoom:1,panX:0,panY:0};
   const threeDView={...DEFAULT_3D_VIEW};
   let textDefaults={...DEFAULT_TEXT_STYLE};
-  let undoStack=[],redoStack=[];
+  let undoStack=[],redoStack=[],copyFeedbackTimer=null;
   const HISTORY_LIMIT=80;
   const DEFAULT_CANVAS_VIEW={x:0,y:0,width:820,height:470};
   let canvasView={...DEFAULT_CANVAS_VIEW};
@@ -406,6 +406,10 @@ const MoleculeEditor = (() => {
         <div class="chem-editor-workspace">
           <div class="chem-editor-canvas-wrap">
             <svg id="chemEditorSvg" viewBox="0 0 820 470" aria-label="Editable molecular structure"></svg>
+            <button id="chemCopyArtwork" class="chem-copy-icon-button" type="button" title="Copy editable vector artwork (Ctrl+C / ⌘C)" aria-label="Copy selected molecular structure as editable SVG">
+              <svg class="chem-copy-glyph" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>
+              <svg class="chem-check-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"></path></svg>
+            </button>
           </div>
           <aside class="chem-3d-panel" id="chem3DPanel" hidden aria-label="Interactive 3D molecular preview">
             <div class="chem-3d-heading">
@@ -572,6 +576,7 @@ const MoleculeEditor = (() => {
       dialog.querySelector("#chemLeftBase").value=leftBase;dialog.querySelector("#chemRightBase").value=rightBase;
       pushUndo();mode="pair";title.textContent="Base-pair chemistry editor";graph=pairTemplate(k,leftBase,rightBase);renumber();fitCanvasToDrawing(false);render();validate();
     }));
+    dialog.querySelector("#chemCopyArtwork").addEventListener("click",copyVectorArtwork);
     svg.addEventListener("pointerdown",canvasPointerDown);
     svg.addEventListener("pointermove",canvasPointerMove);
     svg.addEventListener("pointerup",canvasPointerUp);
@@ -583,6 +588,12 @@ const MoleculeEditor = (() => {
     dialog.addEventListener("keydown",e=>{
       const modifier=e.metaKey||e.ctrlKey,key=String(e.key).toLowerCase();
       if(modifier&&!e.altKey){
+        if(key==="c"&&!e.shiftKey){
+          if(e.target?.closest?.('input,textarea,select,[contenteditable]')||
+            document.querySelector("#chemExportDialog[open]")||
+            window.getSelection?.()?.toString())return;
+          e.preventDefault();copyVectorArtwork();return;
+        }
         if(key==="z"&&e.shiftKey){e.preventDefault();redo();return;}
         if(key==="z"){e.preventDefault();undo();return;}
         if(!e.metaKey&&key==="y"){e.preventDefault();redo();return;}
@@ -1290,6 +1301,104 @@ const MoleculeEditor = (() => {
     if(threeDVisible)schedule3DRender();
   }
 
+
+  // Both the lasso and rectangular tools populate selectedAtoms. Build actual
+  // standalone SVG paths/text, keeping bonds only when both atoms are included.
+  function molecularCopySvg(){
+    if(!svg||!graph.atoms.length)throw Error("Draw a molecule before copying.");
+    if(typeof ExportTools==="undefined")throw Error("Vector export unavailable.");
+    const picked=selectedAtoms.size?[...selectedAtoms]:(selectedAtom?[selectedAtom]:[]);
+    const partial=picked.length>0;
+    const ids=new Set((partial?picked:graph.atoms.map(a=>a.id)).filter(id=>atomById(id)));
+    if(!ids.size)throw Error("There are no atoms to copy.");
+    const bonds=new Map(graph.bonds.map(b=>[String(b.id),b]));
+    const hbonds=new Map(graph.hbonds.map(h=>[String(h.id),h]));
+    const clone=ExportTools.preparedSvg(svg).clone;
+    const kept=["chem-editor-bonds","chem-editor-hbonds","chem-editor-r-markers","chem-editor-atoms"];
+    [...clone.children].forEach(el=>{
+      if(!kept.some(cls=>el.classList?.contains(cls)))el.remove();
+    });
+    clone.querySelectorAll("[data-atom-id]").forEach(el=>{
+      if(!ids.has(el.getAttribute("data-atom-id"))){el.remove();return;}
+      el.classList.remove("selected","pending","valence-warning");
+      const circle=el.querySelector(".chem-atom-circle");
+      if(circle){
+        if(!showAtomCircles)circle.remove();
+        else{
+          circle.style.fill="#0d1b2b";
+          circle.style.stroke="#60798d";
+          circle.style.strokeWidth="1.5";
+          circle.style.removeProperty("filter");
+        }
+      }
+      el.querySelectorAll("text").forEach(t=>t.style.removeProperty("filter"));
+    });
+    clone.querySelectorAll("[data-bond-id]").forEach(el=>{
+      const b=bonds.get(String(el.getAttribute("data-bond-id")));
+      if(!b||!ids.has(b.a)||!ids.has(b.b)){el.remove();return;}
+      el.classList.remove("pending-fuse");
+      el.querySelectorAll("line").forEach(line=>{
+        line.style.stroke="#dbe7ef";
+        line.style.strokeWidth="2.3";
+      });
+    });
+    clone.querySelectorAll("[data-hbond-id]").forEach(el=>{
+      const h=hbonds.get(String(el.getAttribute("data-hbond-id")));
+      if(!h||!ids.has(h.a)||!ids.has(h.b))el.remove();
+    });
+    // R labels are pair-level decorations, not atom-level selections.
+    if(partial)clone.querySelector(".chem-editor-r-markers")?.remove();
+    clone.querySelectorAll("*").forEach(el=>{
+      [...el.attributes].filter(a=>a.name.startsWith("data-")||
+        a.name==="tabindex"||a.name==="role"||a.name.startsWith("aria-"))
+        .forEach(a=>el.removeAttribute(a.name));
+      el.style?.removeProperty("cursor");
+      el.style?.removeProperty("pointer-events");
+      el.style?.removeProperty("filter");
+    });
+    const atoms=graph.atoms.filter(a=>ids.has(a.id)),pad=65;
+    const minX=Math.min(...atoms.map(a=>Number(a.x)))-pad;
+    const minY=Math.min(...atoms.map(a=>Number(a.y)))-pad;
+    const w=Math.max(120,Math.max(...atoms.map(a=>Number(a.x)))+pad-minX);
+    const h=Math.max(120,Math.max(...atoms.map(a=>Number(a.y)))+pad-minY);
+    const round=n=>Number(n.toFixed(2));
+    const group=document.createElementNS(NS,"g");
+    group.setAttribute("transform","translate("+round(-minX)+" "+round(-minY)+")");
+    while(clone.firstChild)group.append(clone.firstChild);
+    clone.append(group);
+    clone.setAttribute("viewBox","0 0 "+round(w)+" "+round(h));
+    clone.setAttribute("width",String(round(w)));
+    clone.setAttribute("height",String(round(h)));
+    clone.setAttribute("xmlns",NS);
+    clone.removeAttribute("aria-label");
+    return {svgText:new XMLSerializer().serializeToString(clone),partial,
+      atomCount:atoms.length,bondCount:graph.bonds.filter(b=>ids.has(b.a)&&ids.has(b.b)).length};
+  }
+  async function copyVectorArtwork(){
+    const button=dialog?.querySelector("#chemCopyArtwork");
+    if(button)button.disabled=true;
+    try{
+      const copy=molecularCopySvg();
+      // Never substitute flattened PNG or raw XML for editable vectors.
+      if(!navigator.clipboard?.write||typeof ClipboardItem==="undefined"||
+        (typeof ClipboardItem.supports==="function"&&!ClipboardItem.supports("image/svg+xml")))
+        throw Error("Native SVG clipboard is unavailable here. Use Export image → SVG.");
+      await navigator.clipboard.write([new ClipboardItem({
+        "image/svg+xml":new Blob([copy.svgText],{type:"image/svg+xml"})
+      })]);
+      if(button){
+        clearTimeout(copyFeedbackTimer);
+        button.classList.add("is-copied");
+        copyFeedbackTimer=setTimeout(()=>button.classList.remove("is-copied"),1800);
+      }
+      if(status)status.textContent="Copied "+(copy.partial?copy.atomCount+" selected atoms":"the entire molecule")+
+        " as editable SVG vectors. If paste is unsupported, use Export image → SVG.";
+      return true;
+    }catch(error){
+      if(status)status.textContent="Vector copy unavailable: "+error.message;
+      return false;
+    }finally{if(button)button.disabled=false;}
+  }
   function molecularFigureStem(){
     const kind=mode==="pair"?"base-pair-"+leftBase+"-"+rightBase:mode==="blank"?"molecular-drawing":"nucleobase-"+String(base).toLowerCase();
     return "rna-"+kind+"-"+graph.atoms.length+"atoms-"+graph.bonds.length+"bonds";
@@ -1433,7 +1542,7 @@ const MoleculeEditor = (() => {
   }
 
   return {setup,openBase,openPair,openBlank,openAminoAcid,openGraph,getBaseGraph:graphFromBase,getCurrentGraph:()=>clone(graph),getSavedBase:b=>savedBases[b]?clone(savedBases[b]):null,pairTemplate,
-    getSessionSnapshot,restoreSessionSnapshot,
+    getSessionSnapshot,restoreSessionSnapshot,molecularCopySvg,copyVectorArtwork,
     get3DDiagnostics:()=>({visible:threeDVisible,mode:threeDMode,view:{...threeDView},fullscreen:document.fullscreenElement===threeDPanel||Boolean(threeDPanel?.classList.contains("chem-3d-expanded")),atomCount:threeDCoords.length}),
     idealize2D:idealize2DGeometry,
     validateGraph:g=>{const old=graph;graph=clone(g);const w=validate();graph=old;return w;}};
