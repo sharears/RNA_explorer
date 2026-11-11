@@ -333,3 +333,30 @@ body.chem-3d-expanded-open{overflow:hidden!important}
 #chemEditorDialog .chem-stock-amino label{display:flex;align-items:center;flex-wrap:wrap;gap:8px;color:var(--muted);font-size:13px}
 #chemEditorDialog .chem-stock-amino select{padding:8px;border:1px solid var(--line);border-radius:7px;background:var(--ink);color:var(--text)}
 #chemEditorDialog .chem-stock-amino p{flex:1 1 100%;margin:0;color:var(--muted);font-size:.75rem}
+
+
+/* Small in-viewer vector copy action, matching the Secondary Structure copy icon. */
+#chemEditorDialog .chem-editor-canvas-wrap{position:relative}
+#chemEditorDialog .chem-copy-icon-button{
+  position:absolute;right:12px;bottom:12px;z-index:4;
+  display:grid;place-items:center;width:34px;height:34px;padding:0;
+  border:1px solid rgba(159,182,204,.3);border-radius:50%;
+  background:rgba(12,28,44,.91);color:var(--muted);
+  box-shadow:0 2px 8px rgba(0,0,0,.18);cursor:pointer;
+  transition:background .15s,border-color .15s,color .15s;
+}
+#chemEditorDialog .chem-copy-icon-button:hover,
+#chemEditorDialog .chem-copy-icon-button:focus-visible{
+  border-color:var(--mint);color:var(--text);background:rgba(27,54,74,.98)
+}
+#chemEditorDialog .chem-copy-icon-button.is-copied{
+  color:var(--mint);border-color:var(--mint)
+}
+#chemEditorDialog .chem-copy-icon-button:disabled{opacity:.5;cursor:wait}
+#chemEditorDialog .chem-copy-icon-button svg{
+  width:17px;height:17px;fill:none;stroke:currentColor;
+  stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round
+}
+#chemEditorDialog .chem-copy-icon-button .chem-check-glyph{display:none}
+#chemEditorDialog .chem-copy-icon-button.is-copied .chem-copy-glyph{display:none}
+#chemEditorDialog .chem-copy-icon-button.is-copied .chem-check-glyph{display:block}
