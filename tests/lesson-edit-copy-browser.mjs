@@ -215,8 +215,86 @@ try{
     "selected SVG download contains only chosen residues");
   assert.ok(exported.includes("<svg")&&exported.includes("<text"),
     "download retains editable vector paths/text");
+  // RNA Spotlight replaces the old homepage "Did you know?" label.
+  await page.goto(base+"?page=home",{waitUntil:"domcontentloaded"});
+  assert.equal((await page.locator("#rnaFactLabel").textContent()).trim(),
+    "RNA Spotlight","homepage science feature has the new name");
+
+  // Molecular Drawing: copy a chemically bounded atom/bond selection as
+  // editable, standalone SVG without accidentally copying the whole canvas.
+  await page.goto(base+"?page=drawing",{waitUntil:"domcontentloaded"});
+  await page.waitForSelector("#drawingOpenBlank");
+  await page.evaluate(()=>MoleculeEditor.openBase("A"));
+  await page.waitForFunction(()=>document.querySelector("#chemEditorDialog")?.open);
+  const baseGraph=await page.evaluate(()=>MoleculeEditor.getCurrentGraph());
+  assert.ok(baseGraph.atoms.length>5&&baseGraph.bonds.length>4,
+    "molecular editor loaded atom/bond drawing");
+  const chosenBond=baseGraph.bonds[0];
+  await page.locator('#chemEditorSvg [data-atom-id="'+chosenBond.a+'"]').click();
+  await page.locator('#chemEditorSvg [data-atom-id="'+chosenBond.b+'"]').click({modifiers:["Shift"]});
+  const molecule=await page.evaluate(()=>MoleculeEditor.molecularCopySvg());
+  assert.equal(molecule.atomCount,2,"only the two selected atoms copied");
+  assert.equal(molecule.bondCount,1,"the bond between selected atoms included");
+  const parsedMolecule=await page.evaluate(text=>{
+    const xml=new DOMParser().parseFromString(text,"image/svg+xml"),root=xml.documentElement;
+    return {error:Boolean(xml.querySelector("parsererror")),
+      atoms:xml.querySelectorAll(".chem-editor-atom").length,
+      bonds:xml.querySelectorAll(".chem-editor-bond").length,
+      outside:xml.querySelectorAll(".chem-selection-box,.chem-lasso-path,.chem-selection-transform-overlay").length,
+      lines:xml.querySelectorAll(".chem-editor-bond line").length,
+      labels:xml.querySelectorAll(".chem-editor-atom text").length,
+      circles:xml.querySelectorAll(".chem-atom-circle").length,
+      box:root.getAttribute("viewBox"),
+      width:Number(root.getAttribute("width"))
+    };
+  },molecule.svgText);
+  assert.equal(parsedMolecule.error,false,"molecular SVG parses as XML");
+  assert.equal(parsedMolecule.atoms,2,"only chosen atom groups exported");
+  assert.equal(parsedMolecule.bonds,1,"only internal covalent connection exported");
+  assert.equal(parsedMolecule.outside,0,"no editor selection handles exported");
+  assert.equal(parsedMolecule.circles,0,"hidden editor-only atom circles omitted");
+  assert.ok(parsedMolecule.lines>=1&&parsedMolecule.labels>=1&&
+    parsedMolecule.box.startsWith("0 0 ")&&parsedMolecule.width>0,
+    "normalized SVG retains separately editable vector bonds and atom labels");
+
+  const canvasBounds=await page.locator("#chemEditorDialog .chem-editor-canvas-wrap").boundingBox();
+  const iconBounds=await page.locator("#chemCopyArtwork").boundingBox();
+  assert.ok(iconBounds.x>=canvasBounds.x+canvasBounds.width-65&&
+    iconBounds.y>=canvasBounds.y+canvasBounds.height-65,
+    "molecular copy button sits at bottom-right of drawing canvas");
+  await page.locator("#chemCopyArtwork").click();
+  await page.waitForFunction(()=>document.querySelector("#chemCopyArtwork")?.classList.contains("is-copied"));
+  const copyTypes=await page.evaluate(async()=>(await navigator.clipboard.read()).flatMap(x=>x.types));
+  assert.ok(copyTypes.includes("image/svg+xml")&&!copyTypes.includes("text/plain"),
+    "clipboard contains real SVG vectors, not source text");
+  const copiedMolecule=await page.evaluate(async()=>{
+    const item=(await navigator.clipboard.read()).find(i=>i.types.includes("image/svg+xml"));
+    return (await item.getType("image/svg+xml")).text();
+  });
+  assert.equal((copiedMolecule.match(/class="chem-editor-atom/g)||[]).length,2,
+    "copy button contains only selected atoms");
+  assert.ok(!copiedMolecule.includes('fill="#0b1220"')&&
+    !copiedMolecule.includes("chem-selection-box"),
+    "molecular copy is transparent with no selection box");
+
+  await page.evaluate(()=>navigator.clipboard.writeText("SENTINEL"));
+  await page.locator("#chemCopyArtwork").focus();
+  await page.keyboard.press("Control+c");
+  await page.waitForFunction(async()=>(await navigator.clipboard.read())
+    .some(item=>item.types.includes("image/svg+xml")));
+  const shortcutSvg=await page.evaluate(async()=>{
+    const item=(await navigator.clipboard.read()).find(i=>i.types.includes("image/svg+xml"));
+    return (await item.getType("image/svg+xml")).text();
+  });
+  assert.equal((shortcutSvg.match(/class="chem-editor-atom/g)||[]).length,2,
+    "Ctrl+C copies selected molecular vectors");
+  await page.locator("#chemCopyArtwork").focus();
+  await page.keyboard.press("Escape");
+  const entireMolecule=await page.evaluate(()=>MoleculeEditor.molecularCopySvg());
+  assert.equal(entireMolecule.atomCount,baseGraph.atoms.length,
+    "without a selection, copy includes the whole molecule");
   if(problems.length)throw Error("Browser JavaScript errors:\n"+problems.join("\n"));
-  console.log("PASS: Inline copy, four lesson editors, viewer SVG copy, Ctrl+C vectors, full selection and Illustrator-friendly selected Export.");
+  console.log("PASS: RNA Spotlight, molecular selected SVG copy and Ctrl+C, plus secondary and lesson regressions.");
 }finally{
   await context.close();
   await browser.close();
