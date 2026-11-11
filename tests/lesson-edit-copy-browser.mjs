@@ -271,7 +271,7 @@ try{
     const item=(await navigator.clipboard.read()).find(i=>i.types.includes("image/svg+xml"));
     return (await item.getType("image/svg+xml")).text();
   });
-  assert.equal((copiedMolecule.match(/class="chem-editor-atom/g)||[]).length,2,
+  assert.equal((copiedMolecule.match(/class="chem-editor-atom(?:\\s|")/g)||[]).length,2,
     "copy button contains only selected atoms");
   assert.ok(!copiedMolecule.includes('fill="#0b1220"')&&
     !copiedMolecule.includes("chem-selection-box"),
@@ -286,7 +286,7 @@ try{
     const item=(await navigator.clipboard.read()).find(i=>i.types.includes("image/svg+xml"));
     return (await item.getType("image/svg+xml")).text();
   });
-  assert.equal((shortcutSvg.match(/class="chem-editor-atom/g)||[]).length,2,
+  assert.equal((shortcutSvg.match(/class="chem-editor-atom(?:\\s|")/g)||[]).length,2,
     "Ctrl+C copies selected molecular vectors");
   await page.locator("#chemCopyArtwork").focus();
   await page.keyboard.press("Escape");
