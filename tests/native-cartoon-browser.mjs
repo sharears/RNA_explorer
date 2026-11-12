@@ -9,7 +9,7 @@ const page=await browser.newPage({viewport:{width:1280,height:900}});
 const errors=[];
 page.on("pageerror",e=>errors.push(String(e)));
 try{
-  await page.goto(base+"?page=tertiary",{waitUntil:"domcontentloaded",timeout:30000});
+  await page.goto(base+"?page=tertiary&start=example",{waitUntil:"domcontentloaded",timeout:30000});
   await page.waitForSelector("#teRepresentation",{state:"attached",timeout:30000});
   await page.waitForFunction(()=>{
     const d=window.TertiaryExplorer?.getDiagnostics?.();
