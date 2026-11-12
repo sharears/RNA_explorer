@@ -1,20 +1,22 @@
-name: RNA cartoon backbone connectivity
+name: Native RNA cartoon ribbon compatibility
 on:
   pull_request:
     paths:
       - tertiary.js
       - tests/tertiary-cartoon-backbone.cjs
+      - tests/native-cartoon-browser.mjs
       - .github/workflows/cartoon-backbone.yml
   push:
     branches: [main]
     paths:
       - tertiary.js
       - tests/tertiary-cartoon-backbone.cjs
+      - tests/native-cartoon-browser.mjs
       - .github/workflows/cartoon-backbone.yml
 permissions:
   contents: read
 jobs:
-  cartoon-connectivity:
+  cartoon-compatibility:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -23,3 +25,25 @@ jobs:
         with:
           node-version: '22'
       - run: node tests/tertiary-cartoon-backbone.cjs
+
+  native-cartoon-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - name: Render genuine 1EHZ cartoon ribbon and verify modified RNA recognition
+        run: |
+          python3 -m http.server 4173 >/tmp/rna-native-cartoon.log 2>&1 &
+          sleep 2
+          node tests/native-cartoon-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-rna-cartoon-screenshot
+          path: artifacts/native-cartoon-ribbon.png
+          if-no-files-found: ignore
