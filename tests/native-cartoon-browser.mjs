@@ -11,10 +11,24 @@ page.on("pageerror",e=>errors.push(String(e)));
 try{
   await page.goto(base+"?page=tertiary&start=example",{waitUntil:"domcontentloaded",timeout:30000});
   await page.waitForSelector("#teRepresentation",{state:"attached",timeout:30000});
-  await page.waitForFunction(()=>{
-    const d=window.TertiaryExplorer?.getDiagnostics?.();
-    return d?.viewerReady&&d?.modelReady&&d.atomCount>100;
-  },undefined,{timeout:60000});
+  try{
+    await page.waitForFunction(()=>{
+      const d=window.TertiaryExplorer?.getDiagnostics?.();
+      return d?.viewerReady&&d?.modelReady&&d.atomCount>100;
+    },undefined,{timeout:24000});
+  }catch(error){
+    const details=await page.evaluate(()=>({
+      page:document.body.dataset.pageMode,
+      sceneHidden:document.querySelector("#scene-tertiary")?.hidden,
+      model:window.TertiaryExplorer?.getDiagnostics?.(),
+      message:document.querySelector("#teMolecularStatus")?.textContent,
+      has3Dmol:!!window.$3Dmol
+    }));
+    console.log("3D INITIALIZATION DIAGNOSTICS",JSON.stringify(details));
+    await mkdir("artifacts",{recursive:true});
+    await page.screenshot({path:"artifacts/native-cartoon-ribbon.png"});
+    throw error;
+  }
   await page.evaluate(()=>{const select=document.querySelector("#teRepresentation");select.value="cartoon";select.dispatchEvent(new Event("change",{bubbles:true}));});
   await page.waitForFunction(()=>{
     const d=TertiaryExplorer.getDiagnostics();
