@@ -135,7 +135,7 @@ const TertiaryExplorer = (() => {
   let viewer=null,model=null,viewerPromise=null,initialView=null,hoverLabel=null;
   let pairs=[],partner=[],setupDone=false,surfaceToken=0,resizeTicket=0,learningPulseTimer=null,learningPulseStep=0;
   let linkedPulseTimer=null,linkedPulseOn=false,linkedPulseShapes=[],linkedPulseFocus=[],linkedPulseHbondDots=0,linkedPulseAtomParts={base:0,sugar:0,phosphate:0},linkedPulseCovalentBonds=0;
-  let cartoonTraceStats={edges:0,runs:0};
+  let cartoonNormalizedCount=0;
   function scheduleViewerResize(preserveView=true){
     if(!viewer)return;
     const ticket=++resizeTicket,view=preserveView&&viewer.getView?viewer.getView():null;
@@ -602,6 +602,7 @@ const TertiaryExplorer = (() => {
     const container=$("tertiaryMolecularViewer");if(!container)throw new Error("Molecular viewer container missing");
     const lib=await load3Dmol();
     viewer=lib.createViewer(container,{backgroundColor:state.backgroundColor||"#08111e",antialias:true});
+    installNativeCartoonCompatibility();
     try{viewer.setViewStyle?.({style:"outline",color:"#02060b",width:.08});}catch(_){}
     try{await loadDefaultStructure();}
     catch(error){
@@ -680,51 +681,51 @@ const TertiaryExplorer = (() => {
     }
   }
 
-  // 3Dmol's nucleic-acid cartoon can show visual seams, especially around
-  // modified RNA bases that are still connected through their sugar-phosphate
-  // atoms. Draw a slim C4'-based continuous trace underneath the cartoon.
-  // Only join consecutive modeled residues when O3'(i)-P(i+1) has a genuine
-  // covalent-distance geometry; never bridge absent atoms or chain gaps.
-  function cartoonBackboneRuns(residues,visible=()=>true){
-    const runs=[];let current=[];
-    const flush=()=>{if(current.length>1)runs.push(current);current=[];};
-    const sugar=r=>atomByName(r,"C4'")||atomByName(r,"C4*");
-    const o3=r=>atomByName(r,"O3'")||atomByName(r,"O3*");
-    const p=r=>atomByName(r,"P");
-    const coord=a=>({x:Number(a.x),y:Number(a.y),z:Number(a.z)});
-    for(let i=0;i<residues.length-1;i++){
-      const a=residues[i],b=residues[i+1],ca=sugar(a),cb=sugar(b);
-      const o=o3(a),phosphate=p(b);
-      const na=Number(a?.resi),nb=Number(b?.resi);
-      const numbered=Number.isFinite(na)&&Number.isFinite(nb)
-        ?(nb-na===1||(nb===na&&String(a.icode||"")!==String(b.icode||""))):false;
-      const distance=o&&phosphate?pointDistance(o,phosphate):Infinity;
-      const traceDist=ca&&cb?pointDistance(ca,cb):Infinity;
-      const linked=visible(i)&&visible(i+1)&&a.chain===b.chain&&numbered&&
-        distance>=1.2&&distance<=2.35&&traceDist>=1.5&&traceDist<=11;
-      if(!linked){flush();continue;}
-      if(!current.length)current.push(coord(ca));
-      current.push(coord(cb));
+  // 3Dmol's native RNA cartoon recognizes canonical A/C/G/U names only.
+  // Modified nucleotides in tRNA (PSU, 1MA, 5MC...) can interrupt the actual
+  // ribbon, even if the chain is connected. During synchronous 3Dmol rendering
+  // only, identify known modified bases by their canonical parent and mark
+  // their atoms as polymer atoms. Restore authentic residue names and HETATM
+  // flags immediately after rendering; do not alter geometry or source data.
+  function withCanonicalCartoonResidues(residues,draw){
+    const changes=[],modified=new Set();
+    try{
+      for(const residue of residues){
+        const base=normalizeBase(residue?.resn);
+        if(!/^[ACGU]$/.test(base))continue;
+        for(const atom of residue.atoms||[]){
+          const original=String(atom.resn||"").trim().toUpperCase();
+          if(original===base&&!atom.hetflag)continue;
+          changes.push({atom,resn:atom.resn,hetflag:atom.hetflag});
+          atom.resn=base;
+          atom.hetflag=false;
+          modified.add(residueKey(residue.chain,residue.resi,residue.icode));
+        }
+      }
+      return draw(modified.size);
+    }finally{
+      for(let i=changes.length-1;i>=0;i--){
+        const entry=changes[i];
+        entry.atom.resn=entry.resn;
+        entry.atom.hetflag=entry.hetflag;
+      }
     }
-    flush();return runs;
   }
-  function addCartoonBackboneTrace(){
-    cartoonTraceStats={edges:0,runs:0};
-    if(!viewer||state.representation!=="cartoon"||!state.visibility.rna||
-      activeCoarseProfile().sparse||guidedLearningActive())return;
-    const runs=cartoonBackboneRuns(activeResidues(),isVisibleIndex);
-    // A consistent, narrow outline supplements — but does not replace —
-    // the standard 3Dmol RNA cartoon and remains behind most of the ribbon.
-    const color=state.colorMode==="uniform"?state.uniformColor:
-      state.colorMode==="chain"?chainColor(state.activeChain):"#91aec2";
-    runs.forEach(points=>{
-      if(points.length>=3&&typeof viewer.addCurve==="function")
-        viewer.addCurve({points,radius:.20,smooth:8,color,fromArrow:false,toArrow:false});
-      else for(let i=0;i<points.length-1;i++)
-        viewer.addCylinder({start:points[i],end:points[i+1],radius:.20,color,
-          fromCap:1,toCap:1});
-    });
-    cartoonTraceStats={edges:runs.reduce((n,points)=>n+points.length-1,0),runs:runs.length};
+  function installNativeCartoonCompatibility(){
+    if(!viewer||viewer.__rnaNativeCartoonCompat)return;
+    const nativeRender=viewer.render.bind(viewer);
+    viewer.render=function(...args){
+      if(!model||state.representation!=="cartoon"||!state.visibility.rna||
+        activeCoarseProfile().sparse||guidedLearningActive()){
+        cartoonNormalizedCount=0;
+        return nativeRender(...args);
+      }
+      return withCanonicalCartoonResidues(activeResidues(),count=>{
+        cartoonNormalizedCount=count;
+        return nativeRender(...args);
+      });
+    };
+    viewer.__rnaNativeCartoonCompat=true;
   }
   function applyCategoryStyles(){
     const atoms=model?.selectedAtoms?model.selectedAtoms({}):[];if(!atoms.length)return;
@@ -1386,14 +1387,13 @@ const TertiaryExplorer = (() => {
   function applyStyles(renderNow=true){
     if(!viewer||!model)return;
     const safe=(label,fn)=>{try{fn();}catch(error){console.warn("3D "+label+":",error);}};
-    clearLinkedPulseShapes();cartoonTraceStats={edges:0,runs:0};safe("shape cleanup",()=>viewer.removeAllShapes());safe("label cleanup",()=>viewer.removeAllLabels());hoverLabel=null;
+    clearLinkedPulseShapes();cartoonNormalizedCount=0;safe("shape cleanup",()=>viewer.removeAllShapes());safe("label cleanup",()=>viewer.removeAllLabels());hoverLabel=null;
     safe("base style reset",()=>model.setStyle({},{}));
     if(state.comparison.model)safe("comparison reset",()=>state.comparison.model.setStyle({},{}));
     const residues=activeResidues();
     if(state.visibility.rna)residues.forEach((r,i)=>{if(isVisibleIndex(i))safe("residue style "+(i+1),()=>applyResidueRepresentation(r,i));});
     safe("component styles",applyCategoryStyles);
     safe("coarse-grained RNA trace",addCoarseGrainedTrace);
-    safe("verified cartoon backbone continuity",addCartoonBackboneTrace);
     if(state.comparison.model&&state.comparison.visible)safe("comparison style",()=>state.comparison.model.setStyle({},{line:{linewidth:2,color:"#f0a36f",opacity:.8}}));
     safe("selection highlights",addSelectionHighlights);safe("selected pair highlights",addSelectedPairHighlights);safe("object highlights",addObjectHighlights);
     safe("optional pair guides",addPairs);safe("selected pair hydrogen bonds",addSelectedPairHydrogenBonds);
@@ -2117,9 +2117,9 @@ const TertiaryExplorer = (() => {
     render();
   }
 
-  return {setup,render,importStructureFile,buildEmbeddedRasterSvg,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,getWorkspaceSnapshot,restoreWorkspaceSnapshot,showLearningFeature,clearLearningFeature,showLinkedRegion,clearLinkedRegion,createDistanceMeasurementFromAtomIndices,cartoonBackboneRuns,
-    getDiagnostics(){return {viewerReady:!!viewer,modelReady:!!model,atomCount:model?.selectedAtoms?model.selectedAtoms({}).length:0,representation:state.representation,colorMode:state.colorMode,split:state.split,mappingEnabled:state.mapping.enabled,source:state.currentFileName,derivedSecondary:state.derivedSecondary,
-      surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,cartoonTraceEdges:cartoonTraceStats.edges,cartoonTraceRuns:cartoonTraceStats.runs,
+  return {setup,render,importStructureFile,buildEmbeddedRasterSvg,compareChain,normalizeBase,hornFit,serializePdb,serializeCif,loadFromRcsbId,deriveSecondaryFromResidues,generateSecondaryFrom3D,getWorkspaceSnapshot,restoreWorkspaceSnapshot,showLearningFeature,clearLearningFeature,showLinkedRegion,clearLinkedRegion,createDistanceMeasurementFromAtomIndices,withCanonicalCartoonResidues,
+    getDiagnostics(){return {viewerReady:!!viewer,modelReady:!!model,atomCount:model?.selectedAtoms?model.selectedAtoms({}).length:0,representation:state.representation,colorMode:state.colorMode,split:state.split,mappingEnabled:state.mapping.enabled,source:state.currentFileName,derivedSecondary:state.derivedSecondary,cartoonNormalizedResidueCount:cartoonNormalizedCount,
+      surfaceEnabled:state.surfaceEnabled,proximityEnabled:state.proximityEnabled,contactEnabled:state.contactEnabled,clipEnabled:state.clipEnabled,measurementMode:state.measurementMode,
       selectionHighlightColor:state.selectionStyle.color,pairHighlightColor:HOT_PINK,selectionCount:state.selectionIndices.size,savedObjectCount:state.savedObjects.length,isolateObjectId:state.isolateObjectId,savedViewCount:state.savedViews.length,
       comparisonRmsd:state.comparison.rmsd,comparisonCount:state.comparison.count,selectedPairCount:state.selectedPairs.size,
       learningKey:state.learning.key,learningTorsion:state.learning.torsion,learningActive:!!state.learning.geometry,learningFlashActive:learningPulseTimer!==null,linkedPulseActive:linkedPulseTimer!==null||linkedPulseOn,linkedPulseVisible:linkedPulseOn,linkedPulseShapes:linkedPulseShapes.length,linkedPulseHbondDots,linkedPulseAtomParts:{...linkedPulseAtomParts},linkedPulseCovalentBonds,linkedPulseFocus:[...linkedPulseFocus],learningGuidedDimmed:guidedLearningActive(),learningStatus:state.learning.geometry?.status||"",
