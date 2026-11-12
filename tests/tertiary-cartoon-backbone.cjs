@@ -1,32 +1,37 @@
 // Run with: node tests/tertiary-cartoon-backbone.cjs
-// Geometry-only regression: no network, 3D renderer, or browser required.
+// Native 3Dmol.js cartoon compatibility regression; no browser/network required.
 const assert=require("node:assert/strict");
 const fs=require("node:fs"),vm=require("node:vm"),path=require("node:path");
 const source=fs.readFileSync(path.join(__dirname,"..","tertiary.js"),"utf8");
 const explorer=vm.runInNewContext(source+"\nTertiaryExplorer;",{console});
-assert.equal(typeof explorer.cartoonBackboneRuns,"function");
-const atom=(atom,x)=>({atom,x,y:0,z:0});
-const residue=(i)=>({resi:i+1,chain:"A",icode:"",atoms:[
-  atom("C4'",i*6),atom("O3'",i*6+2),atom("P",i*6-2)
-]});
-const baseline=Array.from({length:5},(_,i)=>residue(i));
-const clone=value=>JSON.parse(JSON.stringify(value));
-const runs=(residues,visible)=>explorer.cartoonBackboneRuns(residues,visible);
-const lengths=rs=>rs.map(run=>run.length).join(",");
-assert.equal(lengths(runs(baseline)),"5","Covalently continuous RNA should form one trace");
-const missingP=clone(baseline);missingP[2].atoms=missingP[2].atoms.filter(a=>a.atom!=="P");
-assert.equal(lengths(runs(missingP)),"2,3","Missing P cannot be bridged");
-const missingO3=clone(baseline);missingO3[1].atoms=missingO3[1].atoms.filter(a=>a.atom!=="O3'");
-assert.equal(lengths(runs(missingO3)),"2,3","Missing O3' must split the trace into two valid runs");
-const wide=clone(baseline);wide[3].atoms.find(a=>a.atom==="P").x+=30;
-assert.equal(lengths(runs(wide)),"3,2","Large O3'-P gap must not be bridged");
-const chain=clone(baseline);chain[3].chain="B";
-assert.equal(lengths(runs(chain)),"3","Separate chains must not be linked");
-const numbering=clone(baseline);numbering[2].resi=100;
-assert.equal(lengths(runs(numbering)),"2,2","Numbering gaps are not interpolated");
-const hidden=runs(baseline,i=>i<3);
-assert.equal(lengths(hidden),"3","Isolated/hidden RNA may not be bridged");
-const alternate=clone(baseline);
-alternate[2].atoms.forEach(a=>a.atom=a.atom.replaceAll("'","*"));
-assert.equal(lengths(runs(alternate)),"5","C4*/O3* legacy RNA atom names are supported");
-console.log("PASS: Cartoon RNA backbone bridges only chemically validated consecutive residues.");
+assert.equal(typeof explorer.withCanonicalCartoonResidues,"function");
+assert.ok(!source.includes("viewer.addCurve({points"),"No additional cartoon backbone wire");
+assert.ok(!source.includes("addCartoonBackboneTrace"),"Previous parallel trace was removed");
+assert.ok(source.includes("installNativeCartoonCompatibility()"),"Native renderer is patched for canonical-name recognition");
+const atom=(resn,hetflag,atom="P")=>({resn,hetflag,atom,x:10,y:12,z:14});
+const residues=[
+  {chain:"A",resi:1,icode:"",resn:"A",atoms:[atom("A",false)]},
+  {chain:"A",resi:2,icode:"",resn:"PSU",atoms:[atom("PSU",true),atom("PSU",true,"C4'")]},
+  {chain:"A",resi:3,icode:"",resn:"1MA",atoms:[atom("1MA",true)]},
+  {chain:"A",resi:4,icode:"",resn:"5MC",atoms:[atom("5MC",true)]},
+  {chain:"A",resi:5,icode:"",resn:"UNX",atoms:[atom("UNX",true)]}
+];
+const before=JSON.stringify(residues);
+let count=0;
+const result=explorer.withCanonicalCartoonResidues(residues,n=>{
+  count=n;
+  assert.equal(residues[0].atoms[0].resn,"A");
+  assert.equal(residues[1].atoms[0].resn,"U","Pseudouridine must be recognized as RNA in cartoon");
+  assert.equal(residues[2].atoms[0].resn,"A","Methyladenosine must be recognized as RNA in cartoon");
+  assert.equal(residues[3].atoms[0].resn,"C","Methylcytidine must be recognized as RNA in cartoon");
+  assert.equal(residues[4].atoms[0].resn,"UNX","Unknown modifications cannot be assigned an invented base");
+  assert.equal(residues[1].atoms[0].hetflag,false,"Known nucleotide no longer stops native ribbon");
+  assert.equal(residues[4].atoms[0].hetflag,true,"Unknown component remains HETATM");
+  return "rendered";
+});
+assert.equal(result,"rendered");
+assert.equal(count,3,"Exactly three modified nucleotide residues normalized");
+assert.equal(JSON.stringify(residues),before,"Original residue names and flags restored after rendering");
+assert.throws(()=>explorer.withCanonicalCartoonResidues(residues,()=>{throw Error("GPU failure");}),/GPU failure/);
+assert.equal(JSON.stringify(residues),before,"Original chemical metadata restored even when rendering throws");
+console.log("PASS: Native RNA cartoon recognizes modified nucleotides without overlay or lasting atom mutation.");
