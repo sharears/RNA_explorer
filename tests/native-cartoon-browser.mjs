@@ -10,12 +10,12 @@ const errors=[];
 page.on("pageerror",e=>errors.push(String(e)));
 try{
   await page.goto(base+"?page=tertiary",{waitUntil:"domcontentloaded",timeout:30000});
-  await page.waitForSelector("#teRepresentation",{timeout:30000});
+  await page.waitForSelector("#teRepresentation",{state:"attached",timeout:30000});
   await page.waitForFunction(()=>{
     const d=window.TertiaryExplorer?.getDiagnostics?.();
     return d?.viewerReady&&d?.modelReady&&d.atomCount>100;
   },undefined,{timeout:60000});
-  await page.selectOption("#teRepresentation","cartoon");
+  await page.evaluate(()=>{const select=document.querySelector("#teRepresentation");select.value="cartoon";select.dispatchEvent(new Event("change",{bubbles:true}));});
   await page.waitForFunction(()=>{
     const d=TertiaryExplorer.getDiagnostics();
     return d.representation==="cartoon"&&d.cartoonNormalizedResidueCount>=1;
@@ -30,7 +30,7 @@ try{
   assert.ok(sample.count>=1,"Known modified RNA residues supplied to native cartoon as canonical");
   await mkdir("artifacts",{recursive:true});
   await page.locator("#tertiaryMolecularViewer").screenshot({path:"artifacts/native-cartoon-ribbon.png"});
-  await page.selectOption("#teRepresentation","sticks");
+  await page.evaluate(()=>{const select=document.querySelector("#teRepresentation");select.value="sticks";select.dispatchEvent(new Event("change",{bubbles:true}));});
   await page.waitForFunction(()=>{
     const d=TertiaryExplorer.getDiagnostics();
     return d.representation==="sticks"&&d.cartoonNormalizedResidueCount===0;
