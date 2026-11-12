@@ -13,14 +13,14 @@ try{
   await page.waitForSelector("#teRepresentation",{state:"attached",timeout:30000});
   try{
     await page.waitForFunction(()=>{
-      const d=window.TertiaryExplorer?.getDiagnostics?.();
+      const d=typeof TertiaryExplorer!=="undefined"?TertiaryExplorer.getDiagnostics():null;
       return d?.viewerReady&&d?.modelReady&&d.atomCount>100;
     },undefined,{timeout:24000});
   }catch(error){
     const details=await page.evaluate(()=>({
       page:document.body.dataset.pageMode,
       sceneHidden:document.querySelector("#scene-tertiary")?.hidden,
-      model:window.TertiaryExplorer?.getDiagnostics?.(),
+      model:typeof TertiaryExplorer!=="undefined"?TertiaryExplorer.getDiagnostics():null,
       message:document.querySelector("#teMolecularStatus")?.textContent,
       has3Dmol:!!window.$3Dmol
     }));
