@@ -108,7 +108,39 @@ const RNAExplorerLearningTools=(()=>{
   // Editorial collection; sources are verified primary publications or official Nobel history.
   // Add reviewed entries here periodically (target: about 5–10 newly vetted items per month).
   // No unreviewed network content is auto-published.
-  const facts=[
+  // November 2026 papers; these take priority in the daily Spotlight.
+  // Each item links to its original peer-reviewed publication.
+  const novemberFacts=[
+    {category:"Small RNA biology",year:"Nov 12, 2026",title:"Where AGO1 loads small RNAs matters",
+      fact:"In plants, the location of ARGONAUTE1 helps determine which small RNAs it loads and how efficiently gene silencing works.",
+      detail:"In Arabidopsis, researchers found that microRNAs preferentially load into AGO1 in the nucleus, while trans-acting siRNAs mainly load in the cytoplasm. Moving AGO1 between these compartments changed silencing outcomes.",
+      source:"Moro et al., Nature Communications (2026)",url:"https://doi.org/10.1038/s41467-026-79175-4"},
+    {category:"RNA therapeutics",year:"Nov 11, 2026",title:"Correcting an RNA-splicing error restores synaptic activity",
+      fact:"Experimental antisense oligonucleotides corrected UNC13A RNA mis-splicing linked to loss of the RNA-binding protein TDP-43.",
+      detail:"The study restored key measures of synaptic communication in human neuron models and corrected splicing in a humanized mouse model. These are preclinical results, not a demonstrated treatment in patients with ALS or frontotemporal dementia.",
+      source:"Keuss et al., Nature (2026)",url:"https://doi.org/10.1038/s41586-026-11256-2"},
+    {category:"RNA and immunity",year:"Nov 11, 2026",title:"Plants can sense fragments of broken-down RNA",
+      fact:"Rice detects particular RNA-cleavage products generated during insect feeding and can activate immune defenses.",
+      detail:"An insect salivary ribonuclease produces 2′,3′-cyclic nucleotides and a cyclic dinucleotide. The rice RNA-binding protein NIB1 senses these products, forms nuclear condensates, and recruits immune-signaling machinery.",
+      source:"Nature (2026)",url:"https://doi.org/10.1038/s41586-026-11259-z"},
+    {category:"tRNA technology",year:"Nov 9, 2026",title:"Reading tRNA directly from nanopore signals",
+      fact:"A deep-learning method identifies bacterial tRNAs using raw nanopore signals without first converting them into nucleotide sequences.",
+      detail:"The nano tRNA classifier was tested with E. coli tRNAs. Using reference mixtures, the researchers quantified individual tRNA species and identified selected RNA modifications at the single-molecule level.",
+      source:"Ueda et al., Nature Communications (2026)",url:"https://doi.org/10.1038/s41467-026-78563-0"},
+    {category:"RNA methods",year:"Nov 6, 2026",title:"New ways to map RNA–protein partnerships",
+      fact:"Three related CLIP-based protocols help reveal RNA-associated proteins and their interaction sites within cells.",
+      detail:"irCLIP-RNP identifies RNA-dependent protein partners, irCLIPv2 maps RNA-binding regions, and Re-CLIP tests protein–RNA interaction relationships using sequential immunoprecipitation.",
+      source:"Ducoli et al., Nature Protocols (2026)",url:"https://doi.org/10.1038/s41596-026-01459-2"},
+    {category:"Circular RNA",year:"Nov 4, 2026",title:"Finding proteins that boost circular RNA translation",
+      fact:"A cell-based screen identified 68 putative RNA-binding-protein activators of translation from circular RNA.",
+      detail:"The study tested proteins that promote internal-ribosome-entry-site-dependent circular RNA translation. The effects varied with context and could help guide engineering of protein-producing circular RNAs.",
+      source:"Lu et al., Nature Communications (2026)",url:"https://doi.org/10.1038/s41467-026-77614-w"},
+    {category:"Circular RNA",year:"Nov 4, 2026",title:"Hundreds of proteins influence circular RNA",
+      fact:"A screen of 730 RNA-binding proteins identified 281 that significantly change circular RNA activity.",
+      detail:"Follow-up experiments implicated proteins in circular RNA formation, nuclear export, degradation, and translation. The work also identified candidate ways to improve engineered circular RNA expression.",
+      source:"Yu et al., Nature Structural & Molecular Biology (2026)",url:"https://doi.org/10.1038/s41594-026-01911-7"}
+  ];
+  const facts=[...novemberFacts,
     {category:"History",year:"1956",title:"Rosalind Franklin and a virus made of RNA",
       fact:"Rosalind Franklin helped locate RNA inside the tobacco mosaic virus particle.",
       detail:"Her X-ray diffraction research examined how RNA is arranged within this rod-shaped virus, broadening structural studies beyond DNA.",
@@ -147,7 +179,7 @@ const RNAExplorerLearningTools=(()=>{
   let tutorialKey="drawing",tutorialStep=0,levelKey="starter",cardIndex=0,flipped=false;
   const scores=Object.fromEntries(levelKeys.map(key=>[key,{known:0,review:0}]));
   const dayIndex=()=>Math.floor(Date.now()/86400000);
-  let factDay=dayIndex(),factIndex=factDay%facts.length,factTimer=null;
+  let factDay=dayIndex(),factIndex=factDay%novemberFacts.length,factTimer=null;
   const $=id=>document.getElementById(id);
 
   function renderTutorial(){
@@ -185,11 +217,11 @@ const RNAExplorerLearningTools=(()=>{
     if($("rnaFactDetails"))$("rnaFactDetails").textContent=fact.detail;
     const link=$("rnaFactSource");if(link){link.href=fact.url;link.textContent="Original source: "+fact.source+" ↗";}
     const more=$("rnaFactLearnMore");if(more)more.open=false;
-    if($("rnaFactCounter"))$("rnaFactCounter").textContent=(factIndex+1)+" / "+facts.length+" · Curated Oct 2026";
+    if($("rnaFactCounter"))$("rnaFactCounter").textContent=(factIndex+1)+" / "+facts.length+" · Curated Nov 2026";
   }
   function nextFact(){factIndex=(factIndex+1)%facts.length;renderFact();}
   // Rotate the featured entry once per UTC day. Reader-initiated Next is immediate.
-  function startFacts(){if(factTimer)return;factTimer=setInterval(()=>{const now=dayIndex();if(now!==factDay){factDay=now;factIndex=factDay%facts.length;renderFact();}},3600000);}
+  function startFacts(){if(factTimer)return;factTimer=setInterval(()=>{const now=dayIndex();if(now!==factDay){factDay=now;factIndex=factDay%novemberFacts.length;renderFact();}},3600000);}
   function stopFacts(){if(factTimer){clearInterval(factTimer);factTimer=null;}}
 
   function setup(){
