@@ -478,8 +478,8 @@ const MoleculeEditor = (() => {
     dialog.querySelector("#chemExpandCanvas").addEventListener("click",expandCanvas);
     dialog.querySelector("#chemFitCanvas").addEventListener("click",()=>fitCanvasToDrawing(true));
     dialog.querySelectorAll("[data-chem-tool]").forEach(b=>b.addEventListener("click",()=>{
-      tool=b.dataset.chemTool;pendingAtom=null;pendingFuseBond=null;transformDrag=null;selectionBox=null;lasso=null;
-      dialog.querySelectorAll("[data-chem-tool]").forEach(x=>x.classList.toggle("active",x===b));render();
+      setActiveChemTool(b.dataset.chemTool);
+      render();
       if(tool==="group")status.textContent="Click or tap an existing atom to attach "+FUNCTIONAL_GROUPS[dialog.querySelector("#chemFunctionalGroup").value].name+".";
     }));
     dialog.querySelector("#chemFunctionalGroup").addEventListener("change",()=>{
@@ -751,10 +751,9 @@ const MoleculeEditor = (() => {
   }
   function armStock(template,label,isPair=false){
     if(!template?.atoms?.length||!Array.isArray(template.bonds))return;
-    pendingStock={template:clone(template),label,isPair};
-    pendingStockPoint=null;
     setActiveChemTool("stock"); // stock stays pending until the user picks a position
     pendingStock={template:clone(template),label,isPair};
+    pendingStockPoint=null;
     svg?.classList.add("chem-stock-placement");
     render();
     status.textContent=label+" selected. Move to the drawing and click once to place it. Existing structures will not be replaced; Esc cancels.";
