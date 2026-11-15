@@ -360,3 +360,7 @@ body.chem-3d-expanded-open{overflow:hidden!important}
 #chemEditorDialog .chem-copy-icon-button .chem-check-glyph{display:none}
 #chemEditorDialog .chem-copy-icon-button.is-copied .chem-copy-glyph{display:none}
 #chemEditorDialog .chem-copy-icon-button.is-copied .chem-check-glyph{display:block}
+
+/* Stock templates are placed only after a deliberate canvas click. */
+#chemEditorSvg.chem-stock-placement { cursor: crosshair; }
+#chemEditorSvg .chem-stock-preview { pointer-events: none; user-select: none; }
