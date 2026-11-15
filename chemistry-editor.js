@@ -189,7 +189,7 @@ const MoleculeEditor = (() => {
 
   let dialog=null,svg=null,status=null,title=null,mode="base",base="A",leftBase="G",rightBase="C";
   let initialLearningGraph=null,learningReturnTarget=null,learningReturnScrollY=0;
-  let graph={atoms:[],bonds:[],hbonds:[]},tool="select",element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,lasso=null,transformDrag=null,selectionZoom=1,pendingFuseBond=null,onSave=null;
+  let graph={atoms:[],bonds:[],hbonds:[]},tool="select",pendingStock=null,pendingStockPoint=null,lastPlacedPair=null,element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,lasso=null,transformDrag=null,selectionZoom=1,pendingFuseBond=null,onSave=null;
   let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false,showAtomLabels=true,showAtomNumbers=false;
   let ignoredValenceWarnings=new Set(),smartLayoutEnabled=true,threeDVisible=false,threeDMode="ideal";
   let threeDCanvas=null,threeDPanel=null,threeDFrame=0,threeDDrag=null,threeDPointers=new Map(),threeDPinch=null,threeDCoords=[],threeDBonds=[],threeDSignature="",threeDPendingSignature="",threeDRequestSerial=0;
@@ -260,6 +260,7 @@ const MoleculeEditor = (() => {
     trimHistory(undoStack);redoStack=[];syncUndoButton();
   }
   function restoreHistorySnapshot(snapshot,message){
+    cancelPendingStock();lastPlacedPair=null;
     const state=JSON.parse(snapshot);
     graph=state.graph;atomSerial=state.atomSerial;bondSerial=state.bondSerial;hbondSerial=state.hbondSerial;textDefaults=state.textDefaults||{...DEFAULT_TEXT_STYLE};
     selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionZoom=1;selectionBox=null;lasso=null;ignoredValenceWarnings.clear();
@@ -381,15 +382,13 @@ const MoleculeEditor = (() => {
             <button type="button" id="chemStockAminoTab" aria-pressed="false">Amino acids</button>
           </div>
           <div class="chem-pair-controls" id="chemPairControls">
-          <label>Single nucleic acid component<select id="chemStockNucleic">
+          <label>Single nucleic acid component<select id="chemStockNucleic"><option value="" selected>Choose a component…</option>
             <option value="A">Adenine</option><option value="G">Guanine</option>
             <option value="C">Cytosine</option><option value="U">Uracil (RNA)</option>
             <option value="T">Thymine (DNA)</option><option value="RIBOSE">Ribose</option>
             <option value="PHOSPHATE">Phosphate</option></select></label>
-          <button type="button" id="chemLoadStockNucleic">Load single component</button>
-          <label>Left base<select id="chemLeftBase"><option>A</option><option>G</option><option>C</option><option>U</option><option>T</option></select></label>
-          <label>Right base<select id="chemRightBase"><option>A</option><option>G</option><option>C</option><option>U</option><option>T</option></select></label>
-          <button type="button" id="chemLoadPair">Load bases</button>
+          <label>Left base<select id="chemLeftBase"><option value="" selected>Choose left base…</option><option>A</option><option>G</option><option>C</option><option>U</option><option>T</option></select></label>
+          <label>Right base<select id="chemRightBase"><option value="" selected>Choose right base…</option><option>A</option><option>G</option><option>C</option><option>U</option><option>T</option></select></label>
           <button type="button" id="chemSelectLeft">Select left base</button>
           <button type="button" id="chemSelectRight">Select right base</button>
           <button type="button" id="chemSelectPair">Select whole pair</button>
@@ -398,9 +397,8 @@ const MoleculeEditor = (() => {
           <button type="button" data-pair-template="GU">G–U wobble</button>
         </div>
         <div id="chemAminoControls" class="chem-stock-amino" hidden>
-          <label>Standard amino acid<select id="chemAminoSelect"></select></label>
-          <button type="button" id="chemLoadAmino" class="primary-action">Load amino acid</button>
-          <p>Editable neutral free amino-acid structure. Stereochemistry is not specified; charged states depend on pH.</p>
+          <label>Standard amino acid<select id="chemAminoSelect"><option value="" selected>Choose an amino acid…</option></select></label>
+          <p>Choose a stock structure, then click or tap where it should appear on the drawing. Your existing molecules stay in place. Press Esc to cancel. Amino acids are neutral free templates; stereochemistry is not specified and charged states depend on pH.</p>
         </div>
         </details>
         <div class="chem-editor-workspace">
@@ -466,16 +464,15 @@ const MoleculeEditor = (() => {
     };
     dialog.querySelector("#chemStockNucleicTab").addEventListener("click",()=>switchStock("nucleic"));
     dialog.querySelector("#chemStockAminoTab").addEventListener("click",()=>switchStock("amino"));
-    dialog.querySelector("#chemLoadAmino").addEventListener("click",()=>{
-      const code=dialog.querySelector("#chemAminoSelect").value;
-      if(code)loadAminoStock(code);
+    dialog.querySelector("#chemAminoSelect").addEventListener("change",e=>{
+      if(e.target.value)armStock(AminoAcidStock.getGraph(e.target.value),e.target.selectedOptions[0]?.textContent||"amino acid");
     });
-    dialog.querySelector("#chemLoadStockNucleic").addEventListener("click",()=>{
-      const name=dialog.querySelector("#chemStockNucleic").value;
-      pushUndo();mode="blank";base=name;graph=graphFromBase(name);title.textContent="Edit "+(BASES[name]?.name||name);resetCanvasView();renumber();fitCanvasToDrawing(false);render();validate();
+    dialog.querySelector("#chemStockNucleic").addEventListener("change",e=>{
+      const key=e.target.value;
+      if(key)armStock(graphFromBase(key),BASES[key]?.name||key);
     });
-    dialog.querySelector("#chemEditorClose").addEventListener("click",()=>dialog.close());
-    dialog.addEventListener("close",()=>{document.body.classList.remove("chem-editor-open","chem-3d-expanded-open");dialog.classList.remove("chem-3d-dialog-expanded");threeDDrag=null;threeDPointers.clear();threeDPinch=null;threeDPanel?.classList.remove("chem-3d-expanded");});
+    dialog.querySelector("#chemEditorClose").addEventListener("click",()=>{cancelPendingStock();dialog.close();});
+    dialog.addEventListener("close",()=>{cancelPendingStock();document.body.classList.remove("chem-editor-open","chem-3d-expanded-open");dialog.classList.remove("chem-3d-dialog-expanded");threeDDrag=null;threeDPointers.clear();threeDPinch=null;threeDPanel?.classList.remove("chem-3d-expanded");});
     dialog.querySelector("#chemUndoButton").addEventListener("click",undo);
     dialog.querySelector("#chemRedoButton").addEventListener("click",redo);
     dialog.querySelector("#chemExpandCanvas").addEventListener("click",expandCanvas);
@@ -490,9 +487,9 @@ const MoleculeEditor = (() => {
       status.textContent="Click or tap an existing atom to attach "+FUNCTIONAL_GROUPS[dialog.querySelector("#chemFunctionalGroup").value].name+".";
     });
     dialog.querySelector("#chemSelectAll").addEventListener("click",()=>{selectAtoms(graph.atoms.map(a=>a.id));render();});
-    dialog.querySelector("#chemSelectLeft").addEventListener("click",()=>{selectAtoms(graph.atoms.filter(a=>a.id.startsWith("L_")).map(a=>a.id));render();});
-    dialog.querySelector("#chemSelectRight").addEventListener("click",()=>{selectAtoms(graph.atoms.filter(a=>a.id.startsWith("R_")).map(a=>a.id));render();});
-    dialog.querySelector("#chemSelectPair").addEventListener("click",()=>{selectAtoms(graph.atoms.map(a=>a.id));render();});
+    dialog.querySelector("#chemSelectLeft").addEventListener("click",()=>{selectAtoms((lastPlacedPair?.leftIds||graph.atoms.filter(a=>a.id.startsWith("L_")).map(a=>a.id)));setActiveChemTool("select");render();});
+    dialog.querySelector("#chemSelectRight").addEventListener("click",()=>{selectAtoms((lastPlacedPair?.rightIds||graph.atoms.filter(a=>a.id.startsWith("R_")).map(a=>a.id)));setActiveChemTool("select");render();});
+    dialog.querySelector("#chemSelectPair").addEventListener("click",()=>{selectAtoms(lastPlacedPair?.ids||graph.atoms.map(a=>a.id));setActiveChemTool("select");render();});
     dialog.querySelector("#chemElement").addEventListener("change",e=>{
       element=e.target.value;
       if(selectedAtom){const a=atomById(selectedAtom);if(a){pushUndo();ignoredValenceWarnings.delete(a.id);a.element=element;a.label=element;invalidateIupac();render();validate();}}
@@ -567,20 +564,32 @@ const MoleculeEditor = (() => {
     });
     dialog.querySelector("#chemLeftBase").addEventListener("change",e=>leftBase=e.target.value);
     dialog.querySelector("#chemRightBase").addEventListener("change",e=>rightBase=e.target.value);
-    dialog.querySelector("#chemLoadPair").addEventListener("click",()=>{pushUndo();mode="pair";title.textContent="Base-pair chemistry editor";graph=mergePair(leftBase,rightBase);renumber();fitCanvasToDrawing(false);render();validate();});
+    const armSelectedPair=()=>{
+      const l=dialog.querySelector("#chemLeftBase").value,r=dialog.querySelector("#chemRightBase").value;
+      if(!l||!r){
+        cancelPendingStock();
+        status.textContent="Choose both a left and a right base, then click the canvas to place them.";
+        return;
+      }
+      leftBase=l;rightBase=r;
+      armStock(mergePair(l,r),l+"–"+r+" base pair",true);
+    };
+    dialog.querySelector("#chemLeftBase").addEventListener("change",armSelectedPair);
+    dialog.querySelector("#chemRightBase").addEventListener("change",armSelectedPair);
     dialog.querySelectorAll("[data-pair-template]").forEach(b=>b.addEventListener("click",()=>{
       const k=b.dataset.pairTemplate;
       if(k==="GC"){leftBase="G";rightBase="C";}
       if(k==="AU"){leftBase="A";rightBase="U";}
       if(k==="GU"){leftBase="G";rightBase="U";}
       dialog.querySelector("#chemLeftBase").value=leftBase;dialog.querySelector("#chemRightBase").value=rightBase;
-      pushUndo();mode="pair";title.textContent="Base-pair chemistry editor";graph=pairTemplate(k,leftBase,rightBase);renumber();fitCanvasToDrawing(false);render();validate();
+      armStock(pairTemplate(k,leftBase,rightBase),k==="GU"?"G–U wobble":leftBase+"–"+rightBase+" Watson–Crick pair",true);
     }));
     dialog.querySelector("#chemCopyArtwork").addEventListener("click",copyVectorArtwork);
     svg.addEventListener("pointerdown",canvasPointerDown);
     svg.addEventListener("pointermove",canvasPointerMove);
     svg.addEventListener("pointerup",canvasPointerUp);
     svg.addEventListener("pointercancel",canvasPointerUp);
+    svg.addEventListener("pointerleave",()=>{if(pendingStock){pendingStockPoint=null;render();}});
     svg.addEventListener("dblclick",e=>{
       const atomEl=e.target.closest?.("[data-atom-id]");if(!atomEl||tool!=="select")return;
       e.preventDefault();selectAtoms(covalentComponent(atomEl.dataset.atomId));render();validate();
@@ -598,6 +607,7 @@ const MoleculeEditor = (() => {
         if(key==="z"){e.preventDefault();undo();return;}
         if(!e.metaKey&&key==="y"){e.preventDefault();redo();return;}
       }
+      if(e.key==="Escape"&&pendingStock){e.preventDefault();e.stopPropagation();cancelPendingStock();status.textContent="Stock placement canceled. The drawing is unchanged.";return;}
       if(e.key==="Escape"&&lasso){lasso=null;render();return;}
       if(e.key==="Escape"&&selectedAtoms.size){selectedAtoms.clear();selectedAtom=null;selectionZoom=1;render();return;}
       if((e.key==="Delete"||e.key==="Backspace")&&(selectedAtoms.size||selectedAtom)){
@@ -608,7 +618,7 @@ const MoleculeEditor = (() => {
 
   function renumber(){
     atomSerial=graph.atoms.length+1;bondSerial=graph.bonds.length+1;hbondSerial=graph.hbonds.length+1;
-    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionZoom=1;selectionBox=null;lasso=null;ignoredValenceWarnings.clear();
+    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionZoom=1;selectionBox=null;lasso=null;ignoredValenceWarnings.clear();cancelPendingStock();lastPlacedPair=null;
   }
   function selectAtoms(ids,activeId=null){
     selectionZoom=1;selectedAtoms=new Set(ids.filter(id=>atomById(id)));
@@ -731,7 +741,92 @@ const MoleculeEditor = (() => {
     // adds atoms that were outside the lasso path.
     return pointInPolygon({x:atom.x,y:atom.y},poly);
   }
+  // Stock selection is non-destructive. Only a deliberate canvas click commits an
+  // independent molecule, with fresh atom/bond IDs to avoid collisions.
+  function cancelPendingStock(){
+    pendingStock=null;pendingStockPoint=null;
+    if(tool==="stock")tool="select";
+    svg?.classList.remove("chem-stock-placement");
+    dialog?.querySelectorAll("[data-chem-tool]").forEach(b=>b.classList.toggle("active",b.dataset.chemTool===tool));
+  }
+  function armStock(template,label,isPair=false){
+    if(!template?.atoms?.length||!Array.isArray(template.bonds))return;
+    pendingStock={template:clone(template),label,isPair};
+    pendingStockPoint=null;
+    setActiveChemTool("stock"); // stock stays pending until the user picks a position
+    pendingStock={template:clone(template),label,isPair};
+    svg?.classList.add("chem-stock-placement");
+    render();
+    status.textContent=label+" selected. Move to the drawing and click once to place it. Existing structures will not be replaced; Esc cancels.";
+  }
+  function placeStockAt(p){
+    if(!pendingStock)return false;
+    const {template,label,isPair}=pendingStock;
+    if(graph.atoms.length+template.atoms.length>500||
+       graph.bonds.length+template.bonds.length>1200||
+       graph.hbonds.length+(template.hbonds||[]).length>1200){
+      status.textContent="Not enough room in this drawing for "+label+" (500 atom / 1200 bond limit).";return false;
+    }
+    const originalIds=new Set(graph.atoms.map(a=>a.id));
+    const existingBondIds=new Set([...graph.bonds,...graph.hbonds].map(b=>b.id));
+    const center={x:template.atoms.reduce((n,a)=>n+a.x,0)/template.atoms.length,
+                  y:template.atoms.reduce((n,a)=>n+a.y,0)/template.atoms.length};
+    const map=new Map(),addedIds=[],leftIds=[],rightIds=[];
+    pushUndo();
+    for(const a of template.atoms){
+      let id;do{id="S"+atomSerial++;}while(originalIds.has(id));
+      originalIds.add(id);map.set(a.id,id);addedIds.push(id);
+      if(String(a.id).startsWith("L_"))leftIds.push(id);
+      if(String(a.id).startsWith("R_"))rightIds.push(id);
+      graph.atoms.push({...clone(a),id,x:a.x-center.x+p.x,y:a.y-center.y+p.y});
+    }
+    for(const b of template.bonds){
+      let id;do{id="b"+bondSerial++;}while(existingBondIds.has(id));
+      existingBondIds.add(id);
+      graph.bonds.push({...clone(b),id,a:map.get(b.a),b:map.get(b.b)});
+    }
+    for(const h of template.hbonds||[]){
+      let id;do{id="h"+hbondSerial++;}while(existingBondIds.has(id));
+      existingBondIds.add(id);
+      graph.hbonds.push({...clone(h),id,a:map.get(h.a),b:map.get(h.b)});
+    }
+    if(isPair)lastPlacedPair={ids:addedIds,leftIds,rightIds};
+    if(mode!=="learning")mode="blank"; // never save a mixed drawing over a stock nucleobase
+    invalidateIupac();
+    cancelPendingStock();
+    selectAtoms(addedIds,addedIds[0]);
+    ensureCanvasContainsDrawing();render();validate();
+    status.textContent="Placed "+label+" at your chosen position. Existing structures were kept. Undo reverses this placement.";
+    return true;
+  }
+  function appendPendingStockPreview(){
+    if(!pendingStock||!pendingStockPoint||!svg)return;
+    const t=pendingStock.template,p=pendingStockPoint;
+    const cx=t.atoms.reduce((n,a)=>n+a.x,0)/t.atoms.length,cy=t.atoms.reduce((n,a)=>n+a.y,0)/t.atoms.length;
+    const layer=document.createElementNS(NS,"g");
+    layer.setAttribute("class","chem-stock-preview");
+    layer.setAttribute("pointer-events","none");
+    layer.setAttribute("transform","translate("+(p.x-cx)+" "+(p.y-cy)+")");
+    const byId=new Map(t.atoms.map(a=>[a.id,a]));
+    t.bonds.forEach(b=>{
+      const a=byId.get(b.a),c=byId.get(b.b);if(!a||!c)return;
+      bondSegments(a,c,b.order).forEach(q=>{
+        const line=document.createElementNS(NS,"line");
+        for(const [k,v] of Object.entries(q))line.setAttribute(k,String(v));
+        line.setAttribute("stroke","#73d7b5");line.setAttribute("stroke-width","2");layer.append(line);
+      });
+    });
+    t.atoms.forEach(a=>{
+      const txt=document.createElementNS(NS,"text");
+      txt.setAttribute("x",a.x);txt.setAttribute("y",a.y);
+      txt.setAttribute("fill","#eafcf4");txt.setAttribute("font-size","15");
+      txt.setAttribute("text-anchor","middle");txt.textContent=a.element;layer.append(txt);
+    });
+    layer.setAttribute("opacity","0.65");svg.append(layer);
+  }
+
   function setActiveChemTool(name){
+    if(name!=="stock")cancelPendingStock();
     tool=name;pendingAtom=null;pendingFuseBond=null;transformDrag=null;selectionBox=null;lasso=null;
     dialog?.querySelectorAll("[data-chem-tool]").forEach(button=>button.classList.toggle("active",button.dataset.chemTool===name));
   }
@@ -1060,6 +1155,7 @@ const MoleculeEditor = (() => {
   }
 
   function loadCurrent(){
+    cancelPendingStock();
     graph=mode==="base"?graphFromBase(base):mode==="pair"?mergePair(leftBase,rightBase):mode==="learning"&&initialLearningGraph?clone(initialLearningGraph):{atoms:[],bonds:[],hbonds:[],iupac:null};
     resetCanvasView();renumber();fitCanvasToDrawing(false);render();validate();
   }
@@ -1088,6 +1184,7 @@ const MoleculeEditor = (() => {
 
   function canvasPointerDown(e){
     if(e.button!==0)return;
+    if(pendingStock){e.preventDefault();placeStockAt(point(e));return;}
     if(tool==="lasso"){
       const p=point(e);lasso={pointer:e.pointerId,points:[p],additive:e.shiftKey};selectionBox=null;
       svg.setPointerCapture?.(e.pointerId);render();return;
@@ -1166,6 +1263,7 @@ const MoleculeEditor = (() => {
     }
   }
   function canvasPointerMove(e){
+    if(pendingStock){pendingStockPoint=point(e);render();return;}
     if(transformDrag&&e.pointerId===transformDrag.pointer){moveSelectionTransform(point(e));render();return;}
     if(lasso&&e.pointerId===lasso.pointer){
       const p=point(e),last=lasso.points.at(-1);if(!last||Math.hypot(p.x-last.x,p.y-last.y)>3){lasso.points.push(p);render();}return;
@@ -1257,6 +1355,7 @@ const MoleculeEditor = (() => {
   }
   function render(){
     if(!svg)return;
+    svg.classList.toggle("chem-stock-placement",Boolean(pendingStock));
     applyCanvasView();svg.innerHTML="";
     const bondLayer=document.createElementNS(NS,"g");bondLayer.setAttribute("class","chem-editor-bonds");
     graph.bonds.forEach(b=>{
@@ -1287,6 +1386,7 @@ const MoleculeEditor = (() => {
     const rLayer=document.createElementNS(NS,"g");rLayer.setAttribute("class","chem-editor-r-markers");appendPairRMarkers(rLayer);
     rLayer.querySelectorAll("text").forEach(t=>setSvgTextStyle(t,textDefaults,.88));
     svg.append(bondLayer,hLayer,rLayer,atomLayer);
+    appendPendingStockPreview();
     appendTransformOverlay();
     if(selectionBox){
       const x=Math.min(selectionBox.start.x,selectionBox.current.x),y=Math.min(selectionBox.start.y,selectionBox.current.y);
@@ -1471,6 +1571,7 @@ const MoleculeEditor = (() => {
     ensureDialog();mode="base";base=selectedBase||"A";onSave=callback||null;showAtomCircles=false;showAtomLabels=true;showAtomNumbers=false;syncDisplayButtons();syncTextControls(textDefaults);
     title.textContent="Edit "+((BASES[base]||{}).name||base);
     dialog.querySelector("#chemStockStructures").open=false;
+    dialog.querySelector("#chemStockNucleic").value="";
     graph=graphFromBase(base);resetCanvasView();renumber();fitCanvasToDrawing(false);resetUndoHistory();render();validate();showEditorWindow();
   }
   function openPair(a,b,callback){
