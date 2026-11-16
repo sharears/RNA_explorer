@@ -231,8 +231,8 @@ const MoleculeEditor = (() => {
     button("chemFitCanvas","Fit drawing","Fit the canvas around the current drawing");
     const groups=[
       ["History",["#chemUndoButton","#chemRedoButton"]],
-      ["Select · Atoms & groups",['[data-chem-tool="select"]','[data-chem-tool="lasso"]',"#chemSelectAll"]],
-      ["Build · Atoms & bonds",['[data-chem-tool="atom"]','[data-chem-tool="bond"]','[data-chem-tool="fuse"]','[data-chem-tool="hbond"]','[data-chem-tool="delete"]',"#chemFunctionalGroup","#chemAttachGroup","#chemRingTemplate","#chemInsertRing","#chemSmartLayoutToggle","#chemTidy2D"]],
+      ["Select · Atoms & groups",['[data-chem-tool="select"]','[data-chem-tool="lasso"]',"#chemSelectAll","#chemDuplicateSelection"]],
+      ["Build · Atoms & bonds",['[data-chem-tool="atom"]','[data-chem-tool="bond"]','[data-chem-tool="fuse"]','[data-chem-tool="hbond"]','[data-chem-tool="delete"]',"#chemFunctionalGroup","#chemAttachGroup","#chemRingTemplate","#chemSmartLayoutToggle","#chemTidy2D"]],
       ["Display · Labels & chemistry",["#chemAtomCirclesToggle","#chemAtomLabelsToggle","#chemAtomNumbersToggle","#chemElement","#chemBondOrder","#chemChargeMinus","#chemChargePlus","#chemIupacButton","#chemIgnoreValence"]],
       ["View · Canvas",["#chemExpandCanvas","#chemFitCanvas"]]
     ];
@@ -344,14 +344,14 @@ const MoleculeEditor = (() => {
           <button type="button" data-chem-tool="select" class="active">Select / move</button>
           <button type="button" data-chem-tool="lasso">Lasso select</button>
           <button type="button" id="chemSelectAll">Select all</button>
+          <button type="button" id="chemDuplicateSelection" title="Copy the selected atoms and their internal bonds; then click to place the copy">Duplicate selection</button>
           <button type="button" data-chem-tool="atom">Add atom</button>
           <button type="button" data-chem-tool="bond">Add bond</button><button type="button" data-chem-tool="fuse">Fuse rings</button>
           <button type="button" data-chem-tool="hbond">H-bond</button>
           <button type="button" data-chem-tool="delete">Delete</button>
           <label>Functional group<select id="chemFunctionalGroup"><option value="hydroxyl">Hydroxyl (–OH)</option><option value="amino">Amino (–NH₂)</option><option value="carboxyl">Carboxyl (–COOH)</option><option value="carbonyl">Carbonyl (=O)</option><option value="methyl">Methyl (–CH₃)</option><option value="phosphate">Phosphate (–O–PO(OH)₂)</option><option value="sulfhydryl">Sulfhydryl (–SH)</option><option value="methoxy">Methoxy (–OCH₃)</option></select></label>
           <button type="button" id="chemAttachGroup" data-chem-tool="group">Attach group</button>
-          <label>Ring<select id="chemRingTemplate"><option value="five">5-membered</option><option value="six">6-membered</option><option value="aromatic6">Aromatic 6-membered</option><option value="fused56">Fused 5+6</option></select></label>
-          <button type="button" id="chemInsertRing">Insert ring</button>
+          <label>Ring<select id="chemRingTemplate"><option value="" selected>Choose a ring…</option><option value="five">5-membered</option><option value="six">6-membered</option><option value="aromatic6">Aromatic 6-membered</option><option value="fused56">Fused 5+6</option></select></label>
           <button type="button" id="chemAtomCirclesToggle" aria-pressed="false">Atom circles: off</button>
           <button type="button" id="chemAtomLabelsToggle" aria-pressed="true" title="On shows every element symbol; off uses skeletal convention with carbon vertices implicit.">Atom labels: on</button>
           <button type="button" id="chemAtomNumbersToggle" aria-pressed="false">Atom numbering: off</button>
@@ -486,7 +486,8 @@ const MoleculeEditor = (() => {
       setActiveChemTool("group");
       status.textContent="Click or tap an existing atom to attach "+FUNCTIONAL_GROUPS[dialog.querySelector("#chemFunctionalGroup").value].name+".";
     });
-    dialog.querySelector("#chemSelectAll").addEventListener("click",()=>{selectAtoms(graph.atoms.map(a=>a.id));render();});
+    dialog.querySelector("#chemSelectAll").addEventListener("click",()=>{selectAtoms(graph.atoms.map(a=>a.id));setActiveChemTool("select");render();});
+    dialog.querySelector("#chemDuplicateSelection").addEventListener("click",duplicateSelection);
     dialog.querySelector("#chemSelectLeft").addEventListener("click",()=>{selectAtoms((lastPlacedPair?.leftIds||graph.atoms.filter(a=>a.id.startsWith("L_")).map(a=>a.id)));setActiveChemTool("select");render();});
     dialog.querySelector("#chemSelectRight").addEventListener("click",()=>{selectAtoms((lastPlacedPair?.rightIds||graph.atoms.filter(a=>a.id.startsWith("R_")).map(a=>a.id)));setActiveChemTool("select");render();});
     dialog.querySelector("#chemSelectPair").addEventListener("click",()=>{selectAtoms(lastPlacedPair?.ids||graph.atoms.map(a=>a.id));setActiveChemTool("select");render();});
@@ -506,7 +507,9 @@ const MoleculeEditor = (() => {
     dialog.querySelector("#chemAtomNumbersToggle").addEventListener("click",()=>{
       showAtomNumbers=!showAtomNumbers;syncDisplayButtons();render();
     });
-    dialog.querySelector("#chemInsertRing").addEventListener("click",()=>{pushUndo();insertRing(dialog.querySelector("#chemRingTemplate").value);});
+    dialog.querySelector("#chemRingTemplate").addEventListener("change",e=>{
+      if(e.target.value)armRing(e.target.value);
+    });
     dialog.querySelector("#chemIupacButton").addEventListener("click",showIupacName);
     dialog.querySelector("#chemIgnoreValence").addEventListener("click",ignoreSelectedValenceWarnings);
     dialog.querySelector("#chemSmartLayoutToggle").addEventListener("click",e=>{
@@ -707,20 +710,15 @@ const MoleculeEditor = (() => {
     const bonds=Array.from({length:n},(_,i)=>[i,(i+1)%n,kind==="aromatic6"?(i%2===0?2:1):1]);
     return {points,bonds,iupac:RING_NAMES[kind]||null};
   }
-  function ringInsertCenter(){
-    const center={x:canvasView.x+canvasView.width/2,y:canvasView.y+canvasView.height/2};
-    if(!graph.atoms.length)return center;
-    const maxX=Math.max(...graph.atoms.map(a=>a.x)),minX=Math.min(...graph.atoms.map(a=>a.x));
-    if(maxX<center.x+canvasView.width*.28)return {x:maxX+105,y:center.y};
-    if(minX>center.x-canvasView.width*.28)return {x:minX-105,y:center.y};
-    return center;
-  }
-  function insertRing(kind){
-    const def=ringDefinition(kind),center=ringInsertCenter(),wasEmpty=graph.atoms.length===0,newIds=[];
-    def.points.forEach(([dx,dy])=>{const id="X"+atomSerial++;newIds.push(id);graph.atoms.push({id,element:"C",x:center.x+dx,y:center.y+dy,charge:0,label:"C",textStyle:{...textDefaults}});});
-    def.bonds.forEach(([a,b,order])=>graph.bonds.push({id:"b"+bondSerial++,a:newIds[a],b:newIds[b],order}));
-    graph.iupac=wasEmpty?def.iupac:null;selectAtoms(newIds,newIds[0]);render();validate();
-    status.textContent=(kind==="aromatic6"?"Aromatic 6-membered":"Ring")+" template inserted. Drag the selected ring to position it.";
+  function armRing(kind){
+    const def=ringDefinition(kind);
+    const names={five:"5-membered ring",six:"6-membered ring",aromatic6:"Aromatic 6-membered ring",fused56:"Fused 5+6 ring"};
+    const template={
+      atoms:def.points.map(([x,y],i)=>({id:"R"+i,element:"C",x,y,charge:0,label:"C",textStyle:{...textDefaults}})),
+      bonds:def.bonds.map(([a,b,order],i)=>({id:"rb"+i,a:"R"+a,b:"R"+b,order})),
+      hbonds:[],iupac:def.iupac
+    };
+    armStock(template,names[kind]||"Ring");
   }
   function pointInPolygon(p,poly){
     let inside=false;
@@ -744,6 +742,12 @@ const MoleculeEditor = (() => {
   // Stock selection is non-destructive. Only a deliberate canvas click commits an
   // independent molecule, with fresh atom/bond IDs to avoid collisions.
   function cancelPendingStock(){
+    if(pendingStock&&dialog){
+      // A new choice of the same template must work after placement or Esc.
+      ["chemRingTemplate","chemStockNucleic","chemAminoSelect"].forEach(id=>{
+        const picker=dialog.querySelector("#"+id);if(picker)picker.value="";
+      });
+    }
     pendingStock=null;pendingStockPoint=null;
     if(tool==="stock")tool="select";
     svg?.classList.remove("chem-stock-placement");
@@ -758,9 +762,22 @@ const MoleculeEditor = (() => {
     render();
     status.textContent=label+" selected. Move to the drawing and click once to place it. Existing structures will not be replaced; Esc cancels.";
   }
+  function duplicateSelection(){
+    const ids=new Set([...selectedAtoms].filter(id=>atomById(id)));
+    if(!ids.size){
+      status.textContent="Select the atoms you want first. Double-click a molecule to select the whole connected molecule, or use Box/Lasso selection.";
+      return false;
+    }
+    const atoms=graph.atoms.filter(a=>ids.has(a.id)).map(a=>clone(a));
+    const bonds=graph.bonds.filter(b=>ids.has(b.a)&&ids.has(b.b)).map(b=>clone(b));
+    const hbonds=graph.hbonds.filter(h=>ids.has(h.a)&&ids.has(h.b)).map(h=>clone(h));
+    armStock({atoms,bonds,hbonds,iupac:null},atoms.length===1?"Copy of selected atom":"Copy of "+atoms.length+" selected atoms");
+    return true;
+  }
   function placeStockAt(p){
     if(!pendingStock)return false;
     const {template,label,isPair}=pendingStock;
+    const wasEmpty=graph.atoms.length===0;
     if(graph.atoms.length+template.atoms.length>500||
        graph.bonds.length+template.bonds.length>1200||
        graph.hbonds.length+(template.hbonds||[]).length>1200){
@@ -792,6 +809,7 @@ const MoleculeEditor = (() => {
     if(isPair)lastPlacedPair={ids:addedIds,leftIds,rightIds};
     if(mode!=="learning")mode="blank"; // never save a mixed drawing over a stock nucleobase
     invalidateIupac();
+    if(wasEmpty&&template.iupac)graph.iupac=template.iupac;
     cancelPendingStock();
     selectAtoms(addedIds,addedIds[0]);
     ensureCanvasContainsDrawing();render();validate();
