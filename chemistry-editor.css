@@ -364,3 +364,12 @@ body.chem-3d-expanded-open{overflow:hidden!important}
 /* Stock templates are placed only after a deliberate canvas click. */
 #chemEditorSvg.chem-stock-placement { cursor: crosshair; }
 #chemEditorSvg .chem-stock-preview { pointer-events: none; user-select: none; }
+
+/* Quick access to the five most recently placed molecular templates. */
+#chemEditorDialog .chem-recent-stock[hidden]{display:none!important}
+#chemEditorDialog .chem-recent-stock{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:10px 0 12px}
+#chemEditorDialog .chem-recent-stock>strong{font-size:12px;color:var(--muted)}
+#chemEditorDialog .chem-recent-stock-items{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+#chemEditorDialog .chem-recent-stock button{border:1px solid var(--line);border-radius:7px;padding:7px 10px;color:var(--text);background:var(--ink-soft);cursor:pointer;font:inherit;font-size:12px}
+#chemEditorDialog .chem-recent-stock button:hover,
+#chemEditorDialog .chem-recent-stock button:focus-visible{border-color:var(--mint);color:var(--mint)}
