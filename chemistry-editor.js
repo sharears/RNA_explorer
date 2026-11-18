@@ -407,7 +407,8 @@ const MoleculeEditor = (() => {
         </details>
         <div class="chem-editor-workspace">
           <div class="chem-editor-canvas-wrap">
-            <svg id="chemEditorSvg" viewBox="0 0 820 470" aria-label="Editable molecular structure"></svg>
+            <svg id="chemEditorSvg" viewBox="0 0 820 470" tabindex="0" aria-label="Editable molecular structure; arrow keys move selected atoms, Shift plus arrow keys moves them farther"></svg>
+            <div class="chem-selection-counter" id="chemSelectionCounter" role="status" aria-live="polite" aria-atomic="true">0 atoms · 0 bonds selected</div>
             <button id="chemCopyArtwork" class="chem-copy-icon-button" type="button" title="Copy editable vector artwork (Ctrl+C / ⌘C)" aria-label="Copy selected molecular structure as editable SVG">
               <svg class="chem-copy-glyph" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>
               <svg class="chem-check-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"></path></svg>
@@ -622,6 +623,11 @@ const MoleculeEditor = (() => {
         if(key==="z"){e.preventDefault();undo();return;}
         if(!e.metaKey&&key==="y"){e.preventDefault();redo();return;}
       }
+      if(!modifier&&!e.altKey&&["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)&&
+         !e.target?.closest?.('input,textarea,select,[contenteditable]')&&
+         !document.querySelector("#chemExportDialog[open]")){
+        if(nudgeSelectedAtoms(e.key,e.shiftKey,!e.repeat)){e.preventDefault();return;}
+      }
       if(e.key==="Escape"&&pendingStock){e.preventDefault();e.stopPropagation();cancelPendingStock();status.textContent="Stock placement canceled. The drawing is unchanged.";return;}
       if(e.key==="Escape"&&lasso){lasso=null;render();return;}
       if(e.key==="Escape"&&selectedAtoms.size){selectedAtoms.clear();selectedAtom=null;selectionZoom=1;render();return;}
@@ -647,6 +653,38 @@ const MoleculeEditor = (() => {
   function toggleAtom(id){
     selectionZoom=1;if(selectedAtoms.has(id))selectedAtoms.delete(id);else selectedAtoms.add(id);
     selectedAtom=selectedAtoms.has(id)?id:(selectedAtoms.values().next().value||null);
+  }
+  // Show covalent bonds whose two endpoints are in the atom selection.
+  // Noncovalent H-bonds are reported separately when present.
+  function selectionCounts(){
+    const ids=new Set([...selectedAtoms].filter(id=>atomById(id)));
+    if(!ids.size&&selectedAtom&&atomById(selectedAtom))ids.add(selectedAtom);
+    return {
+      atoms:ids.size,
+      bonds:graph.bonds.filter(b=>ids.has(b.a)&&ids.has(b.b)).length,
+      hbonds:graph.hbonds.filter(b=>ids.has(b.a)&&ids.has(b.b)).length
+    };
+  }
+  function syncSelectionCounter(){
+    const node=dialog?.querySelector("#chemSelectionCounter");
+    if(!node)return;
+    const {atoms,bonds,hbonds}=selectionCounts();
+    node.textContent=atoms+" atom"+(atoms===1?"":"s")+" · "+bonds+" bond"+(bonds===1?"":"s")+" selected"+(hbonds?" · "+hbonds+" H-bond"+(hbonds===1?"":"s"):"");
+  }
+  function nudgeSelectedAtoms(key,largeStep=false,recordUndo=true){
+    if(tool!=="select"||pendingStock||drag||transformDrag||selectionBox||lasso)return false;
+    const direction={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[key];
+    if(!direction)return false;
+    const ids=new Set([...selectedAtoms].filter(id=>atomById(id)));
+    if(!ids.size&&selectedAtom&&atomById(selectedAtom))ids.add(selectedAtom);
+    if(!ids.size)return false;
+    const step=largeStep?20:5;
+    if(recordUndo)pushUndo();
+    graph.atoms.forEach(a=>{if(ids.has(a.id)){a.x+=direction[0]*step;a.y+=direction[1]*step;}});
+    ensureCanvasContainsDrawing();
+    render();
+    if(status)status.textContent="Moved "+ids.size+" selected atom"+(ids.size===1?"":"s")+" "+step+" units. Shift + arrow moves 20 units; Undo reverses movement.";
+    return true;
   }
   function covalentComponent(startId){
     const seen=new Set([startId]),queue=[startId];
@@ -1276,6 +1314,7 @@ const MoleculeEditor = (() => {
 
   function canvasPointerDown(e){
     if(e.button!==0)return;
+    svg.focus?.({preventScroll:true});
     if(pendingStock){e.preventDefault();placeStockAt(point(e));return;}
     if(tool==="lasso"){
       const p=point(e);lasso={pointer:e.pointerId,points:[p],additive:e.shiftKey};selectionBox=null;
@@ -1490,6 +1529,7 @@ const MoleculeEditor = (() => {
       const pts=lasso.points;path.setAttribute("points",[...pts,pts[0]].map(p=>p.x+","+p.y).join(" "));svg.append(path);
     }
     syncValenceIgnoreButton();
+    syncSelectionCounter();
     if(threeDVisible)schedule3DRender();
   }
 
