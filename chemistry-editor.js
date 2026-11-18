@@ -190,7 +190,7 @@ const MoleculeEditor = (() => {
   let dialog=null,svg=null,status=null,title=null,mode="base",base="A",leftBase="G",rightBase="C";
   let initialLearningGraph=null,learningReturnTarget=null,learningReturnScrollY=0;
   let graph={atoms:[],bonds:[],hbonds:[]},tool="select",pendingStock=null,pendingStockPoint=null,lastPlacedPair=null,element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,lasso=null,transformDrag=null,selectionZoom=1,pendingFuseBond=null,onSave=null;
-  let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false,showAtomLabels=true,showAtomNumbers=false;
+  let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false,showAtomLabels=true,showAtomNumbers=false,showHydrogenBonds=true,showCanvasGrid=false;
   let ignoredValenceWarnings=new Set(),smartLayoutEnabled=true,threeDVisible=false,threeDMode="ideal";
   let threeDCanvas=null,threeDPanel=null,threeDFrame=0,threeDDrag=null,threeDPointers=new Map(),threeDPinch=null,threeDCoords=[],threeDBonds=[],threeDSignature="",threeDPendingSignature="",threeDRequestSerial=0;
   const DEFAULT_3D_VIEW={rx:-0.38,ry:0.58,zoom:1,panX:0,panY:0};
@@ -236,8 +236,8 @@ const MoleculeEditor = (() => {
       ["History",["#chemUndoButton","#chemRedoButton"]],
       ["Select · Atoms & groups",['[data-chem-tool="select"]','[data-chem-tool="lasso"]',"#chemSelectAll","#chemDuplicateSelection"]],
       ["Build · Atoms & bonds",['[data-chem-tool="atom"]','[data-chem-tool="bond"]','[data-chem-tool="fuse"]','[data-chem-tool="hbond"]','[data-chem-tool="delete"]',"#chemFunctionalGroup","#chemAttachGroup","#chemRingTemplate","#chemSmartLayoutToggle","#chemTidy2D"]],
-      ["Display · Labels & chemistry",["#chemAtomCirclesToggle","#chemAtomLabelsToggle","#chemAtomNumbersToggle","#chemElement","#chemBondOrder","#chemChargeMinus","#chemChargePlus","#chemIupacButton","#chemIgnoreValence"]],
-      ["View · Canvas",["#chemExpandCanvas","#chemFitCanvas"]]
+      ["Display · Labels & chemistry",["#chemAtomCirclesToggle","#chemAtomLabelsToggle","#chemAtomNumbersToggle","#chemHydrogenBondsToggle","#chemElement","#chemBondOrder","#chemChargeMinus","#chemChargePlus","#chemIupacButton","#chemIgnoreValence"]],
+      ["View · Canvas",["#chemExpandCanvas","#chemFitCanvas","#chemCanvasGridToggle"]]
     ];
     groups.forEach(([name,selectors],index)=>{
       const details=document.createElement("details");details.className="chem-tool-group";details.open=index<3;const summary=document.createElement("summary");summary.textContent=name;const body=document.createElement("div");body.className="chem-tool-group-body";details.append(summary,body);
@@ -358,6 +358,8 @@ const MoleculeEditor = (() => {
           <button type="button" id="chemAtomCirclesToggle" aria-pressed="false">Atom circles: off</button>
           <button type="button" id="chemAtomLabelsToggle" aria-pressed="true" title="On shows every element symbol; off uses skeletal convention with carbon vertices implicit.">Atom labels: on</button>
           <button type="button" id="chemAtomNumbersToggle" aria-pressed="false">Atom numbering: off</button>
+          <button type="button" id="chemHydrogenBondsToggle" aria-pressed="true" title="Show or hide hydrogen bonds without changing their molecular data">H-bonds: on</button>
+          <button type="button" id="chemCanvasGridToggle" aria-pressed="false" title="Show a coordinate-aligned guide grid, which will not be exported">Grid: off</button>
           <label>Element<select id="chemElement"><option>C</option><option>N</option><option>O</option><option>H</option><option>P</option><option>S</option><option>F</option><option>Cl</option><option>Br</option><option>I</option></select></label>
           <label>Bond order<select id="chemBondOrder"><option value="1">Single</option><option value="2">Double</option><option value="3">Triple</option></select></label>
           <button type="button" id="chemChargeMinus">Charge −</button><button type="button" id="chemChargePlus">Charge +</button>
@@ -513,6 +515,14 @@ const MoleculeEditor = (() => {
     });
     dialog.querySelector("#chemAtomNumbersToggle").addEventListener("click",()=>{
       showAtomNumbers=!showAtomNumbers;syncDisplayButtons();render();
+    });
+    dialog.querySelector("#chemHydrogenBondsToggle").addEventListener("click",()=>{
+      showHydrogenBonds=!showHydrogenBonds;syncDisplayButtons();render();
+      status.textContent=showHydrogenBonds?"Hydrogen bonds are visible again.":"Hydrogen bonds are hidden from the drawing and exports, but kept in the molecular data.";
+    });
+    dialog.querySelector("#chemCanvasGridToggle").addEventListener("click",()=>{
+      showCanvasGrid=!showCanvasGrid;syncDisplayButtons();render();
+      status.textContent=showCanvasGrid?"Canvas guide grid is visible. It will not appear in exported figures.":"Canvas guide grid is hidden.";
     });
     dialog.querySelector("#chemRingTemplate").addEventListener("change",e=>{
       if(e.target.value)armRing(e.target.value);
@@ -736,7 +746,9 @@ const MoleculeEditor = (() => {
     const entries=[
       ["#chemAtomCirclesToggle",showAtomCircles,"Atom circles"],
       ["#chemAtomLabelsToggle",showAtomLabels,"Atom labels"],
-      ["#chemAtomNumbersToggle",showAtomNumbers,"Atom numbering"]
+      ["#chemAtomNumbersToggle",showAtomNumbers,"Atom numbering"],
+      ["#chemHydrogenBondsToggle",showHydrogenBonds,"H-bonds"],
+      ["#chemCanvasGridToggle",showCanvasGrid,"Grid"]
     ];
     entries.forEach(([selector,on,label])=>{const b=dialog.querySelector(selector);if(b){b.setAttribute("aria-pressed",String(on));b.textContent=label+": "+(on?"on":"off");b.classList.toggle("active",on);}});
   }
@@ -1484,10 +1496,34 @@ const MoleculeEditor = (() => {
       layer.append(line,text);
     });
   }
+  // The grid uses the drawing's SVG coordinates, so its spacing follows zoom
+  // and pan. The export helper removes data-export-remove before serializing.
+  function appendCanvasGrid(){
+    if(!showCanvasGrid||!svg)return;
+    const group=document.createElementNS(NS,"g");
+    group.setAttribute("data-export-remove","");
+    group.setAttribute("pointer-events","none");
+    const defs=document.createElementNS(NS,"defs"),pattern=document.createElementNS(NS,"pattern");
+    pattern.setAttribute("id","chem-editor-guide-grid-pattern");
+    pattern.setAttribute("patternUnits","userSpaceOnUse");
+    pattern.setAttribute("width","34");pattern.setAttribute("height","34");
+    const path=document.createElementNS(NS,"path");
+    path.setAttribute("d","M 34 0 H 0 V 34");
+    path.setAttribute("fill","none");path.setAttribute("stroke","#698599");
+    path.setAttribute("stroke-opacity","0.3");path.setAttribute("stroke-width","0.8");
+    pattern.append(path);defs.append(pattern);
+    const rect=document.createElementNS(NS,"rect");
+    rect.setAttribute("x",canvasView.x);rect.setAttribute("y",canvasView.y);
+    rect.setAttribute("width",canvasView.width);rect.setAttribute("height",canvasView.height);
+    rect.setAttribute("fill","url(#chem-editor-guide-grid-pattern)");
+    group.append(defs,rect);
+    svg.append(group);
+  }
   function render(){
     if(!svg)return;
     svg.classList.toggle("chem-stock-placement",Boolean(pendingStock));
     applyCanvasView();svg.innerHTML="";
+    appendCanvasGrid();
     const bondLayer=document.createElementNS(NS,"g");bondLayer.setAttribute("class","chem-editor-bonds");
     graph.bonds.forEach(b=>{
       const a=atomById(b.a),c=atomById(b.b);if(!a||!c)return;
@@ -1500,7 +1536,7 @@ const MoleculeEditor = (() => {
       bondLayer.append(g);
     });
     const hLayer=document.createElementNS(NS,"g");hLayer.setAttribute("class","chem-editor-hbonds");
-    graph.hbonds.forEach(h=>{
+    if(showHydrogenBonds)graph.hbonds.forEach(h=>{
       const a=atomById(h.a),b=atomById(h.b);if(!a||!b)return;
       const line=document.createElementNS(NS,"line");line.dataset.hbondId=h.id;line.setAttribute("x1",a.x);line.setAttribute("y1",a.y);line.setAttribute("x2",b.x);line.setAttribute("y2",b.y);hLayer.append(line);
     });
