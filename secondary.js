@@ -183,24 +183,38 @@ const SecondaryExplorer = (() => {
     const paired=partner.filter(i=>i>=0).length;
     const pairKeys=new Set(pairs.map(([a,b])=>keyOf(a,b)));
     const stems=pairs.filter(([a,b])=>!pairKeys.has(keyOf(a-1,b+1))).length;
-    const gc=[...seq].filter(base=>base==="G"||base==="C").length;
+    const composition=Object.fromEntries(["A","U","G","C"].map(base=>{
+      const count=[...seq].filter(letter=>letter===base).length;
+      return [base,{count,percent:seq.length?Math.round(count/seq.length*1000)/10:0}];
+    }));
+    const gc=composition.G.count+composition.C.count;
     return {residues:seq.length,basePairs:pairs.length,paired,unpaired:seq.length-paired,
-      stems,gcPercent:seq.length?Math.round(gc/seq.length*1000)/10:0};
+      stems,gcPercent:seq.length?Math.round(gc/seq.length*1000)/10:0,composition};
   }
   function renderSecondaryStatistics(){
     const box=$("seStructureStats");if(!box)return;
     const data=secondaryStatistics();
-    const items=[["Residues",data.residues],["Base pairs",data.basePairs],
-      ["Paired nt",data.paired],["Unpaired nt",data.unpaired],
-      ["Stems / isolated pairs",data.stems],["GC content",data.gcPercent+"%"]];
     box.replaceChildren();
-    const heading=document.createElement("strong");heading.textContent="Secondary structure statistics";box.append(heading);
-    const grid=document.createElement("dl");grid.className="se-stats-grid";
-    items.forEach(([label,value])=>{
-      const item=document.createElement("div"),dt=document.createElement("dt"),dd=document.createElement("dd");
-      dt.textContent=label;dd.textContent=String(value);item.append(dt,dd);grid.append(item);
-    });
-    box.append(grid);
+    const addGroup=(heading,items,className="")=>{
+      const title=document.createElement("strong");
+      title.textContent=heading;if(className)title.className=className;box.append(title);
+      const grid=document.createElement("dl");grid.className="se-stats-grid";
+      items.forEach(([label,value])=>{
+        const item=document.createElement("div"),dt=document.createElement("dt"),dd=document.createElement("dd");
+        dt.textContent=label;dd.textContent=String(value);item.append(dt,dd);grid.append(item);
+      });
+      box.append(grid);
+    };
+    addGroup("Secondary structure statistics",[
+      ["Residues",data.residues],["Base pairs",data.basePairs],
+      ["Paired nt",data.paired],["Unpaired nt",data.unpaired],
+      ["Stems / isolated pairs",data.stems],["GC content",data.gcPercent+"%"]
+    ]);
+    const names={A:"Adenine",U:"Uracil",G:"Guanine",C:"Cytosine"};
+    addGroup("Nucleotide composition",["A","U","G","C"].map(base=>{
+      const {count,percent}=data.composition[base];
+      return [base+" · "+names[base],count+" ("+percent.toFixed(1)+"%)"];
+    }),"se-composition-heading");
   }
   const copyResetTimers=new WeakMap();
   async function copySecondaryText(kind){
