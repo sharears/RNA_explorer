@@ -340,7 +340,29 @@ const MoleculeEditor = (() => {
     dialog=document.createElement("dialog");dialog.id="chemEditorDialog";dialog.className="chem-editor-dialog";
     dialog.innerHTML=`
       <div class="chem-editor-shell">
-        <header><div><p class="eyebrow">RNA chemistry editor</p><h2 id="chemEditorTitle">Nucleobase editor</h2></div><button id="chemEditorClose" class="chem-editor-close" type="button" aria-label="Close">×</button></header>
+        <header>
+          <div><p class="eyebrow">RNA chemistry editor</p><h2 id="chemEditorTitle">Nucleobase editor</h2></div>
+          <div class="chem-editor-header-actions">
+            <details class="chem-keyboard-shortcuts" id="chemKeyboardShortcuts">
+              <summary aria-label="Show molecular drawing keyboard shortcuts">⌨ Shortcuts</summary>
+              <div class="chem-shortcut-panel">
+                <strong>Keyboard shortcuts</strong>
+                <dl>
+                  <div><dt><kbd>R</kbd></dt><dd>Rotate the selected stock-structure preview 90° clockwise before placement</dd></div>
+                  <div><dt><kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd></dt><dd>Move selected atoms 5 canvas units</dd></div>
+                  <div><dt><kbd>Shift</kbd> + <kbd>arrow</kbd></dt><dd>Move selected atoms 20 canvas units</dd></div>
+                  <div><dt><kbd>Ctrl/⌘</kbd> + <kbd>Z</kbd></dt><dd>Undo</dd></div>
+                  <div><dt><kbd>Ctrl/⌘</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd></dt><dd>Redo (also Ctrl + Y on Windows)</dd></div>
+                  <div><dt><kbd>Ctrl/⌘</kbd> + <kbd>C</kbd></dt><dd>Copy molecular artwork as editable SVG</dd></div>
+                  <div><dt><kbd>Delete</kbd> / <kbd>Backspace</kbd></dt><dd>Remove selected atoms</dd></div>
+                  <div><dt><kbd>Esc</kbd></dt><dd>Cancel stock placement or clear selection</dd></div>
+                </dl>
+                <p>Use shortcuts while the molecular editor is active, not while typing in a field. SVG clipboard support depends on your browser.</p>
+              </div>
+            </details>
+            <button id="chemEditorClose" class="chem-editor-close" type="button" aria-label="Close">×</button>
+          </div>
+        </header>
         <div class="chem-editor-toolbar" role="toolbar" aria-label="Molecular drawing tools">
           <button type="button" id="chemUndoButton" title="Undo (Ctrl+Z / ⌘Z)" aria-label="Undo last molecular drawing change" disabled>Undo</button>
           <button type="button" id="chemRedoButton" title="Redo (Ctrl+Y / Ctrl+Shift+Z / ⌘Shift+Z)" aria-label="Redo molecular drawing change" disabled>Redo</button>
@@ -481,7 +503,7 @@ const MoleculeEditor = (() => {
       if(key)armStock(graphFromBase(key),BASES[key]?.name||key,false,{kind:"nucleic",value:key});
     });
     dialog.querySelector("#chemEditorClose").addEventListener("click",()=>{cancelPendingStock();dialog.close();});
-    dialog.addEventListener("close",()=>{cancelPendingStock();document.body.classList.remove("chem-editor-open","chem-3d-expanded-open");dialog.classList.remove("chem-3d-dialog-expanded");threeDDrag=null;threeDPointers.clear();threeDPinch=null;threeDPanel?.classList.remove("chem-3d-expanded");});
+    dialog.addEventListener("close",()=>{cancelPendingStock();dialog.querySelector("#chemKeyboardShortcuts").open=false;document.body.classList.remove("chem-editor-open","chem-3d-expanded-open");dialog.classList.remove("chem-3d-dialog-expanded");threeDDrag=null;threeDPointers.clear();threeDPinch=null;threeDPanel?.classList.remove("chem-3d-expanded");});
     dialog.querySelector("#chemUndoButton").addEventListener("click",undo);
     dialog.querySelector("#chemRedoButton").addEventListener("click",redo);
     dialog.querySelector("#chemExpandCanvas").addEventListener("click",expandCanvas);
