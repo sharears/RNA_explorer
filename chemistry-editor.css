@@ -383,3 +383,25 @@ body.chem-3d-expanded-open{overflow:hidden!important}
   font-size:12px;line-height:1.35;pointer-events:none;max-width:calc(100% - 70px)
 }
 #chemEditorSvg:focus-visible{outline:2px solid var(--mint);outline-offset:-3px}
+
+/* On-demand help for shortcuts; no permanent extra toolbar clutter. */
+#chemEditorDialog .chem-editor-shell>header{position:relative;z-index:5}
+#chemEditorDialog .chem-editor-header-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
+#chemEditorDialog .chem-keyboard-shortcuts{position:relative;min-width:0}
+#chemEditorDialog .chem-keyboard-shortcuts>summary{list-style:none;display:inline-flex;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--ink-soft);color:var(--text);font-size:13px;cursor:pointer;white-space:nowrap}
+#chemEditorDialog .chem-keyboard-shortcuts>summary::-webkit-details-marker{display:none}
+#chemEditorDialog .chem-keyboard-shortcuts[open]>summary,
+#chemEditorDialog .chem-keyboard-shortcuts>summary:focus-visible{border-color:var(--mint);outline-offset:2px}
+#chemEditorDialog .chem-shortcut-panel{position:absolute;right:0;top:calc(100% + 8px);z-index:20;width:min(360px,85vw);max-height:55vh;overflow-y:auto;padding:15px;border:1px solid var(--line);border-radius:10px;background:#0b1a2a;color:var(--text);box-shadow:0 12px 36px rgba(0,0,0,.5)}
+#chemEditorDialog .chem-shortcut-panel>strong{display:block;margin-bottom:10px;color:var(--mint);font-size:14px}
+#chemEditorDialog .chem-shortcut-panel dl{display:grid;gap:8px;margin:0}
+#chemEditorDialog .chem-shortcut-panel dl>div{display:grid;grid-template-columns:minmax(100px,43%) minmax(0,1fr);align-items:start;gap:10px}
+#chemEditorDialog .chem-shortcut-panel dt{font-size:12px;line-height:1.8}
+#chemEditorDialog .chem-shortcut-panel dd{margin:0;font-size:12px;line-height:1.45;color:var(--cream)}
+#chemEditorDialog .chem-shortcut-panel kbd{display:inline-block;padding:1px 5px;border:1px solid var(--line);border-radius:4px;background:var(--ink-soft);font:inherit;font-size:11px;line-height:1.5}
+#chemEditorDialog .chem-shortcut-panel p{margin:12px 0 0;font-size:11px;line-height:1.5;color:var(--muted)}
+@media(max-width:560px){
+  #chemEditorDialog .chem-editor-header-actions{gap:6px}
+  #chemEditorDialog .chem-shortcut-panel{right:-34px;width:min(345px,88vw)}
+  #chemEditorDialog .chem-shortcut-panel dl>div{grid-template-columns:minmax(90px,42%) minmax(0,1fr);gap:8px}
+}
