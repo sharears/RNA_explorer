@@ -375,3 +375,6 @@ body[data-page-mode="secondary"] .workspace-advanced-panel .se-controls{margin-t
 #scene-secondary .se-copy-icon-button .se-check-glyph{display:none}
 #scene-secondary .se-copy-icon-button.is-copied .se-copy-glyph{display:none}
 #scene-secondary .se-copy-icon-button.is-copied .se-check-glyph{display:block}
+
+/* Distinguish nucleotide composition from structural summary metrics. */
+.se-structure-stats .se-composition-heading{margin-top:15px;padding-top:12px;border-top:1px solid var(--line)}
