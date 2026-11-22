@@ -33,6 +33,8 @@ const SecondaryExplorer = (() => {
       boxMode:"box",backgroundColor:"#08111e",backgroundOpacity:.92,borderVisible:true,borderColor:"#c5d6e2",borderThickness:1
     }
   };
+  // Search highlights are temporary view state, independent of residue selection.
+  let motifQuery="",motifMatches=[],motifResidues=new Set();
   const defaults={...settings};
   const palettes={
     viridis:["#440154","#3b528b","#21918c","#5ec962","#fde725"],
@@ -188,8 +190,16 @@ const SecondaryExplorer = (() => {
       return [base,{count,percent:seq.length?Math.round(count/seq.length*1000)/10:0}];
     }));
     const gc=composition.G.count+composition.C.count;
+    const pairCounts={GC:0,AU:0,GU:0,other:0};
+    pairs.forEach(([a,b])=>{
+      const identity=seq[a]+seq[b];
+      const type=["GC","CG"].includes(identity)?"GC":["AU","UA"].includes(identity)?"AU":["GU","UG"].includes(identity)?"GU":"other";
+      pairCounts[type]++;
+    });
+    const pairComposition=Object.fromEntries(Object.entries(pairCounts).map(([type,count])=>
+      [type,{count,percent:pairs.length?Math.round(count/pairs.length*1000)/10:0}]));
     return {residues:seq.length,basePairs:pairs.length,paired,unpaired:seq.length-paired,
-      stems,gcPercent:seq.length?Math.round(gc/seq.length*1000)/10:0,composition};
+      stems,gcPercent:seq.length?Math.round(gc/seq.length*1000)/10:0,composition,pairComposition};
   }
   function renderSecondaryStatistics(){
     const box=$("seStructureStats");if(!box)return;
@@ -215,6 +225,79 @@ const SecondaryExplorer = (() => {
       const {count,percent}=data.composition[base];
       return [base+" · "+names[base],count+" ("+percent.toFixed(1)+"%)"];
     }),"se-composition-heading");
+    const heading=document.createElement("strong");heading.className="se-composition-heading";heading.textContent="Base-pair composition";box.append(heading);
+    const breakdown=document.createElement("dl");breakdown.className="se-pair-composition";
+    [["GC","G–C / C–G"],["AU","A–U / U–A"],["GU","G–U / U–G"],["other","Other pairs"]].forEach(([key,label])=>{
+      const {count,percent}=data.pairComposition[key];
+      const row=document.createElement("div"),dt=document.createElement("dt"),dd=document.createElement("dd");
+      dt.textContent=label;dd.textContent=count+" ("+percent.toFixed(1)+"%)";
+      const bar=document.createElement("span");bar.className="se-pair-composition-track";
+      bar.setAttribute("aria-hidden","true");
+      const fill=document.createElement("span");fill.className="se-pair-composition-fill";fill.style.width=percent+"%";
+      bar.append(fill);row.append(dt,dd,bar);breakdown.append(row);
+    });
+    box.append(breakdown);
+    const note=document.createElement("p");note.className="se-pair-composition-note";
+    note.textContent=data.basePairs?"Based on paired nucleotide identities, not inferred 3D geometry.":"No base pairs in this structure.";
+    box.append(note);
+  }
+
+  // Exact, case-insensitive RNA sequence matching; advance by one position
+  // after each match so overlapping occurrences are included.
+  function findSequenceMotifs(sequence,query){
+    const clean=String(query||"").toUpperCase().replace(/\s/g,"");
+    if(!clean)return {query:"",matches:[],residues:[]};
+    if(!/^[ACGU]+$/.test(clean))throw Error("Enter an RNA sequence using A, C, G and U only.");
+    const matches=[],residues=new Set(),source=String(sequence||"").toUpperCase();
+    let start=source.indexOf(clean);
+    while(start!==-1){
+      const end=start+clean.length-1;matches.push({start,end});
+      for(let i=start;i<=end;i++)residues.add(i);
+      start=source.indexOf(clean,start+1);
+    }
+    return {query:clean,matches,residues:[...residues].sort((a,b)=>a-b)};
+  }
+  function refreshMotifMatches(){
+    const result=findSequenceMotifs(seq,motifQuery);
+    motifMatches=result.matches;motifResidues=new Set(result.residues);
+    const status=$("seMotifSearchStatus"),ranges=$("seMotifMatchRanges");
+    if(status){
+      status.classList.remove("error");
+      status.textContent=!motifQuery?"Search for an exact RNA sequence in the currently rendered structure.":
+        motifMatches.length?motifMatches.length+" match"+(motifMatches.length===1?"":"es")+" · "+motifResidues.size+" unique residues highlighted.":"No matches for "+motifQuery+".";
+    }
+    if(ranges){
+      ranges.textContent=motifMatches.map(({start,end})=>start===end?String(start+1):(start+1)+"–"+(end+1)).join(", ");
+      ranges.hidden=!motifMatches.length;
+    }
+    return result;
+  }
+  function setMotifSearch(query){
+    // Validate before altering current search. Invalid input clears the view
+    // highlight and provides a useful message rather than leaving stale hits.
+    const status=$("seMotifSearchStatus"),input=$("seMotifQuery");
+    try{
+      const result=findSequenceMotifs(seq,query);motifQuery=result.query;
+      if(input)input.value=motifQuery;
+      refreshMotifMatches();render();
+    }catch(error){
+      motifQuery="";refreshMotifMatches();render();
+      if(status){status.textContent=error.message;status.classList.add("error");}
+    }
+  }
+  function appendMotifHighlight(node,index,style){
+    if(!motifResidues.has(index))return;
+    const radius=Math.max(26,style.circleVisible===false?(Number(style.letterSize)||16)*.65+6:26);
+    node.append(svg("circle",{class:"se-motif-highlight","data-export-remove":"","pointer-events":"none","aria-hidden":"true",r:radius,fill:"none",stroke:"#f5ca62","stroke-width":3,"stroke-dasharray":"5 3"}));
+  }
+  function setupMotifSearch(statsBox){
+    const section=document.createElement("section");
+    section.className="se-motif-search";section.setAttribute("aria-label","Find a sequence motif");
+    section.innerHTML='<label for="seMotifQuery"><strong>Find sequence motif</strong></label><div class="se-motif-search-controls"><input id="seMotifQuery" type="text" maxlength="1000" placeholder="e.g. GAAA" autocomplete="off" spellcheck="false" autocapitalize="characters" aria-describedby="seMotifSearchStatus"><button id="seMotifFind" type="button">Find</button><button id="seMotifClear" type="button">Clear</button></div><p id="seMotifSearchStatus" role="status">Search for an exact RNA sequence in the currently rendered structure.</p><p id="seMotifMatchRanges" aria-label="Matching residue ranges (1-based)" hidden></p><p class="se-motif-search-note">Gold dashed rings mark sequence matches, not confirmed structural motifs.</p>';
+    statsBox.before(section);
+    $("seMotifFind").addEventListener("click",()=>setMotifSearch($("seMotifQuery").value));
+    $("seMotifClear").addEventListener("click",()=>setMotifSearch(""));
+    $("seMotifQuery").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();setMotifSearch(e.target.value);}});
   }
   const copyResetTimers=new WeakMap();
   async function copySecondaryText(kind){
@@ -790,6 +873,7 @@ const SecondaryExplorer = (() => {
       const g=svg("g",{transform:`translate(${p.x} ${p.y})`,class:"se-node"+(pinnedResidues.has(i)?" pinned":"")+(selectedResidues.has(i)?" multi-selected":""),tabindex:0,role:"button","aria-pressed":String(selectedResidues.has(i)),"data-residue-index":i,"aria-label":`${seq[i]}${i+1}, ${partner[i]<0?"unpaired":"paired with "+(partner[i]+1)}`});
       const persistent=selectedResidues.has(i),current=persistent,pairedFocus=selectedPairKeys.size>0&&[...selectedPairKeys].some(key=>key.split(":").map(Number).includes(i));
       if(persistent||current||pairedFocus) g.append(svg("circle",{"data-export-remove":"",r:persistent?22:20,fill:"none",stroke:persistent?"#f5e9c8":"#ffffff","stroke-width":persistent?3:1.5,"stroke-dasharray":persistent||current?"none":"3 3"}));
+      appendMotifHighlight(g,i,s);
       if(s.circleVisible!==false)g.append(svg("circle",{r:16,fill:s.fillColor,stroke:s.circleColor,"stroke-width":s.circleWidth}));
       if(s.letterVisible!==false)text(g,seq[i],{y:0,fill:s.letterColor,"font-family":s.font,"font-size":s.letterSize,"font-style":s.fontStyle==="italic"?"italic":"normal","font-weight":s.fontStyle==="bold"?"700":"400","text-anchor":"middle","dominant-baseline":"central"});
       const prev=pos[Math.max(0,i-1)],next=pos[Math.min(pos.length-1,i+1)];
@@ -824,6 +908,7 @@ const SecondaryExplorer = (() => {
     const parsed=parse(sequence,structure);
     const changed=sequence!==seq||structure!==db;
     seq=sequence;db=structure;pairs=parsed.pairs;partner=parsed.partner;selected=0;
+    if(changed)refreshMotifMatches();
     if(changed){selectedResidues=new Set();selectedPairKeys=new Set();selectedPairKey=null;overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;pairProbabilities={};pairProbEnabled=false;pairProbTicket++;pairChemistry={};manualOffsets={};pinnedResidues=new Set();zoom=1;panX=panY=0;wholeRotation=0;selectionRotation=0;selectionScale=1;
       indexMode="default";indexOverrides={};indexLabelOffsets={};indexSelection=new Set([...sequence].map((_,i)=>i).filter(i=>i===0||(i+1)%5===0||i===sequence.length-1));
       if($("seMetadataFile"))$("seMetadataFile").value="";
@@ -1341,6 +1426,7 @@ const SecondaryExplorer = (() => {
     const statsBox=document.createElement("section");statsBox.id="seStructureStats";
     statsBox.className="se-structure-stats";statsBox.setAttribute("aria-label","Secondary structure statistics");
     document.querySelector("#scene-secondary .secondary-inputs")?.insertAdjacentElement("afterend",statsBox);
+    setupMotifSearch(statsBox);
     reorganizeControls(controls);
     if($("seCircleVisible")){$("seCircleVisible").checked=settings.circleVisible!==false;$("seCircleVisible").addEventListener("change",e=>{settings.circleVisible=e.target.checked;render();});}
     if($("seLetterVisible")){$("seLetterVisible").checked=settings.letterVisible!==false;$("seLetterVisible").addEventListener("change",e=>{settings.letterVisible=e.target.checked;render();});}
