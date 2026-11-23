@@ -405,3 +405,18 @@ body.chem-3d-expanded-open{overflow:hidden!important}
   #chemEditorDialog .chem-shortcut-panel{right:-34px;width:min(345px,88vw)}
   #chemEditorDialog .chem-shortcut-panel dl>div{grid-template-columns:minmax(90px,42%) minmax(0,1fr);gap:8px}
 }
+
+/* Label text is user-authored; validation adornments are editor-only SVG. */
+#chemEditorDialog .chem-editor-canvas-wrap{position:relative}
+#chemEditorDialog #chemAtomLabelEditor[hidden]{display:none!important}
+#chemEditorDialog .chem-atom-label-editor{position:absolute;z-index:8;top:12px;right:12px;display:grid;gap:9px;width:min(355px,calc(100% - 24px));max-height:calc(100% - 24px);overflow:auto;padding:13px;border:1px solid var(--mint);border-radius:9px;background:#0a2030;color:var(--text);box-shadow:0 14px 35px rgba(0,0,0,.55)}
+#chemEditorDialog .chem-atom-label-editor label{font-size:13px;color:var(--cream)}
+#chemEditorDialog .chem-atom-label-editor input{width:100%;box-sizing:border-box;padding:9px;border:1px solid var(--line);border-radius:6px;background:#08111e;color:var(--text);font:500 15px "DM Mono",monospace}
+#chemEditorDialog .chem-atom-label-editor input:focus{outline:2px solid var(--mint);outline-offset:1px}
+#chemEditorDialog .chem-atom-label-editor p{margin:0;font-size:12px;line-height:1.5;color:var(--muted)}
+#chemEditorDialog .chem-atom-label-editor .chem-label-message.warning{color:#ff9299}
+#chemEditorDialog .chem-label-actions{display:flex;gap:6px;flex-wrap:wrap}
+#chemEditorDialog .chem-label-actions button{border:1px solid var(--line);border-radius:6px;background:var(--ink-soft);color:var(--text);padding:8px 10px;font-size:12px;cursor:pointer}
+#chemEditorDialog .chem-label-actions button[type=submit]{border-color:var(--mint);color:var(--mint)}
+#chemEditorDialog .chem-label-actions button:disabled{opacity:.45;cursor:not-allowed}
+#chemEditorDialog .chem-atom-label-warning{stroke:#ff5a67;stroke-width:2.1;fill:none;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
