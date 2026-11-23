@@ -34,7 +34,7 @@ const SecondaryExplorer = (() => {
     }
   };
   // Search highlights are temporary view state, independent of residue selection.
-  let motifQuery="",motifMatches=[],motifResidues=new Set();
+  let motifQuery="",motifMatches=[],motifResidues=new Set(),activeMotifMatch=0;
   const defaults={...settings};
   const palettes={
     viridis:["#440154","#3b528b","#21918c","#5ec962","#fde725"],
@@ -181,6 +181,27 @@ const SecondaryExplorer = (() => {
   }
 
   // Six quality-of-life tools share the current parsed RNA structure.
+  function basePairCategory(a,b){
+    const identity=a+b;
+    if(identity==="GC"||identity==="CG")return "GC";
+    if(identity==="AU"||identity==="UA")return "AU";
+    if(identity==="GU"||identity==="UG")return "GU";
+    return "other";
+  }
+  function basePairCsv(){
+    const categories={GC:"G-C / C-G",AU:"A-U / U-A",GU:"G-U / U-G",other:"Other"};
+    const rows=["Residue_1,Residue_2,Base_Pair,Category"];
+    pairs.forEach(([a,b])=>{
+      const left=seq[a],right=seq[b],category=basePairCategory(left,right);
+      rows.push([left+(a+1),right+(b+1),left+"-"+right,categories[category]].join(","));
+    });
+    return rows.join("\n")+"\n";
+  }
+  function downloadBasePairsCsv(){
+    if(!pairs.length)return;
+    ExportTools.downloadText(basePairCsv(),
+      "rna-base-pairs-"+seq.length+"nt-"+pairs.length+"bp.csv","text/csv;charset=utf-8");
+  }
   function secondaryStatistics(){
     const paired=partner.filter(i=>i>=0).length;
     const pairKeys=new Set(pairs.map(([a,b])=>keyOf(a,b)));
@@ -192,9 +213,7 @@ const SecondaryExplorer = (() => {
     const gc=composition.G.count+composition.C.count;
     const pairCounts={GC:0,AU:0,GU:0,other:0};
     pairs.forEach(([a,b])=>{
-      const identity=seq[a]+seq[b];
-      const type=["GC","CG"].includes(identity)?"GC":["AU","UA"].includes(identity)?"AU":["GU","UG"].includes(identity)?"GU":"other";
-      pairCounts[type]++;
+      pairCounts[basePairCategory(seq[a],seq[b])]++;
     });
     const pairComposition=Object.fromEntries(Object.entries(pairCounts).map(([type,count])=>
       [type,{count,percent:pairs.length?Math.round(count/pairs.length*1000)/10:0}]));
@@ -225,7 +244,13 @@ const SecondaryExplorer = (() => {
       const {count,percent}=data.composition[base];
       return [base+" · "+names[base],count+" ("+percent.toFixed(1)+"%)"];
     }),"se-composition-heading");
-    const heading=document.createElement("strong");heading.className="se-composition-heading";heading.textContent="Base-pair composition";box.append(heading);
+    const header=document.createElement("div");header.className="se-pair-composition-header";
+    const heading=document.createElement("strong");heading.className="se-composition-heading";heading.textContent="Base-pair composition";
+    const button=document.createElement("button");button.type="button";button.id="seDownloadPairsCsv";
+    button.textContent="Download Base Pairs (CSV)";button.disabled=!pairs.length;
+    button.title=pairs.length?"Download one row per displayed base pair":"No base pairs to download";
+    button.addEventListener("click",downloadBasePairsCsv);
+    header.append(heading,button);box.append(header);
     const breakdown=document.createElement("dl");breakdown.className="se-pair-composition";
     [["GC","G–C / C–G"],["AU","A–U / U–A"],["GU","G–U / U–G"],["other","Other pairs"]].forEach(([key,label])=>{
       const {count,percent}=data.pairComposition[key];
@@ -257,9 +282,22 @@ const SecondaryExplorer = (() => {
     }
     return {query:clean,matches,residues:[...residues].sort((a,b)=>a-b)};
   }
+  function syncMotifNavigator(){
+    const total=motifMatches.length,selected=motifMatches[activeMotifMatch];
+    const previous=$("seMotifPrevious"),next=$("seMotifNext"),activeLabel=$("seMotifActiveMatch");
+    if(previous)previous.disabled=!total;
+    if(next)next.disabled=!total;
+    if(activeLabel){
+      activeLabel.textContent=selected?
+        "Match "+(activeMotifMatch+1)+" of "+total+" · Residues "+
+        (selected.start+1)+(selected.start===selected.end?"":"–"+(selected.end+1)):
+        "No active match";
+    }
+  }
   function refreshMotifMatches(){
     const result=findSequenceMotifs(seq,motifQuery);
     motifMatches=result.matches;motifResidues=new Set(result.residues);
+    if(!motifMatches.length||activeMotifMatch>=motifMatches.length)activeMotifMatch=0;
     const status=$("seMotifSearchStatus"),ranges=$("seMotifMatchRanges");
     if(status){
       status.classList.remove("error");
@@ -270,34 +308,61 @@ const SecondaryExplorer = (() => {
       ranges.textContent=motifMatches.map(({start,end})=>start===end?String(start+1):(start+1)+"–"+(end+1)).join(", ");
       ranges.hidden=!motifMatches.length;
     }
+    syncMotifNavigator();
     return result;
   }
+  function centerActiveMotifMatch(){
+    const match=motifMatches[activeMotifMatch],root=$("secondarySvg");
+    if(!match||!root?.dataset.fullViewBox)return;
+    const view=root.dataset.fullViewBox.split(/\\s+/).map(Number);
+    if(view.length!==4||view.some(v=>!Number.isFinite(v)))return;
+    const pos=coordinates().slice(match.start,match.end+1);
+    if(!pos.length||pos.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return;
+    const cx=pos.reduce((total,p)=>total+p.x,0)/pos.length;
+    const cy=pos.reduce((total,p)=>total+p.y,0)/pos.length;
+    panX=cx-(view[0]+view[2]/2);panY=cy-(view[1]+view[3]/2);
+  }
+  function navigateMotif(direction){
+    if(!motifMatches.length)return false;
+    activeMotifMatch=(activeMotifMatch+direction+motifMatches.length)%motifMatches.length;
+    centerActiveMotifMatch();syncMotifNavigator();render();
+    return true;
+  }
   function setMotifSearch(query){
-    // Validate before altering current search. Invalid input clears the view
-    // highlight and provides a useful message rather than leaving stale hits.
     const status=$("seMotifSearchStatus"),input=$("seMotifQuery");
     try{
-      const result=findSequenceMotifs(seq,query);motifQuery=result.query;
+      const result=findSequenceMotifs(seq,query);motifQuery=result.query;activeMotifMatch=0;
       if(input)input.value=motifQuery;
-      refreshMotifMatches();render();
+      refreshMotifMatches();
+      centerActiveMotifMatch();
+      render();
     }catch(error){
-      motifQuery="";refreshMotifMatches();render();
+      motifQuery="";activeMotifMatch=0;refreshMotifMatches();render();
       if(status){status.textContent=error.message;status.classList.add("error");}
     }
   }
   function appendMotifHighlight(node,index,style){
     if(!motifResidues.has(index))return;
-    const radius=Math.max(26,style.circleVisible===false?(Number(style.letterSize)||16)*.65+6:26);
-    node.append(svg("circle",{class:"se-motif-highlight","data-export-remove":"","pointer-events":"none","aria-hidden":"true",r:radius,fill:"none",stroke:"#f5ca62","stroke-width":3,"stroke-dasharray":"5 3"}));
+    const active=motifMatches[activeMotifMatch];
+    const isActive=Boolean(active&&index>=active.start&&index<=active.end);
+    const radius=Math.max(isActive?28:26,style.circleVisible===false?(Number(style.letterSize)||16)*.65+6:26);
+    node.append(svg("circle",{
+      class:"se-motif-highlight"+(isActive?" se-motif-active":""),
+      "data-export-remove":"","pointer-events":"none","aria-hidden":"true",
+      r:radius,fill:"none",stroke:isActive?"#ffe48b":"#f5ca62",
+      "stroke-width":isActive?4:2.5,"stroke-dasharray":isActive?"none":"5 3"
+    }));
   }
   function setupMotifSearch(statsBox){
     const section=document.createElement("section");
     section.className="se-motif-search";section.setAttribute("aria-label","Find a sequence motif");
-    section.innerHTML='<label for="seMotifQuery"><strong>Find sequence motif</strong></label><div class="se-motif-search-controls"><input id="seMotifQuery" type="text" maxlength="1000" placeholder="e.g. GAAA" autocomplete="off" spellcheck="false" autocapitalize="characters" aria-describedby="seMotifSearchStatus"><button id="seMotifFind" type="button">Find</button><button id="seMotifClear" type="button">Clear</button></div><p id="seMotifSearchStatus" role="status">Search for an exact RNA sequence in the currently rendered structure.</p><p id="seMotifMatchRanges" aria-label="Matching residue ranges (1-based)" hidden></p><p class="se-motif-search-note">Gold dashed rings mark sequence matches, not confirmed structural motifs.</p>';
+    section.innerHTML='<label for="seMotifQuery"><strong>Find sequence motif</strong></label><div class="se-motif-search-controls"><input id="seMotifQuery" type="text" maxlength="1000" placeholder="e.g. GAAA" autocomplete="off" spellcheck="false" autocapitalize="characters" aria-describedby="seMotifSearchStatus"><button id="seMotifFind" type="button">Find</button><button id="seMotifClear" type="button">Clear</button></div><p id="seMotifSearchStatus" role="status">Search for an exact RNA sequence in the currently rendered structure.</p><p id="seMotifMatchRanges" aria-label="Matching residue ranges (1-based)" hidden></p><div class="se-motif-navigator" aria-label="Navigate matching sequence regions"><button id="seMotifPrevious" type="button" disabled>← Previous</button><output id="seMotifActiveMatch" aria-live="polite">No active match</output><button id="seMotifNext" type="button" disabled>Next →</button></div><p class="se-motif-search-note">Gold dashed rings show all matches; solid bright rings indicate the active match. These are sequence matches, not confirmed structural motifs.</p>';
     statsBox.before(section);
     $("seMotifFind").addEventListener("click",()=>setMotifSearch($("seMotifQuery").value));
     $("seMotifClear").addEventListener("click",()=>setMotifSearch(""));
     $("seMotifQuery").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();setMotifSearch(e.target.value);}});
+    $("seMotifPrevious").addEventListener("click",()=>navigateMotif(-1));
+    $("seMotifNext").addEventListener("click",()=>navigateMotif(1));
   }
   const copyResetTimers=new WeakMap();
   async function copySecondaryText(kind){
@@ -908,7 +973,7 @@ const SecondaryExplorer = (() => {
     const parsed=parse(sequence,structure);
     const changed=sequence!==seq||structure!==db;
     seq=sequence;db=structure;pairs=parsed.pairs;partner=parsed.partner;selected=0;
-    if(changed)refreshMotifMatches();
+    if(changed){activeMotifMatch=0;refreshMotifMatches();}
     if(changed){selectedResidues=new Set();selectedPairKeys=new Set();selectedPairKey=null;overrides={};annotations={};residueOverrides={};backboneOverrides={};metadata={};heatEnabled=false;metadataTicket++;pairProbabilities={};pairProbEnabled=false;pairProbTicket++;pairChemistry={};manualOffsets={};pinnedResidues=new Set();zoom=1;panX=panY=0;wholeRotation=0;selectionRotation=0;selectionScale=1;
       indexMode="default";indexOverrides={};indexLabelOffsets={};indexSelection=new Set([...sequence].map((_,i)=>i).filter(i=>i===0||(i+1)%5===0||i===sequence.length-1));
       if($("seMetadataFile"))$("seMetadataFile").value="";
