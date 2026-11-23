@@ -2,6 +2,19 @@ const MoleculeEditor = (() => {
   const NS="http://www.w3.org/2000/svg";
   const savedBases={};
   const standardValence={H:1,C:4,N:3,O:2,P:5,S:6,F:1,Cl:1,Br:1,I:1};
+  const recognizedElements=new Set(("H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr Rf Db Sg Bh Hs Mt Ds Rg Cn Nh Fl Mc Lv Ts Og").split(" "));
+  const recognizedAbbreviations=new Set(["NH2","NH₂","NH3","NH₃","OH","HO","SH","CH3","CH₃","COOH","CO2H","CO₂H","OCH3","OCH₃","R","X","Ph","Me","Et","Ac","Bn","Boc","Fmoc","tBu","OMe","NMe2","NMe₂","NO2","NO₂","H2N","H₂N","N-H","N–H","N(H)","OR","NR2","NR₂","CF3","CF₃","CHO","CN","SO3H","SO₃H"]);
+  function classifyAtomLabel(value){
+    const label=String(value??"").trim();
+    if(!label)return {kind:"empty",message:"Type a label before applying it."};
+    if(Object.prototype.hasOwnProperty.call(standardValence,label))
+      return {kind:"atom",message:"Supported chemical element. Applying will update the actual atom."};
+    if(recognizedElements.has(label))
+      return {kind:"unsupported-element",message:"Recognized element, but unsupported by this model: display text only."};
+    if(recognizedAbbreviations.has(label)||/^R(?:[1-9][0-9]*|['′″]+)?$/.test(label))
+      return {kind:"group",message:"Recognized chemical abbreviation: display text only; molecular chemistry stays unchanged."};
+    return {kind:"custom",message:"Unrecognized chemical label. Keep as custom text or choose Ignore warning; the atom's chemistry stays unchanged."};
+  }
   const DEFAULT_TEXT_STYLE={font:"DM Mono",color:"#ffffff",size:17,bold:true,italic:false};
   const IUPAC_NAMES={
     A:"9H-purin-6-amine",
@@ -98,16 +111,22 @@ const MoleculeEditor = (() => {
       if(!ids.has(a)||!ids.has(b)||a===b||![1,2,3].includes(order))throw new Error("Saved "+base+" bond "+(index+1)+" is invalid.");
       return [a,b,order];
     });
-    const textStyles={};
+    const textStyles={},labelOverrides={};
     Object.entries(value.textStyles||{}).forEach(([id,style])=>{if(ids.has(id))textStyles[id]=sanitizeTextStyle(style);});
-    return {name:(BASES[base]||{}).name||base,atoms,bonds,textStyles};
+    Object.entries(value.labelOverrides||{}).forEach(([id,o])=>{
+      if(!ids.has(id)||!o||typeof o!=="object")return;
+      const displayLabel=String(o.displayLabel??"").trim();
+      if(!displayLabel||displayLabel.length>120)return;
+      labelOverrides[id]={displayLabel,ignoreLabelWarning:!!o.ignoreLabelWarning&&classifyAtomLabel(displayLabel).kind==="custom"};
+    });
+    return {name:(BASES[base]||{}).name||base,atoms,bonds,textStyles,labelOverrides};
   }
   function graphFromBase(base){
     const custom=Boolean(savedBases[base]),src=savedBases[base]||BASES[base]||BASES.A;
     return {
       atoms:src.atoms.map(a=>{
         const id=a[0]||a.id;
-        return {id,element:a[1]||a.element,x:a[2]??a.x,y:a[3]??a.y,charge:a[4]??a.charge??0,label:id,textStyle:src.textStyles?.[id]?sanitizeTextStyle(src.textStyles[id]):null};
+        return {id,element:a[1]||a.element,x:a[2]??a.x,y:a[3]??a.y,charge:a[4]??a.charge??0,label:id,textStyle:src.textStyles?.[id]?sanitizeTextStyle(src.textStyles[id]):null,displayLabel:src.labelOverrides?.[id]?.displayLabel||null,ignoreLabelWarning:!!src.labelOverrides?.[id]?.ignoreLabelWarning};
       }),
       bonds:src.bonds.map((b,i)=>({id:"b"+i,a:b[0]||b.a,b:b[1]||b.b,order:b[2]||b.order||1})),
       hbonds:[],
@@ -115,12 +134,16 @@ const MoleculeEditor = (() => {
     };
   }
   function storeBase(base,graph){
-    const textStyles={};graph.atoms.forEach(a=>{if(a.textStyle)textStyles[a.id]=sanitizeTextStyle(a.textStyle);});
+    const textStyles={},labelOverrides={};
+    graph.atoms.forEach(a=>{
+      if(a.textStyle)textStyles[a.id]=sanitizeTextStyle(a.textStyle);
+      if(typeof a.displayLabel==="string"&&a.displayLabel.trim())
+        labelOverrides[a.id]={displayLabel:a.displayLabel,ignoreLabelWarning:!!a.ignoreLabelWarning};
+    });
     savedBases[base]={
       name:(BASES[base]||{}).name||base,
       atoms:graph.atoms.map(a=>[a.id,a.element,a.x,a.y,a.charge||0]),
-      bonds:graph.bonds.map(b=>[b.a,b.b,b.order]),
-      textStyles
+      bonds:graph.bonds.map(b=>[b.a,b.b,b.order]),textStyles,labelOverrides
     };
   }
   function mergePair(left,right){
@@ -191,7 +214,7 @@ const MoleculeEditor = (() => {
   let initialLearningGraph=null,learningReturnTarget=null,learningReturnScrollY=0;
   let graph={atoms:[],bonds:[],hbonds:[]},tool="select",pendingStock=null,pendingStockPoint=null,lastPlacedPair=null,element="C",bondOrder=1,selectedAtom=null,selectedAtoms=new Set(),pendingAtom=null,drag=null,selectionBox=null,lasso=null,transformDrag=null,selectionZoom=1,pendingFuseBond=null,onSave=null;
   let atomSerial=1,bondSerial=1,hbondSerial=1,showAtomCircles=false,showAtomLabels=true,showAtomNumbers=false,showHydrogenBonds=true,showCanvasGrid=false;
-  let ignoredValenceWarnings=new Set(),smartLayoutEnabled=true,threeDVisible=false,threeDMode="ideal";
+  let ignoredValenceWarnings=new Set(),editingAtomId=null,smartLayoutEnabled=true,threeDVisible=false,threeDMode="ideal";
   let threeDCanvas=null,threeDPanel=null,threeDFrame=0,threeDDrag=null,threeDPointers=new Map(),threeDPinch=null,threeDCoords=[],threeDBonds=[],threeDSignature="",threeDPendingSignature="",threeDRequestSerial=0;
   const DEFAULT_3D_VIEW={rx:-0.38,ry:0.58,zoom:1,panX:0,panY:0};
   const threeDView={...DEFAULT_3D_VIEW};
@@ -234,7 +257,7 @@ const MoleculeEditor = (() => {
     button("chemFitCanvas","Fit drawing","Fit the canvas around the current drawing");
     const groups=[
       ["History",["#chemUndoButton","#chemRedoButton"]],
-      ["Select · Atoms & groups",['[data-chem-tool="select"]','[data-chem-tool="lasso"]',"#chemSelectAll","#chemDuplicateSelection"]],
+      ["Select · Atoms & groups",['[data-chem-tool="select"]','[data-chem-tool="lasso"]',"#chemSelectAll","#chemEditAtomLabel","#chemDuplicateSelection"]],
       ["Build · Atoms & bonds",['[data-chem-tool="atom"]','[data-chem-tool="bond"]','[data-chem-tool="fuse"]','[data-chem-tool="hbond"]','[data-chem-tool="delete"]',"#chemFunctionalGroup","#chemAttachGroup","#chemRingTemplate","#chemSmartLayoutToggle","#chemTidy2D"]],
       ["Display · Labels & chemistry",["#chemAtomCirclesToggle","#chemAtomLabelsToggle","#chemAtomNumbersToggle","#chemHydrogenBondsToggle","#chemElement","#chemBondOrder","#chemChargeMinus","#chemChargePlus","#chemIupacButton","#chemIgnoreValence"]],
       ["View · Canvas",["#chemExpandCanvas","#chemFitCanvas","#chemCanvasGridToggle"]]
@@ -266,7 +289,7 @@ const MoleculeEditor = (() => {
     cancelPendingStock();lastPlacedPair=null;
     const state=JSON.parse(snapshot);
     graph=state.graph;atomSerial=state.atomSerial;bondSerial=state.bondSerial;hbondSerial=state.hbondSerial;textDefaults=state.textDefaults||{...DEFAULT_TEXT_STYLE};
-    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionZoom=1;selectionBox=null;lasso=null;ignoredValenceWarnings.clear();
+    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionZoom=1;selectionBox=null;lasso=null;ignoredValenceWarnings.clear();closeAtomLabelEditor();
     syncTextControls(textDefaults);render();validate();syncUndoButton();status.textContent=message;return true;
   }
   function undo(){
@@ -369,6 +392,7 @@ const MoleculeEditor = (() => {
           <button type="button" data-chem-tool="select" class="active">Select / move</button>
           <button type="button" data-chem-tool="lasso">Lasso select</button>
           <button type="button" id="chemSelectAll">Select all</button>
+          <button type="button" id="chemEditAtomLabel" title="Edit the selected atom label, or double-click an atom" disabled>Edit label</button>
           <button type="button" id="chemDuplicateSelection" title="Copy the selected atoms and their internal bonds; then click to place the copy">Duplicate selection</button>
           <button type="button" data-chem-tool="atom">Add atom</button>
           <button type="button" data-chem-tool="bond">Add bond</button><button type="button" data-chem-tool="fuse">Fuse rings</button>
@@ -431,7 +455,14 @@ const MoleculeEditor = (() => {
         </details>
         <div class="chem-editor-workspace">
           <div class="chem-editor-canvas-wrap">
-            <svg id="chemEditorSvg" viewBox="0 0 820 470" tabindex="0" aria-label="Editable molecular structure; arrow keys move selected atoms, Shift plus arrow keys moves them farther"></svg>
+            <svg id="chemEditorSvg" viewBox="0 0 820 470" tabindex="0" aria-label="Editable molecular structure; double-click to edit atom labels"></svg>
+            <form class="chem-atom-label-editor" id="chemAtomLabelEditor" aria-label="Edit atom label" hidden>
+              <label for="chemLabelInput"><strong>Edit atom label</strong></label>
+              <input id="chemLabelInput" type="text" maxlength="120" autocomplete="off" spellcheck="false" aria-describedby="chemLabelMessage" placeholder="e.g. N, NH2, R, custom text">
+              <p id="chemLabelMessage" class="chem-label-message" role="status"></p>
+              <p id="chemLabelIdentity" class="chem-label-identity"></p>
+              <div class="chem-label-actions"><button type="submit">Apply</button><button id="chemLabelIgnore" type="button">Ignore warning</button><button id="chemLabelCancel" type="button">Cancel</button></div>
+            </form>
             <div class="chem-selection-counter" id="chemSelectionCounter" role="status" aria-live="polite" aria-atomic="true">0 atoms · 0 bonds selected</div>
             <button id="chemCopyArtwork" class="chem-copy-icon-button" type="button" title="Copy editable vector artwork (Ctrl+C / ⌘C)" aria-label="Copy selected molecular structure as editable SVG">
               <svg class="chem-copy-glyph" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>
@@ -502,8 +533,24 @@ const MoleculeEditor = (() => {
       const key=e.target.value;
       if(key)armStock(graphFromBase(key),BASES[key]?.name||key,false,{kind:"nucleic",value:key});
     });
-    dialog.querySelector("#chemEditorClose").addEventListener("click",()=>{cancelPendingStock();dialog.close();});
-    dialog.addEventListener("close",()=>{cancelPendingStock();dialog.querySelector("#chemKeyboardShortcuts").open=false;document.body.classList.remove("chem-editor-open","chem-3d-expanded-open");dialog.classList.remove("chem-3d-dialog-expanded");threeDDrag=null;threeDPointers.clear();threeDPinch=null;threeDPanel?.classList.remove("chem-3d-expanded");});
+    dialog.querySelector("#chemEditorClose").addEventListener("click",()=>{closeAtomLabelEditor();cancelPendingStock();dialog.close();});
+    dialog.addEventListener("close",()=>{closeAtomLabelEditor();cancelPendingStock();dialog.querySelector("#chemKeyboardShortcuts").open=false;document.body.classList.remove("chem-editor-open","chem-3d-expanded-open");dialog.classList.remove("chem-3d-dialog-expanded");threeDDrag=null;threeDPointers.clear();threeDPinch=null;threeDPanel?.classList.remove("chem-3d-expanded");});
+    const labelForm=dialog.querySelector("#chemAtomLabelEditor");
+    labelForm.addEventListener("submit",e=>{e.preventDefault();applyEditedAtomLabel(false);});
+    labelForm.addEventListener("keydown",e=>{e.stopPropagation();if(e.key==="Escape"){e.preventDefault();closeAtomLabelEditor();svg?.focus?.({preventScroll:true});}});
+    dialog.querySelector("#chemLabelInput").addEventListener("input",syncAtomLabelEditor);
+    dialog.querySelector("#chemLabelCancel").addEventListener("click",closeAtomLabelEditor);
+    dialog.querySelector("#chemLabelIgnore").addEventListener("click",()=>{
+      if(!editingAtomId)return;
+      const a=atomById(editingAtomId),draft=dialog.querySelector("#chemLabelInput").value.trim();
+      const restore=!!(a?.ignoreLabelWarning&&a.displayLabel===draft&&classifyAtomLabel(draft).kind==="custom");
+      applyEditedAtomLabel(!restore);
+    });
+    dialog.querySelector("#chemEditAtomLabel").addEventListener("click",()=>{
+      if(tool!=="select")setActiveChemTool("select");
+      if(selectedAtom&&atomById(selectedAtom))openAtomLabelEditor(selectedAtom);
+      else if(status)status.textContent="Select an atom before choosing Edit label.";
+    });
     dialog.querySelector("#chemUndoButton").addEventListener("click",undo);
     dialog.querySelector("#chemRedoButton").addEventListener("click",redo);
     dialog.querySelector("#chemExpandCanvas").addEventListener("click",expandCanvas);
@@ -524,7 +571,7 @@ const MoleculeEditor = (() => {
     dialog.querySelector("#chemSelectPair").addEventListener("click",()=>{selectAtoms(lastPlacedPair?.ids||graph.atoms.map(a=>a.id));setActiveChemTool("select");render();});
     dialog.querySelector("#chemElement").addEventListener("change",e=>{
       element=e.target.value;
-      if(selectedAtom){const a=atomById(selectedAtom);if(a){pushUndo();ignoredValenceWarnings.delete(a.id);a.element=element;a.label=element;invalidateIupac();render();validate();}}
+      if(selectedAtom){const a=atomById(selectedAtom);if(a){pushUndo();ignoredValenceWarnings.delete(a.id);a.element=element;a.label=a.id;a.displayLabel=null;a.ignoreLabelWarning=false;invalidateIupac();closeAtomLabelEditor();render();validate();}}
     });
     dialog.querySelector("#chemBondOrder").addEventListener("change",e=>bondOrder=Number(e.target.value));
     dialog.querySelector("#chemChargeMinus").addEventListener("click",()=>changeCharge(-1));
@@ -633,8 +680,19 @@ const MoleculeEditor = (() => {
     svg.addEventListener("pointercancel",canvasPointerUp);
     svg.addEventListener("pointerleave",()=>{if(pendingStock){pendingStockPoint=null;render();}});
     svg.addEventListener("dblclick",e=>{
-      const atomEl=e.target.closest?.("[data-atom-id]");if(!atomEl||tool!=="select")return;
-      e.preventDefault();selectAtoms(covalentComponent(atomEl.dataset.atomId));render();validate();
+      if(tool!=="select")return;
+      const id=e.target.closest?.("[data-atom-id]")?.dataset.atomId||atomAtPointer(e);
+      if(!id)return;
+      e.preventDefault();
+      if(e.shiftKey){closeAtomLabelEditor();selectAtoms(covalentComponent(id));render();validate();return;}
+      if(editingAtomId===id&&!dialog.querySelector("#chemAtomLabelEditor").hidden)return;
+      selectAtoms([id],id);render();openAtomLabelEditor(id);
+    });
+    svg.addEventListener("contextmenu",e=>{
+      if(tool!=="select")return;
+      const id=e.target.closest?.("[data-atom-id]")?.dataset.atomId||atomAtPointer(e);
+      if(!id)return;
+      e.preventDefault();selectAtoms([id],id);render();openAtomLabelEditor(id);
     });
     // Use a window shortcut so R also works while the stock chooser still has focus.
     window.addEventListener("keydown",e=>{
@@ -669,9 +727,57 @@ const MoleculeEditor = (() => {
     });
   }
 
+  function closeAtomLabelEditor(){
+    editingAtomId=null;
+    const form=dialog?.querySelector("#chemAtomLabelEditor");if(form)form.hidden=true;
+  }
+  function syncAtomLabelEditor(){
+    const form=dialog?.querySelector("#chemAtomLabelEditor"),a=atomById(editingAtomId);
+    if(!form||form.hidden||!a)return;
+    const input=form.querySelector("#chemLabelInput"),note=form.querySelector("#chemLabelMessage"),
+      identity=form.querySelector("#chemLabelIdentity"),ignore=form.querySelector("#chemLabelIgnore");
+    const value=input.value.trim(),kind=classifyAtomLabel(value);
+    note.textContent=kind.message;note.classList.toggle("warning",kind.kind==="custom"||kind.kind==="empty");
+    identity.textContent="Underlying chemical atom: "+a.element+". Custom text does not change chemistry.";
+    const suppressed=!!(a.ignoreLabelWarning&&a.displayLabel===value&&kind.kind==="custom");
+    ignore.disabled=kind.kind!=="custom";ignore.textContent=suppressed?"Restore warning":"Ignore warning";
+  }
+  function openAtomLabelEditor(id){
+    const a=atomById(id),form=dialog?.querySelector("#chemAtomLabelEditor");
+    if(!a||!form)return false;
+    if(pendingStock)cancelPendingStock();
+    editingAtomId=id;form.hidden=false;
+    const input=form.querySelector("#chemLabelInput");
+    input.value=a.displayLabel||((a.label&&a.label!==a.id)?a.label:a.element);
+    syncAtomLabelEditor();input.focus();input.select();return true;
+  }
+  function applyEditedAtomLabel(ignoreWarning=false){
+    const a=atomById(editingAtomId),form=dialog?.querySelector("#chemAtomLabelEditor");if(!a||!form)return false;
+    const input=form.querySelector("#chemLabelInput"),value=input.value.trim(),kind=classifyAtomLabel(value);
+    if(kind.kind==="empty"){
+      const note=form.querySelector("#chemLabelMessage");note.textContent=kind.message;note.classList.add("warning");input.focus();return false;
+    }
+    const atomChange=kind.kind==="atom",displayLabel=atomChange?null:value;
+    const suppressed=kind.kind==="custom"&&!!ignoreWarning;
+    if(a.element===(atomChange?value:a.element)&&(a.displayLabel||null)===displayLabel&&!!a.ignoreLabelWarning===suppressed&&(!atomChange||a.label===a.id)){
+      closeAtomLabelEditor();return false;
+    }
+    pushUndo();
+    if(atomChange){
+      a.element=value;a.label=a.id;a.displayLabel=null;a.ignoreLabelWarning=false;
+      ignoredValenceWarnings.delete(a.id);element=value;
+      const picker=dialog?.querySelector("#chemElement");if(picker)picker.value=value;
+      invalidateIupac();
+    }else{a.displayLabel=displayLabel;a.ignoreLabelWarning=suppressed;}
+    closeAtomLabelEditor();render();validate();
+    if(status)status.textContent=atomChange?"Updated chemical element to "+value+".":
+      kind.kind==="custom"?(suppressed?"Custom label saved and warning ignored.":"Custom label saved with a validation warning."):
+      "Label saved as display-only text; underlying atom is still "+a.element+".";
+    return true;
+  }
   function renumber(){
     atomSerial=graph.atoms.length+1;bondSerial=graph.bonds.length+1;hbondSerial=graph.hbonds.length+1;
-    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionZoom=1;selectionBox=null;lasso=null;ignoredValenceWarnings.clear();cancelPendingStock();lastPlacedPair=null;
+    selectedAtom=null;selectedAtoms.clear();pendingAtom=null;pendingFuseBond=null;drag=null;transformDrag=null;selectionZoom=1;selectionBox=null;lasso=null;ignoredValenceWarnings.clear();closeAtomLabelEditor();cancelPendingStock();lastPlacedPair=null;
   }
   function selectAtoms(ids,activeId=null){
     selectionZoom=1;selectedAtoms=new Set(ids.filter(id=>atomById(id)));
@@ -909,7 +1015,7 @@ const MoleculeEditor = (() => {
   function duplicateSelection(){
     const ids=new Set([...selectedAtoms].filter(id=>atomById(id)));
     if(!ids.size){
-      status.textContent="Select the atoms you want first. Double-click a molecule to select the whole connected molecule, or use Box/Lasso selection.";
+      status.textContent="Select atoms first. Shift + double-click selects a whole connected molecule, or use Box/Lasso selection.";
       return false;
     }
     const atoms=graph.atoms.filter(a=>ids.has(a.id)).map(a=>clone(a));
@@ -990,6 +1096,7 @@ const MoleculeEditor = (() => {
   }
 
   function setActiveChemTool(name){
+    closeAtomLabelEditor();
     if(name!=="stock")cancelPendingStock();
     tool=name;pendingAtom=null;pendingFuseBond=null;transformDrag=null;selectionBox=null;lasso=null;
     dialog?.querySelectorAll("[data-chem-tool]").forEach(button=>button.classList.toggle("active",button.dataset.chemTool===name));
@@ -1346,8 +1453,23 @@ const MoleculeEditor = (() => {
     return {x:x0+(event.clientX-rect.left)/Math.max(1,rect.width)*width,y:y0+(event.clientY-rect.top)/Math.max(1,rect.height)*height};
   }
 
+  function atomAtPointer(e){
+    if(!svg||!Number.isFinite(e.clientX)||!Number.isFinite(e.clientY))return null;
+    const p=point(e),near=graph.atoms.filter(a=>Math.hypot(a.x-p.x,a.y-p.y)<=18);
+    near.sort((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y));
+    return near[0]?.id||null;
+  }
   function canvasPointerDown(e){
     if(e.button!==0)return;
+    if(tool==="select"&&e.detail>=2){
+      const id=e.target.closest?.("[data-atom-id]")?.dataset.atomId||atomAtPointer(e);
+      if(id){
+        e.preventDefault();
+        if(e.shiftKey){closeAtomLabelEditor();selectAtoms(covalentComponent(id));render();validate();}
+        else {selectAtoms([id],id);render();openAtomLabelEditor(id);}
+        return;
+      }
+    }
     svg.focus?.({preventScroll:true});
     if(pendingStock){e.preventDefault();placeStockAt(point(e));return;}
     if(tool==="lasso"){
@@ -1483,6 +1605,7 @@ const MoleculeEditor = (() => {
     return a.charge===0?"":a.charge===1?"⁺":a.charge===-1?"⁻":a.charge>1?String(a.charge)+"⁺":String(Math.abs(a.charge))+"⁻";
   }
   function atomText(a){
+    if(typeof a.displayLabel==="string"&&a.displayLabel.trim())return a.displayLabel;
     const charge=atomCharge(a);
     return (a.label&&a.label!==a.id?a.label:a.element)+charge;
   }
@@ -1502,6 +1625,7 @@ const MoleculeEditor = (() => {
     T:{O4:"O",N3:"N–H",O2:"O",N1:"N"}
   };
   function cleanAtomText(a){
+    if(typeof a.displayLabel==="string"&&a.displayLabel.trim())return a.displayLabel;
     const name=atomName(a),baseName=atomBase(a);
     const explicit=CLEAN_LABELS[baseName]?.[name];
     if(explicit)return explicit+atomCharge(a);
@@ -1541,6 +1665,17 @@ const MoleculeEditor = (() => {
     group.append(defs,rect);
     svg.append(group);
   }
+  function atomLabelWarning(a){
+    return !!(a?.displayLabel&&!a.ignoreLabelWarning&&classifyAtomLabel(a.displayLabel).kind==="custom");
+  }
+  function labelUnderlinePath(text,style){
+    const size=sanitizeTextStyle(style||textDefaults).size;
+    const length=Math.max(18,Math.min(600,[...text].length*size*.57)),half=length/2,y=size*.62+5;
+    let path="M "+(-half).toFixed(1)+" "+y.toFixed(1);
+    for(let n=1;n<=Math.ceil(length/5);n++)
+      path+=" L "+Math.min(half,-half+n*5).toFixed(1)+" "+(y+(n%2?2.5:-2.5)).toFixed(1);
+    return path;
+  }
   function render(){
     if(!svg)return;
     svg.classList.toggle("chem-stock-placement",Boolean(pendingStock));
@@ -1569,6 +1704,11 @@ const MoleculeEditor = (() => {
       const circle=document.createElementNS(NS,"circle");circle.setAttribute("r","18");circle.setAttribute("class","chem-atom-circle");g.append(circle);
       const textValue=showAtomLabels?atomText(a):cleanAtomText(a);
       if(textValue){const text=document.createElementNS(NS,"text");text.textContent=textValue;text.setAttribute("y","1");text.setAttribute("class","chem-atom-label");setSvgTextStyle(text,a.textStyle||textDefaults,1);g.append(text);}
+      if(textValue&&atomLabelWarning(a)){
+        const underline=document.createElementNS(NS,"path");underline.setAttribute("class","chem-atom-label-warning");
+        underline.setAttribute("data-export-remove","");underline.setAttribute("pointer-events","none");
+        underline.setAttribute("d",labelUnderlinePath(textValue,a.textStyle||textDefaults));g.append(underline);
+      }
       if(showAtomNumbers){const sub=document.createElementNS(NS,"text");sub.textContent=String(index+1);sub.setAttribute("class","chem-atom-id");sub.setAttribute("y","31");setSvgTextStyle(sub,a.textStyle||textDefaults,.6);g.append(sub);}
       atomLayer.append(g);
     });
@@ -1586,8 +1726,9 @@ const MoleculeEditor = (() => {
       const path=document.createElementNS(NS,"polyline");path.setAttribute("class","chem-lasso-path");
       const pts=lasso.points;path.setAttribute("points",[...pts,pts[0]].map(p=>p.x+","+p.y).join(" "));svg.append(path);
     }
-    syncValenceIgnoreButton();
-    syncSelectionCounter();
+    syncValenceIgnoreButton();syncSelectionCounter();
+    const editButton=dialog?.querySelector("#chemEditAtomLabel");
+    if(editButton)editButton.disabled=!selectedAtom||!atomById(selectedAtom);
     if(threeDVisible)schedule3DRender();
   }
 
@@ -1714,13 +1855,14 @@ const MoleculeEditor = (() => {
       const state=atomValenceState(a);
       if(state.invalid&&!ignoredValenceWarnings.has(a.id))warnings.push((a.label||a.id)+" ("+a.element+") valence "+state.used+" > "+state.limit);
       if(!state.invalid)ignoredValenceWarnings.delete(a.id);
+      if(atomLabelWarning(a))warnings.push("Unrecognized label "+JSON.stringify(a.displayLabel.slice(0,35))+" on "+a.id);
     });
     graph.hbonds.forEach(h=>{
       const a=atomById(h.a),b=atomById(h.b);
       if(a&&b&&!["N","O","S"].includes(a.element)&&!["N","O","S"].includes(b.element))warnings.push("An H-bond does not involve an N/O/S atom");
     });
     const ignored=[...ignoredValenceWarnings].filter(id=>{const a=atomById(id);return a&&atomValenceState(a).invalid;}).length;
-    status.textContent=warnings.length?warnings.join(" · ")+". Correct the highlighted atom or select it and choose Ignore valence warning.":ignored?"Ready. "+ignored+" intentional valence warning"+(ignored===1?" is":"s are")+" being ignored.":"Ready. Ideal 2D generates clean textbook-style coordinates. Show in 3D opens Ideal 3D by default; MMFF94 energy minimization is optional.";
+    status.textContent=warnings.length?warnings.join(" · ")+". Double-click to edit/ignore label warnings; Ignore valence warning handles valence errors.":ignored?"Ready. "+ignored+" intentional valence warning"+(ignored===1?" is":"s are")+" being ignored.":"Ready. Ideal 2D generates clean textbook-style coordinates. Show in 3D opens Ideal 3D by default; MMFF94 energy minimization is optional.";
     status.classList.toggle("warning",warnings.length>0);syncValenceIgnoreButton();
     return warnings;
   }
