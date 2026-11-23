@@ -313,19 +313,21 @@ const SecondaryExplorer = (() => {
   }
   function centerActiveMotifMatch(){
     const match=motifMatches[activeMotifMatch],root=$("secondarySvg");
-    if(!match||!root?.dataset.fullViewBox)return;
-    const view=root.dataset.fullViewBox.split(/\\s+/).map(Number);
-    if(view.length!==4||view.some(v=>!Number.isFinite(v)))return;
+    if(!match||!root?.dataset.fullViewBox)return false;
+    const view=root.dataset.fullViewBox.trim().split(/\s+/).map(Number);
+    if(view.length!==4||view.some(v=>!Number.isFinite(v)))return false;
     const pos=coordinates().slice(match.start,match.end+1);
-    if(!pos.length||pos.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return;
+    if(!pos.length||pos.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return false;
     const cx=pos.reduce((total,p)=>total+p.x,0)/pos.length;
     const cy=pos.reduce((total,p)=>total+p.y,0)/pos.length;
     panX=cx-(view[0]+view[2]/2);panY=cy-(view[1]+view[3]/2);
+    return true;
   }
   function navigateMotif(direction){
     if(!motifMatches.length)return false;
     activeMotifMatch=(activeMotifMatch+direction+motifMatches.length)%motifMatches.length;
-    centerActiveMotifMatch();syncMotifNavigator();render();
+    syncMotifNavigator();render();
+    if(centerActiveMotifMatch()){applyZoom();saveWorkspaceLocal();}
     return true;
   }
   function setMotifSearch(query){
@@ -334,8 +336,8 @@ const SecondaryExplorer = (() => {
       const result=findSequenceMotifs(seq,query);motifQuery=result.query;activeMotifMatch=0;
       if(input)input.value=motifQuery;
       refreshMotifMatches();
-      centerActiveMotifMatch();
       render();
+      if(centerActiveMotifMatch()){applyZoom();saveWorkspaceLocal();}
     }catch(error){
       motifQuery="";activeMotifMatch=0;refreshMotifMatches();render();
       if(status){status.textContent=error.message;status.classList.add("error");}
