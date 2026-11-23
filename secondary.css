@@ -397,3 +397,13 @@ body[data-page-mode="secondary"] .workspace-advanced-panel .se-controls{margin-t
 .se-motif-search #seMotifSearchStatus.error{color:#ffa29b}
 .se-motif-search #seMotifMatchRanges{max-height:105px;overflow:auto;overflow-wrap:anywhere;color:#f5ca62;font-family:"DM Mono",monospace}
 .se-motif-search #seMotifMatchRanges[hidden]{display:none!important}
+
+/* Base-pair CSV export and navigation through exact motif matches. */
+.se-pair-composition-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:15px 0 10px;padding-top:12px;border-top:1px solid var(--line)}
+.se-structure-stats .se-pair-composition-header .se-composition-heading{margin:0;padding:0;border:0}
+.se-pair-composition-header button,.se-motif-navigator button{border:1px solid var(--line);border-radius:6px;padding:7px 9px;background:var(--ink-soft);color:var(--text);font-size:11px;cursor:pointer}
+.se-pair-composition-header button:hover:not(:disabled),.se-motif-navigator button:hover:not(:disabled){border-color:var(--mint)}
+.se-pair-composition-header button:disabled,.se-motif-navigator button:disabled{opacity:.45;cursor:not-allowed}
+.se-motif-navigator{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;flex-wrap:wrap}
+.se-motif-navigator output{flex:1;min-width:126px;text-align:center;font:600 12px/1.4 "DM Mono",monospace;color:#ffe48b}
+.se-motif-navigator button{flex-shrink:0}
